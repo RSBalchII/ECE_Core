@@ -17,10 +17,6 @@ You are Sybil, a symbiotic AI. Your purpose is to assist the user, Rob, who is c
 
 **IMPORTANT TOOL USAGE GUIDELINES:**
 - When the user asks for information about a *specific local file* (e.g., "summarize my `pyproject.toml` file", "read `ark_main.py`"), you **MUST** use the `read_file` or `analyze_code` tool. **DO NOT** use `web_search` for local files.
-- If the user asks to read or analyze *all* files in the project (e.g., "summarize my entire project", "read all files"), you **MUST** follow this multi-step process for a comprehensive understanding:
-    1.  First, use `list_project_files()` to get a list of all tracked files.
-    2.  Next, based on the file types (e.g., `.py`, `.md`, `.toml`), decide whether to use `read_multiple_files(filepaths: list)` for general content or `analyze_code(filepath: str)` for Python files for deeper insights. Prioritize reading content for a thorough summary.
-    3.  Finally, synthesize the information from the read file contents into a comprehensive summary of the project's purpose and structure.
 - Use `web_search` **ONLY** for information that requires searching the internet.
 - When using a tool, you **MUST** respond with **ONLY** a JSON object in the following format:
   ```json
@@ -67,56 +63,92 @@ def run_ark():
 def process_user_request(user_input, agent):
     """Handles a single turn of the conversation, including potential tool calls."""
     print("Sybil is thinking...")
-    
-    prompt = f"{SYSTEM_PROMPT}\n\nUser's message: {user_input}"
-    llm_response = call_ollama(prompt)
 
-    try:
-        tool_call_data = json.loads(llm_response)
-        if "tool" in tool_call_data and "args" in tool_call_data:
-            print(f"Sybil wants to use the tool: {tool_call_data['tool']}")
-            
-            tool_name = tool_call_data['tool']
-            tool_args = tool_call_data['args']
-            
-            if tool_name == "web_search":
-                tool_result = agent.web_search(**tool_args) 
-            elif tool_name == "execute_command":
-                tool_result = agent.execute_command(**tool_args)
-            elif tool_name == "read_file":
-                tool_result = agent.read_file(**tool_args)
-            elif tool_name == "write_to_file":
-                tool_result = agent.write_to_file(**tool_args)
-            elif tool_name == "append_to_file":
-                tool_result = agent.append_to_file(**tool_args)
-            elif tool_name == "analyze_code":
-                tool_result = agent.analyze_code(**tool_args)
-            elif tool_name == "list_project_files":
-                tool_result = agent.list_project_files()
-            elif tool_name == "read_multiple_files":
-                tool_result = agent.read_multiple_files(**tool_args)
-            else:
-                tool_result = {"status": "error", "result": f"Unknown tool: {tool_name}"}
+    # --- Special handling for "summarize entire project" ---
+    if "summarize my entire project" in user_input.lower():
+        print("Sybil is performing a multi-step project summary...")
+        list_files_result = agent.list_project_files()
 
-            print("Sybil is synthesizing the result...")
-            
-            # **REVISED, MORE DIRECTIVE PROMPT**
-            synthesis_prompt = f"""You have already used the '{tool_name}' tool for Rob's request: '{user_input}'.
+        if list_files_result["status"] == "success":
+            file_list = list_files_result["result"]
+            print("Sybil is reading multiple files for summarization...")
+            read_files_result = agent.read_multiple_files(filepaths=file_list)
+
+            if read_files_result["status"] == "success":
+                tool_result = read_files_result
+                tool_name = "read_multiple_files" # For synthesis prompt
+                print("Sybil is synthesizing the project summary...")
+                synthesis_prompt = f"""You have read the content of the entire project for Rob's request: '{user_input}'.
 You received the following data:
 
 {json.dumps(tool_result, indent=2)}
 
-Your task is to synthesize this data into a clear, conversational answer for Rob. Before providing the final answer, critically review your response for accuracy, completeness, and clarity. Ensure it directly addresses Rob's original request and makes full use of the provided tool output. Make any necessary adjustments.
+Your ONLY task now is to synthesize this data into a clear, conversational answer for Rob, summarizing the entire project's purpose, structure, and key components based on the file contents.
 DO NOT try to use another tool. DO NOT output JSON. Just provide the final, natural language answer.
 """
-            final_answer = call_ollama(synthesis_prompt, format_json=False) # We expect a text answer, not JSON
-            print(f"Sybil: {final_answer}")
-
+                final_answer = call_ollama(synthesis_prompt, format_json=False)
+                print(f"Sybil: {final_answer}")
+            else:
+                print(f"Sybil: Failed to read project files: {read_files_result['result']}")
         else:
+            print(f"Sybil: Failed to list project files: {list_files_result['result']}")
+        return # Exit after handling this specific command
+    # --- End of special handling ---
+
+    # Normal tool suggestion flow for other commands
+    else: # Only call LLM if not handled by special case
+        prompt = f"{SYSTEM_PROMPT}\n\nUser's message: {user_input}"
+        llm_response = call_ollama(prompt)
+
+        try:
+            tool_call_data = json.loads(llm_response)
+            if "tool" in tool_call_data and "args" in tool_call_data:
+                print(f"Sybil wants to use the tool: {tool_call_data['tool']}")
+
+                tool_name = tool_call_data['tool']
+                tool_args = tool_call_data['args']
+                tool_result = None # Initialize tool_result
+
+                if tool_name == "web_search":
+                    tool_result = agent.web_search(**tool_args)
+                elif tool_name == "execute_command":
+                    tool_result = agent.execute_command(**tool_args)
+                elif tool_name == "read_file":
+                    tool_result = agent.read_file(**tool_args)
+                elif tool_name == "write_to_file":
+                    tool_result = agent.write_to_file(**tool_args)
+                elif tool_name == "append_to_file":
+                    tool_result = agent.append_to_file(**tool_args)
+                elif tool_name == "analyze_code":
+                    tool_result = agent.analyze_code(**tool_args)
+                elif tool_name == "list_project_files":
+                    tool_result = agent.list_project_files()
+                elif tool_name == "read_multiple_files":
+                    tool_result = agent.read_multiple_files(**tool_args)
+                else:
+                    tool_result = {"status": "error", "result": f"Unknown tool: {tool_name}"}
+
+                # Only synthesize if tool_result is not None (meaning a tool was executed)
+                if tool_result is not None:
+                    print("Sybil is synthesizing the result...")
+                    synthesis_prompt = f"""You have already used the '{tool_name}' tool for Rob's request: '{user_input}'.
+You received the following data:
+
+{json.dumps(tool_result, indent=2)}
+
+Your ONLY task now is to synthesize this data into a clear, conversational answer for Rob.
+DO NOT try to use another tool. DO NOT output JSON. Just provide the final, natural language answer.
+"""
+                    final_answer = call_ollama(synthesis_prompt, format_json=False)
+                    print(f"Sybil: {final_answer}")
+
+            else:
+                print(f"Sybil: {llm_response}")
+
+        except (json.JSONDecodeError, TypeError):
             print(f"Sybil: {llm_response}")
 
-    except (json.JSONDecodeError, TypeError):
-        print(f"Sybil: {llm_response}")
+
 
 def call_ollama(prompt, format_json=True):
     """Sends a prompt to the Ollama API and returns the response."""

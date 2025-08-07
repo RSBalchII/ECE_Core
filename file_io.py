@@ -14,11 +14,13 @@ def read_file(filepath: str) -> dict:
         A dictionary with 'status' and 'result' keys.
     """
     try:
-        with open(filepath, 'r') as f:
+        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
         return {'status': 'success', 'result': content}
     except FileNotFoundError:
         return {'status': 'error', 'result': f"File not found: {filepath}"}
+    except UnicodeDecodeError as e:
+        return {'status': 'error', 'result': f"Decoding error: {e}. This might be a binary file."}
     except Exception as e:
         return {'status': 'error', 'result': str(e)}
 
