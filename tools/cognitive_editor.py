@@ -6,7 +6,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # A small, fast model dedicated to summarization.
-COMPRESSION_MODEL = "phi:latest" # Or another small, efficient model.
+COMPRESSION_MODEL = "deepseek-coder-v2:16b-lite-instruct-q4_0"# Or another small, efficient model.
 
 class WorkingMemoryManager:
     """

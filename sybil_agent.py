@@ -1,4 +1,3 @@
-# sybil_agent.py
 # sybil_agent.py (Refactored)
 # Description: Implements a tool registry for dynamic tool execution.
 
@@ -12,6 +11,7 @@ from tools.memory_tool import store_memory, retrieve_similar_memories
 from tools.vision_tool import analyze_screen
 from tools.gui_automation_tool import move_mouse, click_mouse, type_text
 from crews.archivist_crew import run_archivist_crew
+from tools.cognitive_editor import WorkingMemoryManager # New: Import the memory manager
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -51,12 +51,19 @@ class SybilAgent:
 
         try:
             tool_function = self._TOOL_REGISTRY[tool_name]
-            # Handle tools that take no arguments
-            if not tool_args:
-                result = tool_function()
-            else:
+
+            # NEW: More robust argument handling
+            # If the tool expects a single positional argument, pass it directly
+            if 'arg' in tool_args and len(tool_args) == 1:
+                result = tool_function(tool_args['arg'])
+            # If there are keyword arguments, use them
+            elif tool_args:
                 result = tool_function(**tool_args)
-            return result
+            # Handle tools that take no arguments
+            else:
+                result = tool_function()
+
+            return {"status": "success", "result": result}
         except Exception as e:
             logging.error(f"Error executing tool '{tool_name}': {e}", exc_info=True)
             return {"status": "error", "result": f"An unexpected error occurred: {str(e)}"}

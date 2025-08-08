@@ -1,47 +1,50 @@
 # ark_main.py
-# Version 4.0: Multi-Model Plan-and-Execute Architecture
+# Version 5.1: Corrected Multi-Model Plan-and-Execute Architecture
 # Author: Rob Balch II & Sybil
 
 import requests
 import json
 import re
 import traceback
+import logging
+import ast
 from sybil_agent import SybilAgent
+from tools.cognitive_editor import WorkingMemoryManager
 
 # --- Configuration ---
 OLLAMA_URL = "http://localhost:11434/api/generate"
-# Use a specialized model for planning and another for synthesis
-PLANNER_MODEL = "deepseek-coder-v2:16b-lite-instruct-q4_0" 
-SYNTHESIZER_MODEL = "samantha-mistral:7b"
+PLANNER_MODEL = "deepseek-coder-v2:16b-lite-instruct-q4_0"
+SYNTHESIZER_MODEL = "deepseek-coder-v2:16b-lite-instruct-q4_0"
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 # --- PROMPT ENGINEERING ---
 
 PLANNER_PROMPT = """
-# ROLE: You are a JSON planning agent.
-# TASK: Create a JSON array of tool calls to fulfill the user's request.
+# ROLE: You are a JSON planning agent. Your task is to create a JSON array of tool calls to fulfill the user's request.
 # OUTPUT: Your response MUST be ONLY a markdown JSON block.
 
 # TOOLS:
 # - web_search(query: str)
-# - store_memory(text_to_store: str)
 # - retrieve_similar_memories(query_text: str)
 # - list_project_files()
 # - read_multiple_files(filepaths: list)
 # - analyze_code(filepath: str)
+# - run_archivist_crew(text_to_analyze: str)
 
 # EXAMPLE:
 # USER REQUEST: what is the weather in Paris and can you save this conversation?
 # YOUR PLAN:
 # ```json
 # [
-#     {{
-#         "reasoning": "Find the weather in Paris.",
-#         "tool_call": "web_search(query=\\"weather in Paris\\")"
-#     }},
-#     {{
-#         "reasoning": "Save the user's request to memory.",
-#         "tool_call": "store_memory(text_to_store=\\"what is the weather in Paris and can you save this conversation?\\")"
-#     }}
+#     {{
+#         "reasoning": "Find the weather in Paris.",
+#         "tool_call": "web_search(query=\\"weather in Paris\\")"
+#     }},
+#     {{
+#         "reasoning": "Save the user's request to memory.",
+#         "tool_call": "store_memory(text_to_store=\\"what is the weather in Paris and can you save this conversation?\\")"
+#     }}
 # ]
 # ```
 
@@ -74,13 +77,16 @@ Based on the results, provide a clear and friendly answer to Rob.
 def run_ark():
     """Main function to run the interactive loop with Sybil."""
     agent = SybilAgent()
+    # NEW: Instantiate the memory manager outside the loop
+    memory_manager = WorkingMemoryManager()
     print("Sybil is online. You can now chat. Type 'exit' to end the session.")
     while True:
         try:
             user_input = input("Rob: ")
             if user_input.lower() in ['exit', 'quit']:
                 break
-            process_user_request(user_input, agent)
+            # Pass the memory manager to the processing function
+            process_user_request(user_input, agent, memory_manager)
         except KeyboardInterrupt:
             print("\nExiting.")
             break
@@ -96,14 +102,58 @@ def extract_json_from_response(response_text):
         return response_text.strip()
     return None
 
-def process_user_request(user_input, agent):
+def parse_tool_call(call_string: str) -> tuple[str, dict] | tuple[None, None]:
+    """Parses a tool call string into a name and args dict, handling various formats."""
+    if not call_string:
+        return None, None
+    try:
+        # Use a flexible regex to capture the function name and arguments string
+        match = re.match(r'(\w+)\((.*)\)', call_string)
+        if not match:
+            return None, None
+
+        tool_name = match.group(1)
+        args_str = match.group(2).strip()
+
+        if not args_str:
+            return tool_name, {}
+
+        tool_args = {}
+        # Safely evaluate arguments for both keyword and positional formats
+        # Using a more robust approach than simple regex or ast.literal_eval
+        try:
+            # Check for keyword arguments first (e.g., query='value')
+            if '=' in args_str:
+                for arg in args_str.split(','):
+                    key, value = arg.split('=', 1)
+                    tool_args[key.strip()] = ast.literal_eval(value.strip())
+            # Assume a single positional argument if no '=' is found
+            else:
+                # ast.literal_eval safely handles string literals, lists, etc.
+                tool_args = ast.literal_eval(args_str)
+                # If it's a single value, wrap it in a dict for consistency
+                if not isinstance(tool_args, (list, tuple, dict)):
+                    # This is the point of a heuristic parser, it guesses the argument name
+                    tool_args = {'arg': tool_args}
+        except Exception as e:
+            logging.error(f"Failed to parse tool arguments: {args_str}. Error: {e}")
+            return None, None
+
+        return tool_name, tool_args
+    except Exception as e:
+        logging.error(f"Failed to parse tool call string '{call_string}': {e}")
+        return None, None
+
+def process_user_request(user_input, agent, memory_manager):
     """Handles a single turn using the multi-model Plan-and-Execute strategy."""
     raw_plan_output = ""
     try:
         # 1. Planning Phase (using the Planner model)
         print("Sybil is planning...")
-        plan_prompt = PLANNER_PROMPT.format(user_input=user_input)
-        raw_plan_output = call_ollama(plan_prompt, model_name=PLANNER_MODEL)
+        # Get the context and add it to the planner prompt
+        scratchpad = memory_manager.get_context()
+        planner_prompt = PLANNER_PROMPT.format(user_input=user_input)
+        raw_plan_output = call_ollama(planner_prompt, model_name=PLANNER_MODEL)
         
         plan_json_str = extract_json_from_response(raw_plan_output)
         if not plan_json_str:
@@ -121,24 +171,22 @@ def process_user_request(user_input, agent):
         # 2. Execution Phase
         tool_outputs = []
         print("Sybil is executing the plan...")
+        # The scratchpad now accumulates all thoughts and actions
+        memory_manager.add_entry(thought=raw_plan_output, action=None, observation=None)
         for step in plan:
             tool_call_str = step.get("tool_call")
             if not tool_call_str: continue
 
-            tool_name = tool_call_str.split('(')[0]
-            args_str = tool_call_str[len(tool_name)+1:-1]
-            
-            tool_args = {}
-            if args_str:
-                parts = args_str.split('=', 1)
-                if len(parts) == 2:
-                    key = parts[0].strip()
-                    value = parts[1].strip().strip('"')
-                    tool_args[key] = value
+            tool_name, tool_args = parse_tool_call(tool_call_str)
+            if not tool_name:
+                raise ValueError(f"Malformed tool call string: {tool_call_str}")
             
             print(f"Executing: {tool_call_str}")
             result = agent.execute_tool(tool_name=tool_name, tool_args=tool_args)
             tool_outputs.append({"tool_call": tool_call_str, "output": result})
+            # Add the execution step to the memory manager
+            memory_manager.add_entry(thought=None, action=tool_call_str, observation=result)
+
 
         # 3. Synthesis Phase (using the Synthesizer model)
         print("Sybil is synthesizing the results...")
@@ -147,6 +195,8 @@ def process_user_request(user_input, agent):
             tool_outputs=json.dumps(tool_outputs, indent=2)
         )
         final_answer = call_ollama(synthesis_prompt, model_name=SYNTHESIZER_MODEL)
+        # Add the final answer to the scratchpad for the next turn
+        memory_manager.add_entry(thought=None, action=None, observation=final_answer)
         print(f"Sybil: {final_answer}")
 
     except Exception as e:

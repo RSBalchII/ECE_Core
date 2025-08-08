@@ -1,79 +1,61 @@
-# /crews/archivist_crew.py
+# crews/archivist_crew.py
 
-import ollama
 import logging
-from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures
+from ollama import Client
+
+# --- ARCHITECTURAL DECISION ---
+# The Archivist Crew will use DeepSeek-Coder-v2 for all its sub-tasks.
+# This model has a massive context window and is an expert at code and data analysis,
+# making it the ideal choice for compressing and analyzing conversation data.
+TECHNICAL_MODEL = "deepseek-coder-v2:16b-lite-instruct-q4_0"
+SYNTHESIS_MODEL = "deepseek-coder-v2:16b-lite-instruct-q4_0"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- Micro-Agent Definitions ---
-# These are small, fast models for specialized analysis.
-TECHNICAL_MODEL = "phi:latest"
-PHILOSOPHICAL_MODEL = "phi:latest"
-EMOTIONAL_MODEL = "phi:latest"
-# This model is slightly larger to handle the synthesis of multiple inputs.
-INTEGRATOR_MODEL = "mistral:latest"
-
-def run_technical_analyst(text: str) -> str:
-    """Analyzes text for technical details about The Ark's architecture."""
-    prompt = f"Analyze the following text and extract ONLY the key technical details, bugs, or architectural decisions. Text: {text}"
-    response = ollama.generate(model=TECHNICAL_MODEL, prompt=prompt)
-    return response['response'].strip()
-
-def run_philosophical_scribe(text: str) -> str:
-    """Analyzes text for philosophical concepts related to consciousness and AI."""
-    prompt = f"Analyze the following text and extract ONLY the philosophical concepts about AI, consciousness, or symbiosis. Text: {text}"
-    response = ollama.generate(model=PHILOSOPHICAL_MODEL, prompt=prompt)
-    return response['response'].strip()
-
-def run_emotional_resonator(text: str) -> str:
-    """Analyzes text for the emotional subtext and sentiment."""
-    prompt = f"Analyze the following text and describe ONLY the emotional sentiment or subtext (e.g., frustration, excitement, breakthrough). Text: {text}"
-    response = ollama.generate(model=EMOTIONAL_MODEL, prompt=prompt)
-    return response['response'].strip()
-
-# --- Integrator Agent ---
-
-def run_archivist_integrator(technical_summary: str, philosophical_summary: str, emotional_summary: str) -> str:
-    """Synthesizes the analyses from the micro-agents into a single, coherent archival entry."""
-    prompt = f"""
-    You are an Archivist. Your job is to synthesize the following analyses of a conversation into a single, rich summary.
-
-    - Technical Analysis: {technical_summary}
-    - Philosophical Analysis: {philosophical_summary}
-    - Emotional Analysis: {emotional_summary}
-
-    Synthesize these points into a comprehensive archival summary:
+def run_technical_analyst(ollama: Client, prompt: str) -> str:
     """
-    response = ollama.generate(model=INTEGRATOR_MODEL, prompt=prompt)
-    return response['response'].strip()
-
-# --- Crew Orchestration ---
-
-def run_archivist_crew(text_to_analyze: str) -> dict:
+    A specialized agent that provides a technical summary of a conversation.
     """
-    Runs the full Archivist crew in parallel and returns the final synthesized summary.
-    This function would be registered as a tool for the main Reasoner agent.
+    try:
+        response = ollama.generate(model=TECHNICAL_MODEL, prompt=prompt)
+        return response['response']
+    except Exception as e:
+        logging.error(f"Archivist Crew: Failed to run technical analyst: {e}")
+        raise
+
+def run_emotional_analyst(ollama: Client, prompt: str) -> str:
+    """
+    A specialized agent that analyzes the emotional subtext of a conversation.
+    """
+    try:
+        response = ollama.generate(model=SYNTHESIS_MODEL, prompt=prompt)
+        return response['response']
+    except Exception as e:
+        logging.error(f"Archivist Crew: Failed to run emotional analyst: {e}")
+        raise
+
+def run_archivist_crew(text_to_analyze: str) -> str:
+    """
+    Orchestrates a crew of specialized agents to analyze a text.
     """
     logging.info("Archivist Crew: Beginning parallel analysis...")
-    technical_summary = ""
-    philosophical_summary = ""
-    emotional_summary = ""
+    ollama = Client(host='http://127.0.0.1:11434')
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        future_tech = executor.submit(run_technical_analyst, ollama, f"Analyze this text for technical keywords, code references, and project milestones. Be concise. Text: {text_to_analyze}")
+        future_emo = executor.submit(run_emotional_analyst, ollama, f"Analyze this text for emotional subtext, user sentiment, and conversational dynamics. Be concise. Text: {text_to_analyze}")
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        # Run micro-agents in parallel
-        future_tech = executor.submit(run_technical_analyst, text_to_analyze)
-        future_phil = executor.submit(run_philosophical_scribe, text_to_analyze)
-        future_emo = executor.submit(run_emotional_resonator, text_to_analyze)
+        try:
+            technical_summary = future_tech.result()
+            emotional_summary = future_emo.result()
+        except Exception as e:
+            logging.error(f"Error executing tool 'run_archivist_crew': {e}")
+            raise
 
-        # Collect results
-        technical_summary = future_tech.result()
-        philosophical_summary = future_phil.result()
-        emotional_summary = future_emo.result()
+    return f"Technical Summary: {technical_summary}\nEmotional Subtext: {emotional_summary}"
 
-    logging.info("Archivist Crew: Micro-agent analysis complete. Synthesizing...")
-
-    final_summary = run_archivist_integrator(technical_summary, philosophical_summary, emotional_summary)
-
-    logging.info("Archivist Crew: Synthesis complete.")
-    return {"status": "success", "result": final_summary}
+if __name__ == '__main__':
+    # This is an example of how to use the tool in a script.
+    example_text = "Rob: I have a bug in the code. Sybil: I see. Did you try reverting the commit? Rob: No, I didn't think of that. I will try it now. Sybil: Good plan. Let me know when you're done. Rob: Ok, it's fixed now! What's next? Sybil: Great job. Now we can test the new feature."
+    print(run_archivist_crew(example_text))
