@@ -4,6 +4,8 @@ import json
 import logging
 import os
 import random # Used for simulation
+import chromadb
+import uuid
 
 # --- Configuration ---
 OLLAMA_URL = "http://localhost:11434/api/generate"
@@ -48,6 +50,9 @@ class ArchivistAgent:
     """
     def __init__(self):
         self.blackboard_path = "archivist_blackboard.md"
+        # Initialize ChromaDB client
+        self.chroma_client = chromadb.PersistentClient(path="./chroma_db_data")
+        self.memory_archive = self.chroma_client.get_or_create_collection(name="memory_archive")
 
     def _manage_blackboard(self, new_content: str):
         """
@@ -120,6 +125,23 @@ class ArchivistAgent:
 
         return decision
 
+    def archive_memory_chunk(self, text_chunk: str):
+        """
+        Archives a text chunk into the ChromaDB collection.
+
+        Args:
+            text_chunk: The piece of text to be archived.
+        """
+        try:
+            doc_id = str(uuid.uuid4())
+            self.memory_archive.add(
+                documents=[text_chunk],
+                ids=[doc_id]
+            )
+            print(f"Archived chunk of {len(text_chunk)} characters.")
+        except Exception as e:
+            print(f"Error archiving memory chunk: {e}")
+
 if __name__ == "__main__":
     # --- Example Usage ---
     archivist = ArchivistAgent()
@@ -139,3 +161,13 @@ if __name__ == "__main__":
     decision_2 = archivist.orchestrate_context_management(revised_context)
     print("Final Decision:")
     print(decision_2)
+
+    print("\n" + "="*50 + "\n")
+
+    # --- Test Archiving ---
+    print("--- Testing Memory Archival ---")
+    sample_chunk = "This is a test memory chunk to be archived in ChromaDB."
+    archivist.archive_memory_chunk(sample_chunk)
+    # Verify the chunk was added (optional, requires querying)
+    # count = archivist.memory_archive.count()
+    # print(f"Current number of items in archive: {count}")

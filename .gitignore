@@ -1,0 +1,8 @@
+# ChromaDB data
+chroma_db_data/
+
+# Blackboard file
+archivist_blackboard.md
+
+# Python cache
+__pycache__/
