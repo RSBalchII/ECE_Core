@@ -186,7 +186,7 @@ def parse_tool_call(call_string: str) -> tuple[str, dict] | tuple[None, None]:
 def process_user_request(user_input, agent, memory_manager):
     """Handles a single turn using the multi-model Plan-and-Execute strategy with a Two-Stage Locus."""
     raw_plan_output = ""
-    try:
+try:
         # First, determine if the query is complex enough to warrant planning and execution.
         if not determine_complexity(user_input):
             print("Query is conversational. Responding directly...")
