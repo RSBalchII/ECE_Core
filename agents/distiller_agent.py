@@ -5,10 +5,11 @@ import logging
 import os
 from datetime import datetime
 from tools.file_io import read_last_n_chars, write_and_truncate
+from tools.blackboard import Blackboard
 
 # --- Configuration ---
 OLLAMA_URL = "http://localhost:11434/api/generate"
-TIER_3_MODEL = "deepseek-r1:1.5b-qwen-distill-q8_0"
+TIER_3_MODEL = "deepseek-v2-code-lite"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -52,28 +53,9 @@ class DistillerAgent:
         self.life_history_path = "life-history.md"
         self.memories_path = "memories.md"
         self.thinking_processes_path = "thinking_processes.md"
+        self.blackboard = Blackboard()
 
-    def _manage_blackboard(self, new_content: str):
-        """
-        Appends new content to the blackboard and truncates it to a maximum size.
-        """
-        max_size = 5000
-        
-        if os.path.exists(self.blackboard_path):
-            with open(self.blackboard_path, "r") as f:
-                existing_content = f.read()
-        else:
-            existing_content = ""
-
-        combined_content = existing_content + new_content
-
-        if len(combined_content) > max_size:
-            truncated_content = combined_content[-max_size:]
-        else:
-            truncated_content = combined_content
-        
-        with open(self.blackboard_path, "w") as f:
-            f.write(truncated_content)
+    
 
     def orchestrate_distillation_crew(self, context_to_distill: str):
         """
@@ -106,8 +88,7 @@ class DistillerAgent:
             new_blackboard_content += f"### Tier3Worker Result {i+1}\n"
             new_blackboard_content += f"{result}\n\n"
         
-        self._manage_blackboard(new_blackboard_content)
-        print(f"Distillation results written to {self.blackboard_path}")
+        self.blackboard.post_message(source_agent='DistillerAgent', content=new_blackboard_content)
 
     def route_and_archive(self):
         """

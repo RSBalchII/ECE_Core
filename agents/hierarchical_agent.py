@@ -4,7 +4,7 @@ import json
 
 # Constants
 OLLAMA_URL = "http://localhost:11434/api/generate"
-TIER_3_MODEL = "deepseek-r1:1.5b-qwen-distill-q8_0"
+TIER_3_MODEL = "deepseek-v2-code-lite"
 
 def run_worker_agent(task_prompt: str) -> str:
     """

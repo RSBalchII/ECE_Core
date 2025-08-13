@@ -8,7 +8,7 @@ from datetime import datetime
 
 # --- Configuration ---
 OLLAMA_URL = "http://localhost:11434/api/generate"
-TIER_3_MODEL = "deepseek-r1:1.5b-qwen-distill-q8_0"
+TIER_3_MODEL = "deepseek-v2-code-lite"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 

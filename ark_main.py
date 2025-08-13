@@ -12,17 +12,21 @@ from agents.sybil_agent import SybilAgent
 from tools.cognitive_editor import WorkingMemoryManager
 from tools.file_io import append_to_file
 from agents.distiller_agent import DistillerAgent
+from tools.blackboard import Blackboard
 
 # --- Configuration ---
 OLLAMA_URL = "http://localhost:11434/api/generate"
 # Stage 1: The fast Locus for planning and easy tasks
-PLANNER_MODEL_FAST = "deepseek-r1:8b-0528-qwen3-q8_0"
+PLANNER_MODEL_FAST = "deepseek-v2-code-lite"
 # Stage 2: The heavy-lifter for complex tasks, used on escalation
-PLANNER_MODEL_APEX = "deepseek-r1:14b-qwen-distill-q8_0"
+PLANNER_MODEL_APEX = "deepseek-v2-code-lite"
 # The fast model for conversational synthesis
-SYNTHESIZER_MODEL = "deepseek-r1:8b-0528-qwen3-q8_0"
+SYNTHESIZER_MODEL = "deepseek-v2-code-lite"
 # The file where raw conversation is stored
 MAIN_CONTEXT_FILE = "main_context.md"
+
+STRATEGIST_MODEL = 'granite3.1'
+blackboard = Blackboard()
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -125,6 +129,7 @@ def run_ark():
             append_to_file(MAIN_CONTEXT_FILE, f"Rob: {user_input}\n")
 
             process_user_request(user_input, agent, memory_manager)
+            run_strategist_synthesis()
             
             # Append Sybil's final response to the raw context file
             # Note: This is done within the process_user_request function for now
@@ -262,6 +267,40 @@ Sybil's Response: {final_answer}""")
             print(raw_plan_output)
             print("--------------------------")
         traceback.print_exc()
+
+def run_strategist_synthesis():
+    logging.info("Strategist: Initiating synthesis from blackboard messages.")
+    messages = blackboard.read_latest_messages(n=10)
+
+    if not messages:
+        logging.info("Strategist: No recent messages on the blackboard to synthesize.")
+        return
+
+    context_string = ""
+    for msg in messages:
+        context_string += f"Source: {msg.get('source_agent', 'Unknown')}\n"
+        context_string += f"Timestamp: {msg.get('timestamp', 'Unknown')}\n"
+        context_string += f"Content: {msg.get('content', 'No content')}\n\n"
+
+    strategist_prompt = f"""
+Given the following agent reports from the blackboard, synthesize the current situation and define the next single priority objective.
+
+--- Agent Reports ---
+{context_string}
+
+--- Objective ---
+"""
+
+    logging.info("Strategist: Calling LLM for synthesis...")
+    try:
+        strategist_response = call_ollama(strategist_prompt, model_name=STRATEGIST_MODEL)
+        print("\n--- Strategist's Objective ---")
+        print(strategist_response)
+        print("----------------------------")
+        # Optionally, post the strategist's objective back to the blackboard
+        blackboard.post_message(source_agent='Strategist', content=f'New Objective: {strategist_response}')
+    except Exception as e:
+        logging.error(f"Strategist: Error during synthesis: {e}")
 
 def call_ollama(prompt, model_name):
     """Sends a prompt to the Ollama API using a specific model."""

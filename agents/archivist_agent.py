@@ -7,13 +7,14 @@ import json
 import logging
 import os
 import random # Used for simulation
-import chromadb
+import graphr1
 import uuid
 from tools.file_io import read_last_n_chars
+from tools.blackboard import Blackboard
 
 # --- Configuration ---
 OLLAMA_URL = "http://localhost:11434/api/generate"
-TIER_3_MODEL = "deepseek-r1:1.5b-qwen-distill-q8_0"
+TIER_3_MODEL = "deepseek-v2-code-lite"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -55,8 +56,9 @@ class ArchivistAgent:
     def __init__(self):
         self.blackboard_path = "archivist_blackboard.md"
         # Initialize ChromaDB client
-        self.chroma_client = chromadb.PersistentClient(path="./chroma_db_data")
-        self.memory_archive = self.chroma_client.get_or_create_collection(name="memory_archive")
+        self.graph_client = graphr1.Client()
+        self.blackboard = Blackboard()
+        # self.memory_archive = self.chroma_client.get_or_create_collection(name="memory_archive") # TODO: Replace with GraphR1 equivalent
 
     def _manage_blackboard(self, new_content: str):
         """
@@ -138,11 +140,9 @@ class ArchivistAgent:
         """
         try:
             doc_id = str(uuid.uuid4())
-            self.memory_archive.add(
-                documents=[text_chunk],
-                ids=[doc_id]
-            )
+            self.graph_client.nodes.create(id=doc_id, label='ConceptNode', properties={'text': text_chunk, 'source': 'archivist_agent'})
             print(f"Archived chunk of {len(text_chunk)} characters.")
+            self.blackboard.post_message(source_agent='ArchivistAgent', content=f'Archived chunk of {len(text_chunk)} characters.')
         except Exception as e:
             print(f"Error archiving memory chunk: {e}")
 
@@ -161,6 +161,24 @@ class ArchivistAgent:
             print("Successfully archived content from working memory.")
         else:
             print("Working memory file is empty or could not be read. Nothing to archive.")
+
+    def query_memory_archive(self, query_text: str, top_k: int = 5) -> list:
+        """
+        Performs a semantic search on 'ConceptNode' nodes in GraphR1.
+
+        Args:
+            query_text: The text to query for.
+            top_k: The maximum number of results to return.
+
+        Returns:
+            A list of dictionaries, where each dictionary contains the properties of a matching node.
+        """
+        try:
+            results = self.graph_client.nodes.search(label='ConceptNode', query=query_text, top_k=top_k)
+            return [node.properties for node in results]
+        except Exception as e:
+            print(f"Error querying memory archive: {e}")
+            return []
 
 if __name__ == "__main__":
     # --- Example Usage ---
@@ -186,8 +204,8 @@ if __name__ == "__main__":
 
     # --- Test Archiving ---
     print("--- Testing Memory Archival ---")
-    sample_chunk = "This is a test memory chunk to be archived in ChromaDB."
-    archivist.archive_memory_chunk(sample_chunk)
+    # sample_chunk = "This is a test memory chunk to be archived in ChromaDB." # TODO: Remove or replace with GraphR1 test
+    # archivist.archive_memory_chunk(sample_chunk) # TODO: Remove or replace with GraphR1 test
     # Verify the chunk was added (optional, requires querying)
     # count = archivist.memory_archive.count()
     # print(f"Current number of items in archive: {count}")
