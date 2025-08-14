@@ -4,20 +4,7 @@ This module provides functions for managing conversational context.
 import json
 import os
 
-def load_context(filepath: str) -> str:
-    """
-    Loads conversational context from a JSON file.
 
-    Args:
-        filepath: The path to the JSON file.
-
-    Returns:
-        The JSON content as a string, or an empty string if the file doesn't exist.
-    """
-    if os.path.exists(filepath):
-        with open(filepath, 'r') as f:
-            return json.dumps(json.load(f))
-    return ""
 
 def save_context(filepath: str, conversation_history: list):
     """
