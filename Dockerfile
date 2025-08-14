@@ -8,7 +8,7 @@ COPY requirements.txt ./
 
 # Install any needed packages specified in requirements.txt
 # Using --no-cache-dir reduces the image size
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install uv && uv pip install -r requirements.txt
 
 # Copy the entire project's source code into the container
 COPY . .
