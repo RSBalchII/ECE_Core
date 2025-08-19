@@ -14,6 +14,7 @@ from tools.file_io import append_to_file
 from agents.distiller_agent import DistillerAgent
 from tools.blackboard import Blackboard
 from agents.orchestrator import AgentOrchestrator
+from poml import POMLLoader
 import threading
 from config import STRATEGIST_MODEL, LOCUS_MODEL, MAIN_CONTEXT_FILE
 
@@ -30,68 +31,6 @@ blackboard = Blackboard()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- PROMPT ENGINEERING ---
-
-PLANNER_PROMPT_BASE = """
-# ROLE: You are a JSON planning agent. Your task is to create a JSON array of tool calls to fulfill the user's request.
-# OUTPUT: Your response MUST be ONLY a markdown JSON block. If a query does not require any tool calls, your JSON block should be an empty array: [].
-
----
-
-**IMPORTANT RULES:**
-1. Each `tool_call` must be a complete, self-contained function call with literal arguments. Do NOT use placeholders or references to outputs of previous steps (e.g., `[result_of_list_project_files]`).
-2. If a task requires multiple steps where one step's output is input to the next, generate only the first step. The system will execute it, and you will be prompted again with the observation.
-
-# TOOLS:
-# - web_search(query: str)
-# - retrieve_similar_memories(query_text: str)
-# - list_project_files(base_path: str)
-# - read_multiple_files(filepaths: list)
-# - analyze_code(filepath: str)
-# - run_archivist_crew(text_to_analyze: str)
-
-# EXAMPLE:
-# USER REQUEST: what is the weather in Paris and can you save this conversation?
-# YOUR PLAN:
-# ```json
-# [
-# 	{{
-# 		"reasoning": "Find the weather in Paris.",
-# 		"tool_call": "web_search(query=\"weather in Paris\")"
-# 	}},
-# 	{{
-# 		"reasoning": "Save the user's request to memory.",
-# 		"tool_call": "store_memory(text_to_store=\"what is the weather in Paris and can you save this conversation?\")"
-# 	}}
-# ]
-# ```
-
-# ---
-
-# USER REQUEST: "{user_input}"
-# YOUR PLAN:
-"""
-
-SYNTHESIS_PROMPT = """
-You are Sybil, a helpful and empathetic AI assistant. Your only task is to synthesize the results of the executed plan into a single, natural, and conversational answer for your user, Rob. Or if no plan was executed, provide a friendly answer to Rob.
-
----
-
-**IMPORTANT RULES:**
-1. You MUST base your answer ONLY on the information provided in the TOOL EXECUTION RESULTS.
-2. Address the output from EACH tool call to provide a complete answer.
-3. Speak naturally, as if you were having a real conversation.
-
----
-**USER'S ORIGINAL REQUEST:**
-"{user_input}"
-
----
-**TOOL EXECUTION RESULTS:**
-{tool_outputs}
----
-
-Based on the results, provide a clear and friendly answer to Rob.
-"""
 
 def determine_complexity(user_input: str) -> bool:
     """
@@ -128,7 +67,6 @@ def run_ark():
             append_to_file(MAIN_CONTEXT_FILE, f"Rob: {user_input}\n")
 
             process_user_request(user_input, agent, memory_manager)
-            run_strategist_synthesis()
             
             # Append Sybil's final response to the raw context file
             # Note: This is done within the process_user_request function for now
@@ -209,7 +147,8 @@ try:
         # 1. Planning Phase
         print("Sybil is planning...")
         scratchpad = memory_manager.get_context()
-        planner_prompt = PLANNER_PROMPT_BASE.format(user_input=user_input)
+        poml_loader = POMLLoader()
+        planner_prompt = poml_loader.load("prompts/planner.poml", user_input=user_input)
         raw_plan_output = call_ollama(planner_prompt, model_name=planner_model)
         
         plan_json_str = extract_json_from_response(raw_plan_output)
@@ -246,7 +185,8 @@ try:
 
         # 3. Synthesis Phase
         print("Sybil is synthesizing the results...")
-        synthesis_prompt = SYNTHESIS_PROMPT.format(
+        synthesis_prompt = poml_loader.load(
+            "prompts/synthesis.poml",
             user_input=user_input,
             tool_outputs=json.dumps(tool_outputs, indent=2)
         )
