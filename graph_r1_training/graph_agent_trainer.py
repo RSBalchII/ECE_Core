@@ -1,53 +1,97 @@
-from graph_environment import create_simple_knowledge_graph
-from graph_agent import GraphAgent
+import sys
+import os
+import pandas as pd
+import random
+
+# Add the project root for absolute imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from graph_r1_training.graph_agent import QLearningAgent
+from injector.graph_injector import GraphInjector # Corrected import path
 
 # --- Hyperparameters ---
-NUM_EPISODES = 1000
-MAX_STEPS_PER_EPISODE = 10
-TARGET_NODE = 'D'
+NUM_EPISODES = 500
+MAX_STEPS_PER_EPISODE = 20
 
-def get_reward(current_node):
-    """
-    Calculates the reward based on the agent's current position.
-    """
-    if current_node == TARGET_NODE:
-        return 100  # High reward for reaching the target
-    else:
-        return -1   # Small penalty for each step taken
+# Q-Learning Parameters
+LEARNING_RATE = 0.1
+DISCOUNT_FACTOR = 0.95
+EPSILON = 1.0
+EPSILON_DECAY = 0.995
+MIN_EPSILON = 0.01
 
-def run_training_simulation():
+def get_reward(graph, current_node):
     """
-    Runs the main training loop for the graph agent.
+    Calculates the reward based on node degree (connectedness),
+    a proxy for the concept's importance.
     """
-    # 1. Initialize Environment and Agent
-    knowledge_graph = create_simple_knowledge_graph()
-    agent = GraphAgent(knowledge_graph, start_node='A')
+    return graph.degree(current_node)
 
-    # 2. Main Training Loop
+def run_training_simulation(knowledge_graph):
+    """Runs the main Q-learning training loop on the provided knowledge graph."""
+    if knowledge_graph.number_of_nodes() < 2:
+        print("Cannot run training: The knowledge graph has fewer than two nodes.")
+        return None
+
+    nodes = list(knowledge_graph.nodes())
+    start_node = random.choice(nodes)
+    target_node = random.choice(nodes)
+    
+    while start_node == target_node:
+        target_node = random.choice(nodes)
+
+    print(f"\n--- Starting New Training Run ---")
+    print(f"Goal: Navigate from '{start_node}' to '{target_node}'")
+
+    agent = QLearningAgent(
+        knowledge_graph,
+        learning_rate=LEARNING_RATE,
+        discount_factor=DISCOUNT_FACTOR,
+        epsilon=EPSILON
+    )
+
     for episode in range(NUM_EPISODES):
-        agent.reset()
-        total_reward = 0
-
-        print(f"--- Episode {episode + 1}/{NUM_EPISODES} ---")
+        agent.reset(start_node=start_node)
+        state = agent.current_node
 
         for step in range(MAX_STEPS_PER_EPISODE):
-            current_position = agent.current_node
+            action = agent.choose_action()
+            if action is None:
+                break
+
+            reward = get_reward(knowledge_graph, action)
+            next_state = action
             
-            # 3. Agent takes an action
-            next_position = agent.take_action()
+            if next_state == target_node:
+                reward += 500 # Bonus for reaching the target
+                done = True
+            else:
+                done = False
 
-            # 4. Get reward for the action
-            reward = get_reward(next_position)
-            total_reward += reward
+            agent.update_q_table(state, action, reward, next_state)
+            state = next_state
 
-            print(f"Step {step + 1}: Moved from {current_position} to {next_position}. Reward: {reward}")
-
-            # 5. Check for terminal state
-            if next_position == TARGET_NODE:
-                print("Target reached!")
+            if done:
                 break
         
-        print(f"Episode {episode + 1} finished. Total Reward: {total_reward}n")
+        if agent.epsilon > MIN_EPSILON:
+            agent.epsilon *= EPSILON_DECAY
+
+    print(f"Training Run Complete. Final Epsilon: {agent.epsilon:.4f}")
+    return agent.q_table
 
 if __name__ == '__main__':
-    run_training_simulation()
+    # Path to the combined text file in the project root
+    PATH_TO_TEXT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'combined_text.txt'))
+
+    # 1. Inject the knowledge graph
+    injector = GraphInjector(PATH_TO_TEXT)
+    our_knowledge_graph = injector.run_pipeline()
+
+    # 2. Train the agent
+    final_q_table = run_training_simulation(our_knowledge_graph)
+
+    if final_q_table:
+        print("\n--- Final Q-Table (Sample) ---")
+        q_table_df = pd.DataFrame.from_dict(final_q_table, orient='index').fillna(0)
+        print(q_table_df.head(15))
