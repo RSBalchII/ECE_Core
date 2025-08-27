@@ -8,10 +8,10 @@ services:
     volumes:
       # Mount the entire local project directory to /app in the container
       # This means changes you make on your host machine are instantly reflected in the container
-      - ./:/app
+      # - ./:/app
       # Mount your models directory from the host to /models in the container
       # IMPORTANT: You MUST change 'C:pathonhosttomodels' to the actual path where you store your LLM files.
-      - C:\Users\rsbiiw\models
+      - /c/Users/rsbiiw/models:/models
     deploy:
       resources:
         reservations:

@@ -25,6 +25,7 @@ packages = [
     { include = "agents" },
     { include = "chimaera" },
     { include = "crews" },
+    { include = "graph_r1_training" },
     { include = "tools" },
 ]
 
