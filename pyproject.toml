@@ -26,6 +26,7 @@ packages = [
     { include = "chimaera" },
     { include = "crews" },
     { include = "tools" },
+    { include = "graph_r1_training" },
 ]
 
 [build-system]

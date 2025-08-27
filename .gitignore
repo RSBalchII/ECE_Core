@@ -9,4 +9,3 @@ __pycache__/
 
 # Docker
 docker-compose.override.yml
-**/Dockerfile
