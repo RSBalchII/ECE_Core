@@ -21,6 +21,11 @@ class ExtractInput(BaseModel):
     """Input schema for the ExtractorAgent tool."""
     question: str = Field(description="A natural language question about a topic that may be in the knowledge graph.")
 
+class InjectInput(BaseModel):
+    """Input schema for the InjectorAgent tool."""
+    analysis_depth: str = Field(description="The level of effort for the analysis, e.g., 'shallow' or 'deep'.", default="shallow")
+
+
 # === Tool Implementations ===
 
 class DistillerAgent(Tool):
@@ -119,19 +124,36 @@ class ExtractorAgent(Tool):
     def _run(self, tool_input: ExtractInput) -> str:
         """The core logic for the ExtractorAgent tool."""
         print(f"🔎 ExtractorAgent activated. Querying knowledge graph for: '{tool_input.question}'")
-
-        # Step 1: Use LLM to translate the natural language question into a Cypher query
         print("   (Simulating NL to Cypher translation...)")
-        # In a real implementation, this would be an LLM call with a specific prompt.
         simulated_cypher_query = f"MATCH (n) WHERE n.name CONTAINS '{tool_input.question}' RETURN n.summary"
         print(f"   Simulated Cypher Query: {simulated_cypher_query}")
-
-        # Step 2: Connect to the database and execute the query
         print("   (Simulating Neo4j connection and query execution...)")
-
-        # Step 3: Return the results as a formatted string
         simulated_result = "Based on the knowledge graph, the refactor to the Youtu-agent framework was initiated to increase long-term velocity and adopt a more scalable foundation."
         print("✅ Extraction complete.")
         return simulated_result
 
-# We will add the InjectorAgent class here in the final step.
+class InjectorAgent(Tool):
+    """
+    A tool that embodies the InjectorAgent. It uses reinforcement learning to
+    analyze and optimize the knowledge graph, inferring new connections and
+    refining existing relationships.
+    """
+    def __init__(self, llm):
+        super().__init__()
+        self.llm = llm
+        self.name = "InjectorAgent"
+        self.description = (
+            "Triggers a deep analysis of the knowledge graph to optimize it and infer "
+            "new relationships. This is a long-running, asynchronous task."
+        )
+        self.input_model = InjectInput
+
+    def _run(self, tool_input: InjectInput) -> str:
+        """The core logic for the InjectorAgent tool."""
+        print(f"🧠 InjectorAgent activated. Beginning graph optimization (Depth: {tool_input.analysis_depth})...")
+        # The actual Q-learning or graph analysis logic is highly complex and
+        # will be implemented here in the future.
+        # For now, we simulate the initiation of this process.
+        result = f"✅ (Simulated) Asynchronous graph optimization process initiated with depth '{tool_input.analysis_depth}'. The graph will be improved over time."
+        print(result)
+        return result
