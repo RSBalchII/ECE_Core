@@ -1,0 +1,56 @@
+# config.yaml
+# Main configuration for the External Context Engine (ECE) using the Youtu-agent framework.
+
+# === LLM Backend Configuration ===
+# Defines the language model that will power the agents.
+# We'll start with a local Ollama model for speed and sovereignty.
+llm:
+  provider: ollama
+  config:
+    model: "deepseek-coder:6.7b"
+    # You can add other Ollama parameters here if needed, e.g., temperature.
+
+# === Agent Definitions ===
+# This section defines each agent in our architecture.
+
+OrchestraAgent:
+  name: "Orchestrator"
+  role: "Central coordinator for the ECE."
+  goal: >
+    Receive user requests, understand intent, and delegate tasks to the appropriate specialist agents
+    (Distiller, Archivist, Extractor, Injector) to fulfill the request.
+  # The Orchestrator will have access to all other agents as its "tools".
+  tools:
+    - DistillerAgent
+    - ArchivistAgent
+    - ExtractorAgent
+    - InjectorAgent
+
+DistillerAgent:
+  name: "Distiller"
+  role: "Raw Data Analysis Agent"
+  goal: >
+    Analyze raw, unstructured session logs and conversation transcripts to identify and
+    summarize high-coherency insights and key conceptual relationships.
+
+ArchivistAgent:
+  name: "Archivist"
+  role: "Knowledge Graph Persistence Agent"
+  goal: >
+    Take the distilled insights from the DistillerAgent and persist them into the
+    Neo4j knowledge graph, creating and updating nodes and relationships.
+
+ExtractorAgent:
+  name: "Extractor"
+  role: "Knowledge Retrieval Agent"
+  goal: >
+    Receive specific queries from the Orchestrator, traverse the Neo4j knowledge graph
+    to find the most relevant information, and return it as a structured context.
+
+InjectorAgent:
+  name: "Injector"
+  role: "Graph Optimization & RL Agent"
+  goal: >
+    Periodically analyze the knowledge graph to identify areas for optimization.
+    Use reinforcement learning techniques to infer new connections and refine existing
+    relationships to improve the graph's overall utility.
