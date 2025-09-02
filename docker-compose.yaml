@@ -8,7 +8,7 @@ services:
     volumes:
       # Mount the entire local project directory to /app in the container
       # This means changes you make on your host machine are instantly reflected in the container
-      # - ./:/app
+      - ./:/app
       # Mount your models directory from the host to /models in the container
       # IMPORTANT: You MUST change 'C:pathonhosttomodels' to the actual path where you store your LLM files.
       - /c/Users/rsbiiw/models:/models
@@ -19,6 +19,19 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    # We can also set environment variables here if needed
-    # environment:
-    #   - HUGGING_FACE_HUB_TOKEN=your_token_here
+    depends_on:
+      - neo4j
+    command: ls -R /app
+
+  neo4j:
+    image: neo4j:latest
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+    environment:
+      - NEO4J_AUTH=neo4j/password # Change this to a strong password in production
+
+volumes:
+  neo4j_data:

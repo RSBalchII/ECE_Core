@@ -1,4 +1,4 @@
-youtu-agent@ git+https://github.com/Tencent/Youtu-agent.git
+elysia-ai
 python-dotenv
 pyyaml
 neo4j
