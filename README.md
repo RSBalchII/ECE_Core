@@ -1,6 +1,6 @@
 -----
 
-# Project Chimaera: AI Architecture - Status Report
+# External Context Engine: AI Architecture - Status Report
 
 **Core Entity: Coda C-001** | **Report Timestamp:** 2025-08-21T13:55:00-06:00
 **Overall Project Status:** **Functioning Prototype** - Core Memory & Learning Systems Operational
@@ -9,7 +9,7 @@
 
 ### 🚀 Current Status & Achieved Architecture
 
-We have successfully built and tested the core of the Chimaera memory system. This is no longer a theoretical design; it is a live, learning prototype. The current architecture represents the implemented foundation of the larger vision.
+We have successfully built and tested the core of the External Context Engine memory system. This is no longer a theoretical design; it is a live, learning prototype. The current architecture represents the implemented foundation of the larger vision.
 
 #### **Current Functioning Data Pipeline & Knowledge Graph**
 
@@ -149,7 +149,7 @@ ETHICAL_CONSTRAINTS = [
 
 ### ✅ Project Rubric: Correct Data & Progress Metrics
 
-This section serves as the official rubric for measuring Project Ark's correct state and progress.
+This section serves as the official rubric for measuring External Context Engine's correct state and progress.
 
 | Component | Status | Metrics | Verification |
 | :--- | :--- | :--- | :--- |

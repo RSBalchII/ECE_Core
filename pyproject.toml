@@ -1,5 +1,5 @@
 [project]
-name = "chimaera-multi-model-ai"
+name = "external-context-engine"
 version = "0.1.0"
 description = ""
 authors = [
