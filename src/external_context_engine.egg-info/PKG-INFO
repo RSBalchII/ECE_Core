@@ -1,11 +1,11 @@
 Metadata-Version: 2.4
 Name: external-context-engine
 Version: 0.1.0
-Summary: An external context engine for LLMs using the Youtu-agent framework.
+Summary: An external context engine for LLMs using the Elysia framework.
 Author-email: Rob Balch II <robert.balch.ii@gmail.com>
 Requires-Python: >=3.12
 Description-Content-Type: text/markdown
-Requires-Dist: youtu-agent@ git+https://github.com/Tencent/Youtu-agent.git
+Requires-Dist: elysia-ai
 Requires-Dist: python-dotenv
 Requires-Dist: pyyaml
 Requires-Dist: neo4j
