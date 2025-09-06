@@ -2,11 +2,15 @@
 Main application for the External Context Engine
 """
 import os
+import sys
 import yaml
 from typing import Dict, Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import logging
+
+# Add the src directory to the Python path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 # Import our specialist agents
 from src.external_context_engine.tools.specialist_agents import (
@@ -15,6 +19,9 @@ from src.external_context_engine.tools.specialist_agents import (
     CoherenceAgent,
     SafetyAgent
 )
+
+# Import the new ExtractorAgent
+from src.external_context_engine.tools.extractor_agent import ExtractorAgent
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +46,7 @@ web_search_agent = WebSearchAgent(config.get('agents', {}).get('WebSearchAgent',
 multi_modal_agent = MultiModalIngestionAgent(config.get('agents', {}).get('MultiModalIngestionAgent', {}))
 coherence_agent = CoherenceAgent(config.get('agents', {}).get('CoherenceAgent', {}))
 safety_agent = SafetyAgent(config.get('agents', {}).get('SafetyAgent', {}))
+extractor_agent = ExtractorAgent(config.get('agents', {}).get('ExtractorAgent', {}))
 
 class ChatMessage(BaseModel):
     message: str
@@ -73,6 +81,8 @@ async def chat(chat_message: ChatMessage):
             intent = "coherence_check"
         elif any(keyword in message.lower() for keyword in ["safety", "appropriate", "filter", "moderation"]):
             intent = "safety_check"
+        elif any(keyword in message.lower() for keyword in ["extract", "information", "data", "parse", "analyze"]):
+            intent = "extract_information"
         
         # Route to appropriate agent based on intent
         if intent == "web_search":
@@ -91,6 +101,21 @@ async def chat(chat_message: ChatMessage):
             result = await safety_agent.execute(message)
             response_text = f"Safety score: {result.get('safety_score', 0)}"
             agent_used = "SafetyAgent"
+        elif intent == "extract_information":
+            # For extraction, we need to get data source, type, and criteria from context
+            data_source = context.get("data_source", "")
+            data_type = context.get("data_type", "text")
+            criteria = context.get("criteria", {})
+            
+            if data_source:
+                result = await extractor_agent.execute(data_source, data_type, criteria)
+                extracted_items = len(result.get("extracted_data", []))
+                query_count = len(result.get("queries", []))
+                response_text = f"Extracted {extracted_items} items and generated {query_count} queries."
+                agent_used = "ExtractorAgent"
+            else:
+                response_text = "Please provide a data source for extraction."
+                agent_used = "ExtractorAgent"
         else:
             # Default to web search
             result = await web_search_agent.execute(message)

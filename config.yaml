@@ -45,6 +45,14 @@ orchestrator:
           - relationships
           - structure
           - summarize
+      extract_information:
+        agent: ExtractorAgent
+        keywords:
+          - extract
+          - information
+          - data
+          - parse
+          - analyze
       inject_context:
         agent: InjectorAgent
         keywords:
@@ -82,6 +90,15 @@ agents:
     enabled: true
     model: "content-filter-safe"
     threshold: 0.9
+  
+  ExtractorAgent:
+    enabled: true
+    supported_types:
+      - text
+      - pdf
+      - docx
+      - html
+    max_file_size: "50MB"
 
 # Logging configuration
 logging:
