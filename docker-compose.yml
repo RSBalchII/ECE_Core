@@ -11,6 +11,7 @@ services:
       - PYTHONPATH=/app
     depends_on:
       - neo4j
+      - redis
 
   neo4j:
     image: neo4j:5.15.0
@@ -29,6 +30,20 @@ services:
       timeout: 30s
       retries: 5
 
+  redis:
+    image: redis/redis-stack:latest
+    ports:
+      - "6380:6379"
+      - "8002:8001"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
 volumes:
   neo4j_data:
   neo4j_logs:
+  redis_data:

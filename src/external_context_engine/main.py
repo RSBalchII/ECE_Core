@@ -30,6 +30,9 @@ from src.external_context_engine.utils.db_manager import Neo4jManager
 # Import the QLearningGraphAgent
 from src.external_context_engine.memory_management.q_learning.q_learning_agent import QLearningGraphAgent
 
+# Import the CacheManager
+from src.external_context_engine.tools.cache_manager import CacheManager
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -81,6 +84,11 @@ try:
     logger.info("QLearningGraphAgent initialized")
 except Exception as e:
     logger.error(f"Failed to initialize QLearningGraphAgent: {e}")
+
+# Initialize CacheManager
+cache_config = config.get('cache', {})
+cache_manager = CacheManager(config=cache_config)
+logger.info("CacheManager initialized")
 
 class ChatMessage(BaseModel):
     message: str
@@ -151,6 +159,8 @@ async def chat(chat_message: ChatMessage):
             intent = "extract_information"
         elif any(keyword in message.lower() for keyword in ["archive", "store", "memory", "persist", "save"]):
             intent = "archive_memory"
+        elif any(keyword in message.lower() for keyword in ["cache", "retrieve", "store in cache", "cached", "memory cache"]):
+            intent = "cache_operation"
         
         # Route to appropriate agent based on intent
         if intent == "web_search":
@@ -197,6 +207,30 @@ async def chat(chat_message: ChatMessage):
             else:
                 response_text = "Please provide structured data for archiving."
                 agent_used = "ArchivistAgent"
+        elif intent == "cache_operation":
+            # For cache operations, we need to get cache action and data from context
+            cache_action = context.get("cache_action", "")
+            cache_key = context.get("cache_key", "")
+            cache_value = context.get("cache_value", "")
+            cache_embedding = context.get("cache_embedding", None)
+            
+            if cache_action == "store" and cache_key and cache_value:
+                result = await cache_manager.store(cache_key, cache_value, cache_embedding)
+                if result:
+                    response_text = f"Stored value in cache with key: {cache_key}"
+                else:
+                    response_text = f"Failed to store value in cache with key: {cache_key}"
+                agent_used = "CacheManager"
+            elif cache_action == "retrieve" and cache_key:
+                result = await cache_manager.retrieve(cache_key)
+                if result:
+                    response_text = f"Retrieved value from cache: {result}"
+                else:
+                    response_text = f"No value found in cache for key: {cache_key}"
+                agent_used = "CacheManager"
+            else:
+                response_text = "Please provide cache action (store/retrieve) and required data."
+                agent_used = "CacheManager"
         else:
             # Default to web search
             result = await web_search_agent.execute(message)
@@ -269,6 +303,81 @@ async def delete_data(delete_request: DeleteRequest):
         return result
     except Exception as e:
         logger.error(f"Error deleting data: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# Data models for CacheManager endpoints
+from src.external_context_engine.tools.cache_manager import CacheEntry, SemanticQuery, CacheStats
+from typing import List, Optional
+
+class CacheStoreRequest(BaseModel):
+    key: str
+    value: str
+    embedding: Optional[List[float]] = None
+    ttl: Optional[int] = None
+
+class CacheRetrieveRequest(BaseModel):
+    key: str
+
+class SemanticSearchRequest(BaseModel):
+    query_embedding: List[float]
+    threshold: float = 0.8
+
+@app.post("/cache/store")
+async def cache_store(store_request: CacheStoreRequest):
+    """Store a value in the cache."""
+    try:
+        result = await cache_manager.store(
+            store_request.key,
+            store_request.value,
+            store_request.embedding,
+            store_request.ttl
+        )
+        return {"success": result}
+    except Exception as e:
+        logger.error(f"Error storing in cache: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/cache/retrieve")
+async def cache_retrieve(retrieve_request: CacheRetrieveRequest):
+    """Retrieve a value from the cache."""
+    try:
+        result = await cache_manager.retrieve(retrieve_request.key)
+        return {"key": retrieve_request.key, "value": result}
+    except Exception as e:
+        logger.error(f"Error retrieving from cache: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/cache/semantic_search")
+async def cache_semantic_search(search_request: SemanticSearchRequest):
+    """Perform semantic search in the cache."""
+    try:
+        results = await cache_manager.semantic_search(
+            search_request.query_embedding,
+            search_request.threshold
+        )
+        return results
+    except Exception as e:
+        logger.error(f"Error performing semantic search: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/cache/stats")
+async def cache_stats():
+    """Get cache statistics."""
+    try:
+        stats = await cache_manager.get_stats()
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting cache stats: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/cache/clear")
+async def cache_clear():
+    """Clear the cache."""
+    try:
+        result = await cache_manager.clear()
+        return {"success": result}
+    except Exception as e:
+        logger.error(f"Error clearing cache: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 # QLearningGraphAgent endpoints

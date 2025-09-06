@@ -77,6 +77,14 @@ orchestrator:
           - traverse graph
           - navigate
           - path finding
+      cache_operation:
+        agent: CacheManager
+        keywords:
+          - cache
+          - retrieve
+          - store in cache
+          - cached
+          - memory cache
 
     # Default agent when no specific intent is matched
     default_agent: WebSearchAgent
@@ -129,6 +137,12 @@ agents:
     epsilon: 0.1
     max_episodes: 1000
     q_table_path: "./data/q_table.npy"
+
+# Cache configuration
+cache:
+  redis_url: "redis://redis:6379"
+  default_ttl: 3600
+  max_size: 10000
 
 # Logging configuration
 logging:

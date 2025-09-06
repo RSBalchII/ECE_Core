@@ -12,3 +12,5 @@ beautifulsoup4>=4.12.0
 psutil>=5.9.0
 spacy>=3.4.0
 scikit-learn>=1.0.0
+redis>=4.5.0
+hiredis>=2.2.0

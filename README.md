@@ -62,6 +62,19 @@ The QLearningGraphAgent is a Reinforcement Learning-based graph navigation syste
 
 For detailed documentation, see [QLearningGraphAgent Documentation](docs/q_learning_agent.md).
 
+### CacheManager
+The CacheManager is responsible for managing the short-term memory layer of the ECE using Redis. It provides both exact match caching and semantic (vector-based) caching to reduce latency and prepare the system for the real-time InjectorAgent.
+
+**Key Features:**
+- Exact match caching for fast retrieval of known data
+- Semantic caching using vector similarity search
+- Cache eviction policies (LRU, TTL)
+- Cache statistics and monitoring
+- High-performance operations with low latency
+- Scalable design for high throughput
+
+For detailed documentation, see [CacheManager Documentation](docs/cache_manager.md).
+
 ### WebSearchAgent
 Performs web searches to gather external context.
 
@@ -123,6 +136,11 @@ The API will be available at `http://localhost:8000`.
 - `POST /q_learning/update_q_values` - Update Q-values based on path success
 - `POST /q_learning/train` - Train the agent with historical data
 - `GET /q_learning/convergence_metrics` - Get convergence metrics
+- `POST /cache/store` - Store a value in the cache
+- `POST /cache/retrieve` - Retrieve a value from the cache
+- `POST /cache/semantic_search` - Perform semantic search in the cache
+- `GET /cache/stats` - Get cache statistics
+- `POST /cache/clear` - Clear the cache
 
 ## Enhancement Opportunities
 
@@ -146,6 +164,7 @@ pytest tests/integration/
 - [ExtractorAgent Documentation](docs/extractor_agent.md)
 - [DistillerAgent Documentation](docs/distiller_agent.md)
 - [QLearningGraphAgent Documentation](docs/q_learning_agent.md)
+- [CacheManager Documentation](docs/cache_manager.md)
 - [QLearning Enhancement Documentation](docs/README.md)
 - [Specification](specs/extractor-agent/spec.md)
 - [Implementation Plan](specs/extractor-agent/plan.md)
