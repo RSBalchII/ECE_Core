@@ -14,6 +14,7 @@
   - The module will be implemented as a standalone component within the `src/external_context_engine/memory_management/q_learning/` directory.
   - It will expose methods for path finding, Q-Table management, and training.
   - The module will integrate with the existing Neo4jManager for database operations.
+  - The module will implement a hybrid memory model where Q-values are stored both in-memory for performance and persisted to Neo4j relationships for shared intelligence.
 
 ## 2. Data Models
 
@@ -74,6 +75,12 @@ class MemoryPath(BaseModel):
 - **Method**: GET
 - **Response**: `Dict[str, Any]` (convergence metrics)
 
+### 3.5 Sync Q-Values Endpoint
+- **Endpoint**: `/sync_q_values`
+- **Method**: POST
+- **Request Body**: `None`
+- **Response**: `Dict[str, Any]` (confirmation of synchronization)
+
 ## 4. Research and Implementation Details
 
 - Investigate and implement the Q-Learning algorithm for graph navigation.
@@ -83,6 +90,8 @@ class MemoryPath(BaseModel):
 - Implement methods for updating Q-values based on path success.
 - Implement training methods with historical path data.
 - Implement metrics for tracking Q-Learning convergence.
+- Implement hybrid memory model with Neo4j integration.
+- Implement synchronization between in-memory Q-table and Neo4j relationship properties.
 - Optimize algorithms for performance with large graphs.
 - Implement logging for monitoring and debugging purposes.
 
@@ -114,6 +123,9 @@ class MemoryPath(BaseModel):
    
    # Train the agent
    await agent.train(training_data)
+   
+   # Synchronize Q-values with Neo4j
+   await agent.sync_q_values_to_graph()
    ```
 
-6. The module will handle graph navigation using reinforcement learning.
+6. The module will handle graph navigation using reinforcement learning and maintain a hybrid memory model.

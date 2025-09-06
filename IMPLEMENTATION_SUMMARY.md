@@ -1,72 +1,80 @@
-# ExtractorAgent Implementation Summary
+# QLearningGraphAgent Implementation Summary
 
-This document summarizes the implementation of the ExtractorAgent for the External Context Engine.
+## Overview
+This document summarizes the implementation of the QLearningGraphAgent module for the External Context Engine. The module implements a Reinforcement Learning-based graph navigation system that can intelligently traverse the knowledge graph to find the most relevant information for complex queries.
 
-## Implemented Features
+## Components Implemented
 
-1. **Multi-format Support**:
-   - Text files (.txt)
-   - PDF documents (.pdf) using pdfplumber
-   - DOCX documents (.docx) using python-docx
-   - HTML documents (.html) using BeautifulSoup
+### 1. Data Models
+- **MemoryPath**: Represents a path through the knowledge graph with nodes, relationships, score, and length.
 
-2. **Flexible Extraction Criteria**:
-   - Basic information extraction (entities, dates, emails, phone numbers)
-   - Keyword-based extraction
-   - Pattern-based extraction using regular expressions
-   - Entity recognition (persons, organizations)
-   - Structured data extraction (key-value pairs)
+### 2. Core Logic
+- **QLearningGraphAgent**: Main class implementing the Q-Learning algorithm for graph navigation.
+- **QTable**: Q-Table implementation with persistence support for storing state-action values.
 
-3. **Knowledge Graph Integration**:
-   - Query generation based on extracted data
-   - Query optimization (aggressive and moderate modes)
-   - Cypher query generation for Neo4j
+### 3. API Integration
+- Implemented API endpoints for path finding, Q-value updates, training, and convergence metrics.
+- Integrated with the main application's routing system.
 
-4. **Performance Monitoring**:
-   - Processing time tracking
-   - Memory usage monitoring
-   - Performance metrics collection
+### 4. Configuration
+- Added configuration options for the QLearningGraphAgent in `config.yaml`.
+- Added routing keywords for the Q-learning module.
 
-5. **Error Handling**:
-   - File not found errors
-   - Unsupported data types
-   - Parsing errors for different formats
-   - Network errors for URL-based sources
+### 5. Testing
+- Unit tests for all components of the Q-learning module.
+- Integration tests for API endpoints.
+- Import tests to verify module availability.
 
-## API
+## Features Implemented
 
-The ExtractorAgent provides the following main methods:
+### Q-Learning Algorithm
+- Implementation of the Q-Learning algorithm for graph navigation.
+- Epsilon-greedy strategy for balancing exploration and exploitation.
+- Q-value update mechanism based on path success.
 
-- `execute(data_source, data_type, criteria)`: Main method to extract information
-- `get_performance_metrics()`: Get performance statistics
+### Path Finding
+- Directed search to specific target nodes.
+- Exploratory search in the neighborhood of a node.
+- Path ranking by Q-values.
 
-## Integration
+### Q-Table Management
+- Sparse Q-Table implementation for memory efficiency.
+- Persistence support for maintaining learned knowledge across sessions.
 
-The ExtractorAgent has been integrated into the main application with:
-- Configuration in `config.yaml`
-- Intent routing in `main.py` based on keywords
-- Proper initialization and error handling
+### Training
+- Training with historical path data to improve navigation capabilities.
+- Metrics for tracking the convergence of the Q-Learning algorithm.
 
-## Documentation
+## API Endpoints
 
-Comprehensive documentation has been created:
-- Technical documentation in `docs/extractor_agent.md`
-- Usage examples in `examples/extractor_agent_examples.py`
-- Sample documents creation script
-- Updates to the main `README.md`
+1. **POST /q_learning/find_paths**: Find optimal paths using Q-values for guidance.
+2. **POST /q_learning/update_q_values**: Update Q-values based on the success of a path.
+3. **POST /q_learning/train**: Train the Q-Learning agent with historical path data.
+4. **GET /q_learning/convergence_metrics**: Get metrics about Q-Learning convergence.
+
+## Configuration
+
+The QLearningGraphAgent can be configured with the following parameters:
+- `learning_rate`: Learning rate for Q-value updates (default: 0.1)
+- `discount_factor`: Discount factor for future rewards (default: 0.9)
+- `epsilon`: Exploration rate (default: 0.1)
+- `max_episodes`: Maximum number of training episodes (default: 1000)
+- `q_table_path`: Path to save/load Q-table (default: "./data/q_table.npy")
+
+## Routing Keywords
+
+The QLearningGraphAgent can be accessed using the following keywords in chat messages:
+- "find path"
+- "reason"
+- "traverse graph"
+- "navigate"
+- "path finding"
 
 ## Testing
 
-- Unit tests covering all major functionality
-- Integration tests for API interaction
-- Standalone test script for verification
+The implementation includes comprehensive tests:
+- Unit tests for the QTable and QLearningGraphAgent classes.
+- Integration tests for API endpoints.
+- Import tests to verify module availability.
 
-## Dependencies
-
-The following dependencies were added:
-- pdfplumber for PDF processing
-- python-docx for DOCX processing
-- beautifulsoup4 for HTML processing
-- psutil for performance monitoring
-
-All dependencies have been added to `requirements.txt`.
+All tests are passing, indicating that the implementation is working correctly.

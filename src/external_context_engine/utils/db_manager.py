@@ -66,6 +66,8 @@ class Neo4jManager:
                 return [record.data() for record in result]
         except Exception as e:
             logger.error(f"Failed to execute query: {e}")
+            logger.error(f"Query: {query}")
+            logger.error(f"Parameters: {parameters}")
             raise
             
     def create_node(self, label: str, properties: Dict[str, Any]) -> Dict[str, Any]:
@@ -83,6 +85,39 @@ class Neo4jManager:
         parameters = {"props": properties}
         result = self.execute_query(query, parameters)
         return result[0] if result else {}
+        
+    def create_relationship_by_ids(self, start_node_id: str, end_node_id: str, 
+                          relationship_type: str, properties: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Create a relationship between two nodes using their 'id' properties.
+        
+        Args:
+            start_node_id: ID property of the start node
+            end_node_id: ID property of the end node
+            relationship_type: Type of relationship
+            properties: Relationship properties
+            
+        Returns:
+            Created relationship data
+        """
+        query = (
+            "MATCH (a {id: $start_id}), (b {id: $end_id}) "
+            "CREATE (a)-[r:" + relationship_type + " $props]->(b) "
+            "RETURN r"
+        )
+        
+        parameters = {
+            "start_id": start_node_id,
+            "end_id": end_node_id,
+            "props": properties or {}
+        }
+        
+        try:
+            result = self.execute_query(query, parameters)
+            return result[0] if result else {}
+        except Exception as e:
+            logger.error(f"Failed to create relationship: {e}")
+            raise
         
     def create_relationship(self, start_node_id: str, end_node_id: str, 
                           relationship_type: str, properties: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

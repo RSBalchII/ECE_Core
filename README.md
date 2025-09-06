@@ -12,6 +12,18 @@ The External Context Engine is an AI-powered system that processes and extracts 
 
 ## Specialist Agents
 
+### ArchivistAgent
+The ArchivistAgent is responsible for managing the knowledge graph by storing and retrieving structured information using Neo4j as the persistence layer.
+
+**Key Features:**
+- Store entities and relationships in the knowledge graph
+- Retrieve information using Cypher queries
+- Update existing entities and relationships
+- Delete entities and relationships
+- Integration with the main application through chat interface or direct API endpoints
+
+For detailed documentation, see [ArchivistAgent Documentation](docs/archivist_agent.md).
+
 ### ExtractorAgent
 The ExtractorAgent is responsible for extracting specific information from unstructured data sources and generating targeted queries for the knowledge graph.
 
@@ -36,6 +48,19 @@ The DistillerAgent is responsible for distilling raw text into structured, meani
 - Comprehensive error handling
 
 For detailed documentation, see [DistillerAgent Documentation](docs/distiller_agent.md).
+
+### QLearningGraphAgent
+The QLearningGraphAgent is a Reinforcement Learning-based graph navigation system that intelligently traverses the knowledge graph to find the most relevant information for complex queries.
+
+**Key Features:**
+- Q-Learning algorithm for graph navigation
+- Path finding with Q-value guidance
+- Q-Table persistence for maintaining learned knowledge
+- Training with historical path data
+- Epsilon-greedy strategy for balancing exploration and exploitation
+- API endpoints for integration with the main application
+
+For detailed documentation, see [QLearningGraphAgent Documentation](docs/q_learning_agent.md).
 
 ### WebSearchAgent
 Performs web searches to gather external context.
@@ -90,6 +115,18 @@ The API will be available at `http://localhost:8000`.
 - `GET /` - Root endpoint
 - `GET /health` - Health check
 - `POST /chat` - Main chat endpoint
+- `POST /archive/store` - Store data in the knowledge graph
+- `POST /archive/retrieve` - Retrieve data from the knowledge graph
+- `POST /archive/update` - Update data in the knowledge graph
+- `POST /archive/delete` - Delete data from the knowledge graph
+- `POST /q_learning/find_paths` - Find optimal paths using Q-values
+- `POST /q_learning/update_q_values` - Update Q-values based on path success
+- `POST /q_learning/train` - Train the agent with historical data
+- `GET /q_learning/convergence_metrics` - Get convergence metrics
+
+## Enhancement Opportunities
+
+The QLearningGraphAgent has been analyzed for enhancement opportunities using Neo4j's advanced features. For detailed information about these opportunities, see the [QLearning Enhancement Documentation](docs/README.md).
 
 ## Testing
 
@@ -105,7 +142,11 @@ pytest tests/integration/
 
 ## Documentation
 
+- [ArchivistAgent Documentation](docs/archivist_agent.md)
 - [ExtractorAgent Documentation](docs/extractor_agent.md)
+- [DistillerAgent Documentation](docs/distiller_agent.md)
+- [QLearningGraphAgent Documentation](docs/q_learning_agent.md)
+- [QLearning Enhancement Documentation](docs/README.md)
 - [Specification](specs/extractor-agent/spec.md)
 - [Implementation Plan](specs/extractor-agent/plan.md)
 - [Task Breakdown](specs/extractor-agent/tasks.md)

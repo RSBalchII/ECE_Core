@@ -15,6 +15,7 @@ As a knowledge base manager, I want to store and retrieve structured information
 - The agent must be able to retrieve information from the knowledge graph based on queries.
 - The agent should support complex queries involving multiple entities and relationships.
 - The agent must return relevant and accurate information.
+- The agent must be able to query and utilize Q-value properties on graph relationships to enhance its data retrieval logic.
 
 ### 2.3 Knowledge Base Maintenance
 - The agent must maintain the integrity and organization of the knowledge base.
@@ -41,12 +42,14 @@ As a knowledge base manager, I want to store and retrieve structured information
 - Given a query, when the agent processes it, then it should return relevant and accurate information.
 - Given a request to update or delete data, when the agent processes it, then the knowledge base should be correctly modified.
 - Given a failure in storage or retrieval, when the agent encounters it, then it should provide a clear error message and not crash.
+- Given Q-values stored on relationships, when the agent queries for them, then it should be able to use them to find the most efficiently reasoned paths.
 
 ## 5. Review and Acceptance Checklist
 
-- [ ] All functional requirements have been implemented.
+- [x] All functional requirements have been implemented.
 - [ ] All non-functional requirements have been addressed.
-- [ ] Acceptance criteria have been met.
-- [ ] The agent has been tested with various data storage and retrieval scenarios.
-- [ ] Error handling has been implemented and tested.
-- [ ] Security measures have been implemented and verified.
+- [x] Acceptance criteria have been met.
+- [x] The agent has been tested with various data storage and retrieval scenarios.
+- [x] Error handling has been implemented and tested.
+- [x] Security measures have been implemented and verified.
+- [x] Integration with QLearningGraphAgent has been implemented and tested.

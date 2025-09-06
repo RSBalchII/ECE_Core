@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from collections import defaultdict
 import numpy as np
 
-from ..models import MemoryPath
+from ..models.memory_path import MemoryPath
 
 
 logger = logging.getLogger(__name__)
@@ -81,6 +81,50 @@ class QLearningGraphAgent:
         self.path_cache = {}
         
         logger.info(f"Q-Learning Agent initialized with α={self.learning_rate}, γ={self.discount_factor}, ε={self.epsilon}")
+    
+    async def initialize(self):
+        """
+        Initialize the Q-Learning agent asynchronously.
+        This method should be called after creating the agent to load the Q-table
+        and initialize Q-values from the Neo4j graph.
+        """
+        await self.q_table.load()
+        await self._initialize_q_table_from_graph()
+    
+    async def _initialize_q_table_from_graph(self):
+        """
+        Initialize the in-memory Q-table with Q-values from the Neo4j graph.
+        This ensures that the agent starts with any previously learned knowledge.
+        """
+        logger.info("Initializing Q-table from Neo4j graph...")
+        
+        query = """
+        MATCH (from)-[r:TRANSITION]->(to)
+        WHERE exists(r.q_value)
+        RETURN from.name as from_node, to.name as to_node, r.q_value as q_value
+        """
+        
+        try:
+            results = await asyncio.to_thread(
+                self.graph.execute_query,
+                query
+            )
+            
+            for record in results:
+                from_node = record["from_node"]
+                to_node = record["to_node"]
+                q_value = record["q_value"]
+                
+                # Create state and action keys
+                state_key = self._get_state_key(from_node)
+                action_key = self._get_action_key({"from": from_node, "to": to_node})
+                
+                # Update Q-table
+                self.q_table.update(state_key, action_key, q_value)
+            
+            logger.info(f"Initialized Q-table with {len(results)} Q-values from graph")
+        except Exception as e:
+            logger.error(f"Failed to initialize Q-table from graph: {e}")
     
     async def find_paths(
         self, 
@@ -275,15 +319,65 @@ class QLearningGraphAgent:
             
             # Update Q-table
             self.q_table.update(state, action, new_q)
+            
+            # Update Q-value in Neo4j database
+            await self._update_q_value_in_graph(path[i], path[i + 1], new_q)
         
         # Track episode
         self.episode_count += 1
         self.total_rewards.append(reward)
         
-        # Periodically save Q-table
+        # Periodically save Q-table and sync with Neo4j
         if self.episode_count % 100 == 0:
             await self.q_table.save()
-            logger.info(f"Q-table saved after {self.episode_count} episodes")
+            await self.sync_q_values_to_graph()
+            logger.info(f"Q-table saved and synced with Neo4j after {self.episode_count} episodes")
+    
+    async def _update_q_value_in_graph(self, from_node: str, to_node: str, q_value: float):
+        """
+        Update Q-value as a property on the relationship in the Neo4j graph.
+        
+        Args:
+            from_node: Name of the starting node
+            to_node: Name of the ending node
+            q_value: The Q-value to store
+        """
+        query = """
+        MATCH (from {name: $from_node}), (to {name: $to_node})
+        MERGE (from)-[r:TRANSITION]-(to)
+        SET r.q_value = $q_value
+        RETURN r
+        """
+        
+        try:
+            await asyncio.to_thread(
+                self.graph.execute_query,
+                query,
+                {
+                    "from_node": from_node,
+                    "to_node": to_node,
+                    "q_value": q_value
+                }
+            )
+        except Exception as e:
+            logger.error(f"Failed to update Q-value in graph: {e}")
+    
+    async def sync_q_values_to_graph(self):
+        """
+        Synchronize all in-memory Q-values with the Neo4j graph.
+        This method should be called periodically to ensure consistency.
+        """
+        logger.info("Synchronizing Q-values with Neo4j graph...")
+        
+        # Get all state-action pairs from the Q-table
+        for state, actions in self.q_table.q_values.items():
+            for action, q_value in actions.items():
+                # Parse the action key to get from_node and to_node
+                if "→" in action:
+                    from_node, to_node = action.split("→")
+                    await self._update_q_value_in_graph(from_node, to_node, q_value)
+        
+        logger.info("Q-value synchronization with Neo4j completed")
     
     async def train(self, training_data: List[Tuple[str, str, float]]):
         """
@@ -310,11 +404,11 @@ class QLearningGraphAgent:
         logger.info(f"Training complete. Total episodes: {self.episode_count}")
     
     async def _get_neighbors(self, node: str) -> List[Dict[str, Any]]:
-        """Get neighboring nodes from the graph."""
+        """Get neighboring nodes from the graph with Q-values."""
         query = """
         MATCH (n {name: $node})-[r]-(neighbor)
         RETURN neighbor.name as to_node, type(r) as type, 
-               r.strength as strength
+               r.strength as strength, r.q_value as q_value
         LIMIT 10
         """
         
@@ -353,7 +447,12 @@ class QLearningGraphAgent:
         
         for action in actions:
             action_key = self._get_action_key(action)
+            # First try to get Q-value from in-memory Q-table
             q_value = self.q_table.get_q_value(state_key, action_key)
+            
+            # If not found in memory, try to get from action data (from graph)
+            if q_value == 0.0 and action.get("q_value") is not None:
+                q_value = action["q_value"]
             
             if q_value > best_q_value:
                 best_q_value = q_value
@@ -410,10 +509,6 @@ class QTable:
         """
         self.persist_path = persist_path
         self.q_values = defaultdict(lambda: defaultdict(float))
-        
-        # Try to load existing Q-table
-        if persist_path:
-            asyncio.create_task(self.load())
     
     def get_q_value(self, state: str, action: str) -> float:
         """Get Q-value for a state-action pair."""

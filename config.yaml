@@ -61,6 +61,22 @@ orchestrator:
           - add to knowledge base
           - integrate
           - incorporate
+      archive_memory:
+        agent: ArchivistAgent
+        keywords:
+          - archive
+          - store
+          - memory
+          - persist
+          - save
+      find_path:
+        agent: QLearningGraphAgent
+        keywords:
+          - find path
+          - reason
+          - traverse graph
+          - navigate
+          - path finding
 
     # Default agent when no specific intent is matched
     default_agent: WebSearchAgent
@@ -99,6 +115,20 @@ agents:
       - docx
       - html
     max_file_size: "50MB"
+
+  ArchivistAgent:
+    enabled: true
+    neo4j_uri: "bolt://localhost:7688"
+    neo4j_user: "neo4j"
+    neo4j_password: "password"
+
+  QLearningGraphAgent:
+    enabled: true
+    learning_rate: 0.1
+    discount_factor: 0.9
+    epsilon: 0.1
+    max_episodes: 1000
+    q_table_path: "./data/q_table.npy"
 
 # Logging configuration
 logging:

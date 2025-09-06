@@ -4,8 +4,31 @@ services:
   context-engine:
     build: .
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - .:/app
     environment:
       - PYTHONPATH=/app
+    depends_on:
+      - neo4j
+
+  neo4j:
+    image: neo4j:5.15.0
+    ports:
+      - "7475:7474"
+      - "7688:7687"
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_PLUGINS=["apoc"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 30s
+      retries: 5
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
