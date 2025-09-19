@@ -209,3 +209,35 @@ class Neo4jManager:
                             q_value=q_value
                         )
             logger.info("Synchronized Q-values to Neo4j graph")
+
+    def find_nodes_by_keywords(self, keywords: List[str]) -> List[Dict[str, Any]]:
+        """
+        Find nodes that have properties matching the given keywords.
+
+        Args:
+            keywords: A list of keywords to search for.
+
+        Returns:
+            A list of nodes that match the keywords.
+        """
+        if not self._driver:
+            raise Exception("Database not connected")
+
+        with self._driver.session() as session:
+            query = """
+            UNWIND $keywords as keyword
+            MATCH (n)
+            WHERE any(prop in keys(n) WHERE n[prop] CONTAINS keyword)
+            RETURN n
+            """
+            result = session.run(query, keywords=keywords)
+            
+            nodes = []
+            for record in result:
+                node = record["n"]
+                nodes.append({
+                    "id": node["id"],
+                    "labels": list(node.labels),
+                    "properties": dict(node)
+                })
+            return nodes

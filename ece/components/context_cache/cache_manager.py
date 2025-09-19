@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from redis.commands.search.field import VectorField, TextField
 from redis.commands.search.query import Query
+from redis.commands.search.index_definition import IndexDefinition
+import asyncio
+
+from ece.agents.clients import ArchivistClient
 
 
 @dataclass
@@ -40,7 +44,8 @@ class CacheManager:
     
     def __init__(self, host: Optional[str] = None, port: Optional[int] = None, 
                  password: Optional[str] = None, db: int = 0, 
-                 vector_dimensions: int = 1536):
+                 vector_dimensions: int = 1536, max_size: int = 1000,
+                 truncation_callback: Optional[callable] = None):
         """
         Initialize the CacheManager with Redis connection parameters.
         
@@ -50,12 +55,17 @@ class CacheManager:
             password: Redis password. Defaults to REDIS_PASSWORD env var.
             db: Redis database number. Defaults to 0.
             vector_dimensions: Dimensions of the vector embeddings. Defaults to 1536.
+            max_size: Maximum number of entries in the cache. Defaults to 1000.
+            truncation_callback: A function to call with the keys of truncated entries.
         """
         self.host = host or os.getenv('REDIS_HOST', 'localhost')
         self.port = port or int(os.getenv('REDIS_PORT', 6379))
         self.password = password or os.getenv('REDIS_PASSWORD')
         self.db = db
         self.vector_dimensions = vector_dimensions
+        self.max_size = max_size
+        self.truncation_callback = truncation_callback
+        self.archivist_client = ArchivistClient()
         
         # Initialize Redis connection
         self.redis_client = self._connect()
@@ -65,6 +75,44 @@ class CacheManager:
         
         # Initialize statistics
         self._init_statistics()
+    
+    def _trim_cache(self):
+        """
+        Trim the cache to the max_size by removing the oldest entries.
+        """
+        try:
+            # Get the number of keys in the cache
+            num_keys = self.redis_client.dbsize()
+            
+            if num_keys > self.max_size:
+                # Get all keys
+                keys = self.redis_client.keys('context_cache:*')
+                
+                # Get creation times for all keys
+                creation_times = []
+                for key in keys:
+                    created_at_str = self.redis_client.hget(key, 'created_at')
+                    if created_at_str:
+                        creation_times.append((key, datetime.fromisoformat(created_at_str)))
+                
+                # Sort keys by creation time (oldest first)
+                creation_times.sort(key=lambda item: item[1])
+                
+                # Determine how many keys to delete
+                num_to_delete = num_keys - self.max_size
+                
+                # Delete the oldest keys
+                keys_to_delete = [item[0] for item in creation_times[:num_to_delete]]
+                if keys_to_delete:
+                    if self.truncation_callback:
+                        self.truncation_callback(keys_to_delete)
+                    else:
+                        # If no callback is provided, call the archivist client
+                        asyncio.run(self.archivist_client.handle_truncated_entries(keys_to_delete))
+                    self.redis_client.delete(*keys_to_delete)
+                    print(f"Trimmed {len(keys_to_delete)} oldest entries from the cache.")
+        except Exception as e:
+            print(f"Error trimming cache: {str(e)}")
     
     def _init_statistics(self):
         """
@@ -106,11 +154,11 @@ class CacheManager:
             
             # Create the index
             search.create_index(
-                schema,
-                definition={
-                    "PREFIX": "context_cache:",
-                    "SCORE_FIELD": "access_count"
-                }
+                *schema,
+                definition=IndexDefinition(
+                    prefix=["context_cache:"],
+                    score_field="access_count"
+                )
             )
         except Exception as e:
             print(f"Warning: Could not create search index: {str(e)}")
@@ -175,6 +223,9 @@ class CacheManager:
                 pipe.execute()
             else:
                 self.redis_client.hset(search_key, mapping=mapping)
+            
+            # Trim the cache if it exceeds max_size
+            self._trim_cache()
                 
             return True
         except Exception as e:

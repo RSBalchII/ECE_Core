@@ -8,9 +8,6 @@ import os
 import json
 import asyncio
 
-# Initialize rich console for better output
-console = Console()
-
 def get_orchestrator_url():
     """
     Get the Orchestrator URL from environment variables or a config file.
@@ -32,14 +29,15 @@ async def main():
     Main asynchronous function to run the ECE client.
     """
     orchestrator_url = get_orchestrator_url()
+    base_url = orchestrator_url.replace("/process_prompt", "")
+    print(f"DEBUG: get_orchestrator_url() returned: {orchestrator_url}")
+    console = Console()
     console.print(f"[bold green]Connecting to ECE Orchestrator at:[/bold green] {orchestrator_url}")
     console.print("Type 'exit' or 'quit' to terminate the client.")
 
     async with httpx.AsyncClient(timeout=None) as client:
         while True:
             try:
-                # --- CRITICAL CHANGE: REMOVED 'await' ---
-                # console.input() is a synchronous function and does not need to be awaited.
                 prompt_text = console.input("[bold cyan]ECE>[/bold cyan] ")
 
                 if prompt_text.lower() in ['exit', 'quit']:
@@ -48,20 +46,43 @@ async def main():
                 if not prompt_text:
                     continue
 
-                payload = {"prompt": prompt_text}
+                params = {"prompt": prompt_text}
                 
                 console.print("\n[yellow]Sending request to Orchestrator...[/yellow]")
                 
-                async with client.stream("POST", orchestrator_url, json=payload) as response:
-                    if response.status_code != 200:
-                        error_detail = await response.aread()
-                        console.print(f"[bold red]HTTP Error: {response.status_code} - {error_detail.decode()}[/bold red]")
-                        continue
+                response = await client.get(orchestrator_url, params=params)
+                if response.status_code != 200:
+                    error_detail = await response.aread()
+                    console.print(f"[bold red]HTTP Error: {response.status_code} - {error_detail.decode()}[/bold red]")
+                    continue
 
-                    console.print("[bold green]Response from Orchestrator:[/bold green]")
-                    async for chunk in response.aiter_text():
-                        print(chunk, end="", flush=True)
-                    print("\n")
+                response_data = response.json()
+                console.print("[bold green]Response from Orchestrator:[/bold green]")
+                console.print(response_data.get("response"))
+
+                if "analysis_id" in response_data.get("response", ""):
+                    analysis_id = response_data.get("response").split("is ")[-1].replace(".","")
+                    console.print(f"\n[yellow]Polling for analysis result with ID: {analysis_id}...[/yellow]")
+                    
+                    polling_url = f"{base_url}/get_analysis_result"
+                    polling_params = {"analysis_id": analysis_id}
+                    
+                    max_polls = 60 # Poll for a maximum of 2 minutes
+                    for _ in range(max_polls):
+                        await asyncio.sleep(2)
+                        polling_response = await client.get(polling_url, params=polling_params)
+                        if polling_response.status_code == 200:
+                            polling_data = polling_response.json()
+                            if polling_data.get("status") == "complete":
+                                console.print("\n[bold green]Analysis complete:[/bold green]")
+                                console.print(polling_data.get("response"))
+                                break
+                        else:
+                            console.print(f"[bold red]Error polling for result: {polling_response.status_code}[/bold red]")
+                            break
+                    else:
+                        console.print("[bold red]Analysis timed out.[/bold red]")
+
 
             except httpx.RequestError as e:
                 console.print(f"\n[bold red]Connection Error:[/bold red] Could not connect to the ECE Orchestrator. Please ensure the ECE is running.")

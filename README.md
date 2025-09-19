@@ -1,184 +1,39 @@
-# External Context Engine
+# External Context Engine (ECE)
 
-The External Context Engine is an AI-powered system that processes and extracts information from various data sources, generating targeted queries for knowledge graph searches. It features multiple specialist agents that handle different types of processing tasks.
+The External Context Engine is a multi-agent AI system designed to function as an Externalized Executive Function (EEF). It augments a user's cognitive abilities by creating and managing a "Living Narrative" of their experiences and knowledge.
 
 ## Features
 
-- **Multi-Agent Architecture**: Specialized agents for different processing tasks
-- **Multi-Format Support**: Handles text files, PDFs, DOCX documents, and HTML content
-- **Knowledge Graph Integration**: Generates optimized queries for knowledge graph searches
-- **Flexible Configuration**: YAML-based configuration system
-- **Comprehensive Testing**: Unit and integration tests for all components
+- **Multi-Agent Architecture**: A tiered system of specialized AI agents for deep, multi-turn reasoning.
+- **Automated Knowledge Management**: Continuously processes and organizes information into a Neo4j knowledge graph with a chronological spine.
+- **Advanced Reasoning**: Capable of parallel thinking and exploratory problem-solving to tackle complex queries.
+- **Asynchronous Workflow**: For complex reasoning tasks, the system initiates a background process and immediately returns an `analysis_id`, allowing the user to poll for the result without blocking.
+- **Resource Management**: Uses a semaphore to control access to the LLM, preventing resource contention and ensuring smooth operation.
+- **POML Protocol**: Uses Persona-Oriented Markup Language for clear, unambiguous inter-agent communication.
 
-## Specialist Agents
+## Core Architecture
 
-### ArchivistAgent
-The ArchivistAgent is responsible for managing the knowledge graph by storing and retrieving structured information using Neo4j as the persistence layer.
+The ECE is built on a tiered architecture:
 
-**Key Features:**
-- Store entities and relationships in the knowledge graph
-- Retrieve information using Cypher queries
-- Update existing entities and relationships
-- Delete entities and relationships
-- Integration with the main application through chat interface or direct API endpoints
+* **Tier 1 (Orchestrator):** The central cognitive unit that manages the primary cognitive loops, translates user intent, and synthesizes outputs from other agents.
+* **Tier 2 (Thinkers):** A dynamic pool of specialized reasoning agents that work sequentially on complex problems, with their access to the LLM managed by a semaphore.
+* **Tier 3 (Memory Cortex):** The long-term memory system that continuously scans the context cache, distills information, and injects it into the knowledge graph.
 
-For detailed documentation, see [ArchivistAgent Documentation](docs/archivist_agent.md).
+## Getting Started
 
-### ExtractorAgent
-The ExtractorAgent is responsible for extracting specific information from unstructured data sources and generating targeted queries for the knowledge graph.
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd External-Context-Engine
+    ```
+2.  **Start the services:**
+    ```bash
+    docker-compose up --build
+    ```
 
-**Key Features:**
-- Multi-format support (text, PDF, DOCX, HTML)
-- Flexible extraction criteria (keywords, patterns, entities)
-- Knowledge graph query generation
-- Performance monitoring
-- Comprehensive error handling
+The main application will be available at `http://localhost:8000`.
 
-For detailed documentation, see [ExtractorAgent Documentation](docs/extractor_agent.md).
+## API Endpoints
 
-### DistillerAgent
-The DistillerAgent is responsible for distilling raw text into structured, meaningful data. It identifies entities, relationships, and key points from the text and structures them for storage in the knowledge graph.
-
-**Key Features:**
-- Entity recognition (people, organizations, locations, etc.)
-- Relationship extraction between identified entities
-- Key point identification from text
-- Data structuring for knowledge graph storage
-- Performance optimization with caching
-- Comprehensive error handling
-
-For detailed documentation, see [DistillerAgent Documentation](docs/distiller_agent.md).
-
-### QLearningGraphAgent
-The QLearningGraphAgent is a Reinforcement Learning-based graph navigation system that intelligently traverses the knowledge graph to find the most relevant information for complex queries.
-
-**Key Features:**
-- Q-Learning algorithm for graph navigation
-- Path finding with Q-value guidance
-- Q-Table persistence for maintaining learned knowledge
-- Training with historical path data
-- Epsilon-greedy strategy for balancing exploration and exploitation
-- API endpoints for integration with the main application
-
-For detailed documentation, see [QLearningGraphAgent Documentation](docs/q_learning_agent.md).
-
-### CacheManager
-The CacheManager is responsible for managing the short-term memory layer of the ECE using Redis. It provides both exact match caching and semantic (vector-based) caching to reduce latency and prepare the system for the real-time InjectorAgent.
-
-**Key Features:**
-- Exact match caching for fast retrieval of known data
-- Semantic caching using vector similarity search
-- Cache eviction policies (LRU, TTL)
-- Cache statistics and monitoring
-- High-performance operations with low latency
-- Scalable design for high throughput
-
-For detailed documentation, see [CacheManager Documentation](docs/cache_manager.md).
-
-### ContextCache
-The ContextCache is the high-speed, short-term memory layer of the ECE, corresponding to Tier 1. It is a passive component implemented using Redis Stack and is managed exclusively by the `Orchestrator` agent to provide fast retrieval of recent and semantically similar information.
-
-**Key Features:**
-- Managed component with all operations controlled by the `Orchestrator`
-- Redis Stack integration for efficient key-value storage and vector similarity search
-- Semantic search capabilities using vector embeddings
-- Cache statistics tracking for performance monitoring
-
-### WebSearchAgent
-Performs web searches to gather external context.
-
-### MultiModalIngestionAgent
-Processes and ingests multi-modal content such as images, videos, and documents.
-
-### CoherenceAgent
-Ensures coherence and consistency in context and responses.
-
-### SafetyAgent
-Ensures the safety and appropriateness of content and responses.
-
-## Installation
-
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd External-Context-Engine
-   ```
-
-2. Create a virtual environment:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   ```
-
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## Configuration
-
-The system is configured through `config.yaml`. Key configuration options include:
-
-- Agent-specific settings
-- Intent routing keywords
-- Logging configuration
-
-## Usage
-
-Start the server:
-```bash
-python src/external_context_engine/main.py
-```
-
-The API will be available at `http://localhost:8000`.
-
-### API Endpoints
-
-- `GET /` - Root endpoint
-- `GET /health` - Health check
-- `POST /chat` - Main chat endpoint
-- `POST /archive/store` - Store data in the knowledge graph
-- `POST /archive/retrieve` - Retrieve data from the knowledge graph
-- `POST /archive/update` - Update data in the knowledge graph
-- `POST /archive/delete` - Delete data from the knowledge graph
-- `POST /q_learning/find_paths` - Find optimal paths using Q-values
-- `POST /q_learning/update_q_values` - Update Q-values based on path success
-- `POST /q_learning/train` - Train the agent with historical data
-- `GET /q_learning/convergence_metrics` - Get convergence metrics
-- `POST /cache/store` - Store a value in the cache
-- `POST /cache/retrieve` - Retrieve a value from the cache
-- `POST /cache/semantic_search` - Perform semantic search in the cache
-- `GET /cache/stats` - Get cache statistics
-- `POST /cache/clear` - Clear the cache
-
-## Enhancement Opportunities
-
-The QLearningGraphAgent has been analyzed for enhancement opportunities using Neo4j's advanced features. For detailed information about these opportunities, see the [QLearning Enhancement Documentation](docs/README.md).
-
-## Testing
-
-Run unit tests:
-```bash
-pytest tests/
-```
-
-Run integration tests:
-```bash
-pytest tests/integration/
-```
-
-## Documentation
-
-- [ArchivistAgent Documentation](docs/archivist_agent.md)
-- [ExtractorAgent Documentation](docs/extractor_agent.md)
-- [DistillerAgent Documentation](docs/distiller_agent.md)
-- [QLearningGraphAgent Documentation](docs/q_learning_agent.md)
-- [CacheManager Documentation](docs/cache_manager.md)
-- [QLearning Enhancement Documentation](docs/README.md)
-- [Specification](specs/extractor-agent/spec.md)
-- [Implementation Plan](specs/extractor-agent/plan.md)
-- [Task Breakdown](specs/extractor-agent/tasks.md)
-
-## License
-
-This project is licensed under the MIT License.
+*   `GET /process_prompt`: The main endpoint for interacting with the ECE.
+*   `GET /get_analysis_result`: Used to retrieve the results of a complex reasoning task.

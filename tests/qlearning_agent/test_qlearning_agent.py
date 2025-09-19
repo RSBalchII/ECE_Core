@@ -15,7 +15,8 @@ from ece.agents.tier3.qlearning.qlearning_agent import (
 @pytest.fixture
 def mock_graph_manager():
     """Create a mock graph manager for testing"""
-    return Mock()
+    mock_graph_manager.find_nodes_by_keywords = AsyncMock(return_value=[{"id": "start", "name": "start"}, {"id": "end", "name": "end"}])
+    return mock_graph_manager
 
 
 @pytest.fixture
@@ -54,7 +55,7 @@ async def test_find_optimal_path(q_learning_agent):
         )
         mock_pathfinding.return_value = mock_path
         
-        paths = await q_learning_agent.find_optimal_path("start", "end")
+        paths = await q_learning_agent.find_optimal_path(["start", "end"])
         
         assert len(paths) == 1
         assert paths[0].score == 0.8
@@ -205,3 +206,20 @@ def test_get_max_q_value(q_learning_agent):
     
     # Test getting maximum value
     assert q_learning_agent._get_max_q_value("state1") == 0.8
+
+
+@pytest.mark.asyncio
+async def test_refine_relationships(q_learning_agent):
+    """Test refining relationships."""
+    # Create a mock path
+    path = MemoryPath(
+        nodes=["nodeA", "nodeB"],
+        relationships=[{"start_node": "nodeA", "end_node": "nodeB", "type": "RELATES_TO"}],
+        score=0.5,
+        length=1
+    )
+    
+    # Mock the update_q_values method
+    with patch.object(q_learning_agent, 'update_q_values', new_callable=AsyncMock) as mock_update_q_values:
+        await q_learning_agent.refine_relationships(path, reward=1.0)
+        mock_update_q_values.assert_called_once_with(path, 1.0)

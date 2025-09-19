@@ -23,6 +23,9 @@ class TestCacheManager(unittest.TestCase):
             
             # Create an instance of CacheManager
             self.cache_manager = CacheManager()
+            
+            # Configure the dbsize mock to return an integer
+            self.mock_redis_client.dbsize.return_value = 0
     
     def test_init(self):
         """Test CacheManager initialization."""
@@ -107,6 +110,31 @@ class TestCacheManager(unittest.TestCase):
         # This test would require a more complex mock of the Redis search functionality
         # For now, we'll just verify the method exists and can be called
         self.assertTrue(hasattr(self.cache_manager, 'semantic_search'))
+
+    def test_trim_cache(self):
+        """Test that the cache is trimmed to the max_size."""
+        # Set a small max_size for testing
+        self.cache_manager.max_size = 2
+        
+        # Mock the dbsize, keys, hget, and delete methods
+        self.mock_redis_client.dbsize.return_value = 3
+        self.mock_redis_client.keys.return_value = [
+            b'context_cache:key2',
+            b'context_cache:key1',
+            b'context_cache:key3'
+        ]
+        self.mock_redis_client.hget.side_effect = lambda key, field: {
+            b'context_cache:key1': {'created_at': '2023-01-01T00:00:00'},
+            b'context_cache:key2': {'created_at': '2023-01-02T00:00:00'},
+            b'context_cache:key3': {'created_at': '2023-01-03T00:00:00'},
+        }.get(key, {}).get(field)
+        self.mock_redis_client.delete.return_value = 1
+        
+        # Call the trim method directly for testing
+        self.cache_manager._trim_cache()
+        
+        # Verify that the oldest key was deleted
+        self.mock_redis_client.delete.assert_called_once_with(b'context_cache:key1')
 
 
 if __name__ == '__main__':

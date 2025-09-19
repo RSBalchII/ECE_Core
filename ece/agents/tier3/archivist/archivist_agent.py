@@ -1,9 +1,10 @@
+# ece/agents/tier3/archivist/archivist_agent.py
 #!/usr/bin/env python3
 """
 Archivist Agent for the External Context Engine (ECE).
 
-The Archivist is the master controller of the Tier 3 Memory Cortex. It serves as the 
-primary API gateway for external requests for context and acts as the central coordinator 
+The Archivist is the master controller of the Tier 3 Memory Cortex. It serves as the
+primary API gateway for external requests for context and acts as the central coordinator
 for all long-term memory operations. This version also includes continuous temporal scanning
 functionality to maintain a chronological record of all processed information.
 """
@@ -68,237 +69,16 @@ class MemoryLinkRequest(BaseModel):
     memory_node_id: int
     timestamp: str
 
-# Distiller client
-class DistillerClient:
-    """Client for communicating with the Distiller agent."""
-    
-    def __init__(self, base_url: str = "http://localhost:8001"):
-        self.base_url = base_url
-        self.client = httpx.AsyncClient()
-    
-    async def process_text(self, text: str, source: str = "context_cache") -> Dict[str, Any]:
-        """
-        Send text to the Distiller agent for processing.
-        
-        Args:
-            text: The text to process
-            source: The source of the text
-            
-        Returns:
-            Structured data from the Distiller
-        """
-        try:
-            data = {
-                "text": text,
-                "source": source,
-                "timestamp": datetime.now().isoformat()
-            }
-            
-            response = await self.client.post(
-                f"{self.base_url}/process_text",
-                json=data,
-                timeout=30.0
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                logger.error(f"Distiller returned status {response.status_code}")
-                return {"error": f"Distiller returned status {response.status_code}"}
-        except Exception as e:
-            logger.error(f"Error calling Distiller: {str(e)}")
-            return {"error": f"Error calling Distiller: {str(e)}"}
-
-# QLearningAgent client
-class QLearningAgentClient:
-    """Client for communicating with the QLearningAgent."""
-    
-    def __init__(self, base_url: str = "http://localhost:8002"):
-        self.base_url = base_url
-        self.client = httpx.AsyncClient()
-    
-    async def find_optimal_path(self, start_node: str, end_node: str) -> List[MemoryPath]:
-        """
-        Find the optimal path between start and end nodes using Q-learning.
-        
-        Args:
-            start_node: The starting node ID
-            end_node: The target node ID
-            
-        Returns:
-            List of MemoryPath objects ranked by Q-values
-        """
-        try:
-            request_data = QLearningPathRequest(
-                start_node=start_node,
-                end_node=end_node
-            )
-            
-            response = await self.client.post(
-                f"{self.base_url}/find_optimal_path",
-                json=request_data.dict()
-            )
-            
-            if response.status_code == 200:
-                paths_data = response.json()
-                paths = [MemoryPath(**path_data) for path_data in paths_data]
-                return paths
-            else:
-                logger.error(f"QLearningAgent returned status {response.status_code}")
-                return []
-        except Exception as e:
-            logger.error(f"Error calling QLearningAgent: {str(e)}")
-            return []
-
-# Injector client
-class InjectorClient:
-    """Client for communicating with the Injector agent."""
-    
-    def __init__(self, base_url: str = "http://localhost:8004"):
-        self.base_url = base_url
-        self.client = httpx.AsyncClient()
-    
-    async def send_data_for_injection(self, data: dict) -> dict:
-        """
-        Send data to the Injector agent for writing to the Neo4j database.
-        
-        Args:
-            data (dict): Structured data to be injected into the Neo4j database.
-            
-        Returns:
-            dict: Result of the injection operation.
-        """
-        try:
-            logger.info(f"Sending data to Injector at {self.base_url}/internal/data_to_inject")
-            logger.debug(f"Data being sent: {data}")
-            
-            response = await self.client.post(
-                f"{self.base_url}/internal/data_to_inject",
-                json=data,
-                timeout=30.0  # Add a timeout
-            )
-            
-            logger.info(f"Received response from Injector: status_code={response.status_code}")
-            logger.debug(f"Response headers: {response.headers}")
-            
-            if response.status_code == 200:
-                result = response.json()
-                logger.info(f"Successful response from Injector: {result}")
-                logger.debug(f"Result type: {type(result)}")
-                return result
-            else:
-                error_text = response.text
-                logger.error(f"Injector returned status {response.status_code} with body: {error_text}")
-                logger.debug(f"Error text type: {type(error_text)}")
-                return {
-                    "success": False,
-                    "error": f"Injector returned status {response.status_code}: {error_text}"
-                }
-        except httpx.ConnectError as e:
-            logger.error(f"Connection error calling Injector: {str(e)}")
-            return {
-                "success": False,
-                "error": f"Connection error: {str(e)}"
-            }
-        except httpx.TimeoutException as e:
-            logger.error(f"Timeout error calling Injector: {str(e)}")
-            return {
-                "success": False,
-                "error": f"Timeout error: {str(e)}"
-            }
-        except Exception as e:
-            logger.error(f"Error calling Injector: {str(e)}", exc_info=True)
-            error_str = str(e)
-            logger.debug(f"Error string: {error_str}, type: {type(error_str)}")
-            # Check if error_str is callable (it shouldn't be)
-            if callable(error_str):
-                logger.error("error_str is callable, which is unexpected")
-                return {
-                    "success": False,
-                    "error": "Unexpected callable error string"
-                }
-            return {
-                "success": False,
-                "error": f"Unexpected error: {error_str}"
-            }
-    
-    async def get_or_create_timenode(self, timestamp: str) -> Dict[str, Any]:
-        """
-        Create a chronological tree of nodes: (Year)->[:HAS_MONTH]->(Month)->[:HAS_DAY]->(Day).
-        
-        Args:
-            timestamp: The timestamp to create the chronological tree for (ISO format)
-            
-        Returns:
-            Dictionary containing the day node information
-        """
-        try:
-            # Parse the timestamp
-            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-            
-            data = {
-                "timestamp": dt.isoformat()
-            }
-            
-            response = await self.client.post(
-                f"{self.base_url}/internal/temporal/get_or_create_timenode",
-                json=data,
-                timeout=30.0
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                logger.error(f"Temporal service returned status {response.status_code}")
-                return {"error": f"Temporal service returned status {response.status_code}"}
-        except Exception as e:
-            logger.error(f"Error calling temporal service: {str(e)}")
-            return {"error": f"Error calling temporal service: {str(e)}"}
-    
-    async def link_memory_to_timenode(self, memory_node_id: int, timestamp: str) -> bool:
-        """
-        Create a [:OCCURRED_AT] relationship to the appropriate Day node.
-        
-        Args:
-            memory_node_id: The ID of the memory node to link
-            timestamp: The timestamp to link the memory to (ISO format)
-            
-        Returns:
-            True if the relationship was created successfully, False otherwise
-        """
-        try:
-            # Parse the timestamp
-            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-            
-            data = {
-                "memory_node_id": memory_node_id,
-                "timestamp": dt.isoformat()
-            }
-            
-            response = await self.client.post(
-                f"{self.base_url}/internal/temporal/link_memory_to_timenode",
-                json=data,
-                timeout=30.0
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                return result.get("success", False)
-            else:
-                logger.error(f"Temporal service returned status {response.status_code}")
-                return False
-        except Exception as e:
-            logger.error(f"Error calling temporal service: {str(e)}")
-            return False
+from ece.agents.clients import DistillerClient, QLearningAgentClient, InjectorClient
 
 # Initialize clients
-distiller_client = DistillerClient()
+distiller_client = DistillerClient(base_url="http://distiller:8001")
 qlearning_client = QLearningAgentClient()
 injector_client = InjectorClient()
 
 # Redis client for cache monitoring
 redis_client = redis.Redis(
-    host=os.environ.get('REDIS_HOST', 'localhost'),
+    host=os.environ.get('REDIS_HOST', 'redis'),
     port=int(os.environ.get('REDIS_PORT', 6379)),
     password=os.environ.get('REDIS_PASSWORD'),
     db=0,
@@ -322,24 +102,24 @@ async def health_check():
 async def get_context(request: ContextRequest):
     """
     External API endpoint to handle context requests.
-    
+
     Args:
         request: ContextRequest containing the query
-        
+
     Returns:
         ContextResponse with relevant context
     """
     try:
         logger.info(f"Received context request: {request.query}")
-        
-        # For demonstration, we'll use a simple example
-        # In a real implementation, we would parse the query to identify start/end nodes
-        start_node = "concept_start"
-        end_node = "concept_end"
-        
+
+        # TODO: In a real implementation, parse the query to identify start/end nodes for QLearningAgent.
+        # This would likely involve an NLP agent or a dedicated query parsing module.
+        start_node = "concept_start"  # Placeholder
+        end_node = "concept_end"    # Placeholder
+
         # Call QLearningAgent to find optimal paths
         paths = await qlearning_client.find_optimal_path(start_node, end_node)
-        
+
         # Synthesize context from paths with more sophisticated processing
         context = []
         for i, path in enumerate(paths):
@@ -351,12 +131,12 @@ async def get_context(request: ContextRequest):
                 "relevance_score": path.score,
                 "path_length": path.length
             }
-            
+
             # Add additional context information
             if path.nodes:
                 path_info["start_node"] = path.nodes[0] if len(path.nodes) > 0 else None
                 path_info["end_node"] = path.nodes[-1] if len(path.nodes) > 0 else None
-            
+
             # Process relationships to extract key information
             if path.relationships:
                 path_info["relationship_types"] = list(set(rel.get("type", "UNKNOWN") for rel in path.relationships))
@@ -364,16 +144,16 @@ async def get_context(request: ContextRequest):
                     [rel.get("start_id") for rel in path.relationships if rel.get("start_id")] +
                     [rel.get("end_id") for rel in path.relationships if rel.get("end_id")]
                 ))
-            
+
             context.append(path_info)
-        
+
         # Sort paths by relevance score (descending)
         context.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
-        
+
         # Limit the number of paths returned to prevent overwhelming the client
         max_paths = 10
         context = context[:max_paths]
-        
+
         return ContextResponse(
             context=context,
             metadata={
@@ -392,23 +172,23 @@ async def get_context(request: ContextRequest):
 async def receive_distiller_data(data: DistillerData):
     """
     Internal endpoint to receive structured data from the Distiller.
-    
+
     Args:
         data: DistillerData containing entities, relationships, and summary
-        
+
     Returns:
         Status of data processing
     """
     try:
         logger.info(f"Received data from Distiller: {len(data.entities)} entities, {len(data.relationships)} relationships")
-        
+
         # Log the received data for debugging
         logger.debug(f"Distiller data: {data}")
         logger.debug(f"Distiller data type: {type(data)}")
-        
+
         # Apply business logic to filter and process the data
         # For demonstration, we'll implement some basic filtering rules:
-        
+
         # 1. Filter entities - only send entities with certain types or properties
         filtered_entities = []
         for entity in data.entities:
@@ -418,7 +198,7 @@ async def receive_distiller_data(data: DistillerData):
                 entity_type = entity.get('type', '')
                 if entity_type in ['Concept', 'Person', 'Organization', 'Event', 'Product']:
                     filtered_entities.append(entity)
-        
+
         # 2. Filter relationships - only send relationships with certain types or properties
         filtered_relationships = []
         for relationship in data.relationships:
@@ -428,13 +208,13 @@ async def receive_distiller_data(data: DistillerData):
                 rel_type = relationship.get('type', '')
                 if rel_type in ['RELATED_TO', 'PART_OF', 'CREATED_BY', 'WORKS_FOR', 'LOCATED_IN']:
                     filtered_relationships.append(relationship)
-        
+
         # 3. Apply additional business rules
         # Example: Only send data if there are at least 1 entity and 1 relationship
         if len(filtered_entities) < 1 or len(filtered_relationships) < 1:
             logger.info("Data does not meet minimum criteria for archiving")
             return {"status": "filtered", "message": "Data filtered out by business rules"}
-        
+
         # Example: Limit the number of entities and relationships to prevent overwhelming the database
         max_entities = 50
         max_relationships = 100
@@ -444,34 +224,33 @@ async def receive_distiller_data(data: DistillerData):
         if len(filtered_relationships) > max_relationships:
             logger.warning(f"Truncating relationships from {len(filtered_relationships)} to {max_relationships}")
             filtered_relationships = filtered_relationships[:max_relationships]
-        
+
         # Log the filtered data
         logger.info(f"Filtered data: {len(filtered_entities)} entities, {len(filtered_relationships)} relationships")
         logger.debug(f"Filtered entities: {filtered_entities}")
         logger.debug(f"Filtered relationships: {filtered_relationships}")
-        
+
         # Convert filtered data to dict for sending to Injector
         data_dict = {
             "entities": filtered_entities,
             "relationships": filtered_relationships,
             "summary": data.summary
         }
-        
+
         # Log before sending to Injector
         logger.info("Sending filtered data to Injector")
         logger.debug(f"Data to send: {data_dict}")
-        logger.debug(f"Data dict type: {type(data_dict)}")
-        
+
         # Check if injector_client is properly initialized
         if not hasattr(injector_client, 'send_data_for_injection'):
             logger.error("injector_client does not have send_data_for_injection method")
             raise HTTPException(status_code=500, detail="Injector client not properly initialized")
-        
+
         # Check if send_data_for_injection is callable
         if not callable(getattr(injector_client, 'send_data_for_injection', None)):
             logger.error("injector_client.send_data_for_injection is not callable")
             raise HTTPException(status_code=500, detail="Injector client method not callable")
-        
+
         # Send data to Injector for writing to Neo4j
         try:
             result = await injector_client.send_data_for_injection(data_dict)
@@ -480,11 +259,11 @@ async def receive_distiller_data(data: DistillerData):
         except Exception as e:
             logger.error(f"Error calling injector_client.send_data_for_injection: {type(e).__name__}: {e}")
             raise HTTPException(status_code=500, detail=f"Error calling injector: {type(e).__name__}: {e}")
-        
+
         # Log the result from Injector
         logger.info(f"Received response from Injector: {result}")
         logger.debug(f"Result type: {type(result)}")
-        
+
         if result.get("success"):
             logger.info("Data successfully sent to Injector")
             return {"status": "processed", "message": "Data sent to Injector successfully"}
@@ -523,62 +302,95 @@ async def receive_distiller_data(data: DistillerData):
                     logger.error(f"Object {obj_str} might be accidentally called as a function")
         raise HTTPException(status_code=500, detail=f"Internal server error: {error_str}")
 
+@app.post("/internal/handle_truncated_entries")
+async def handle_truncated_entries(keys: List[str]):
+    """
+    Internal endpoint to handle truncated entries from the Context Cache.
+
+    Args:
+        keys: A list of keys for the truncated entries.
+    """
+    try:
+        logger.info(f"Received {len(keys)} truncated entries to process.")
+        
+        for key in keys:
+            # Retrieve the entry from the cache before it's deleted
+            entry = redis_client.hgetall(key)
+            if entry:
+                value = entry.get("value", "")
+                if value:
+                    # Process the entry
+                    success = await _process_cache_entry(key, value)
+                    if not success:
+                        logger.warning(f"Failed to process truncated cache entry: {key}")
+        
+        return {"status": "processed"}
+    except Exception as e:
+        logger.error(f"Error handling truncated entries: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 async def _process_cache_entry(key: str, value: str) -> bool:
     """
     Process a single cache entry.
-    
+
     Args:
         key: The cache key
         value: The cache value
-        
+
     Returns:
         True if processing was successful, False otherwise
     """
     try:
         logger.info(f"Processing cache entry: {key}")
-        
+
         # Step 1: Send to Distiller for processing
+        # Note: Using datetime.now() for timestamp. If the cache entry itself contains a timestamp,
+        # it would be more accurate to use that. Assuming 'value' does not contain it for now.
         distiller_result = await distiller_client.process_text(value, "context_cache")
-        
+
         if "error" in distiller_result:
             logger.error(f"Distiller processing failed for {key}: {distiller_result['error']}")
             return False
-        
+
         logger.info(f"Distiller processing successful for {key}")
         logger.debug(f"Distiller result: {distiller_result}")
-        
+
         # Step 2: Send to Injector for database storage
         injector_result = await injector_client.send_data_for_injection(distiller_result)
-        
-        if not injector_result.get("success", False):
-            logger.error(f"Injector processing failed for {key}: {injector_result.get('error', 'Unknown error')}")
+
+        if injector_result.get("status") != "processed":
+            logger.error(f"Injector processing failed for {key}: {injector_result.get('message', 'Unknown error')}")
             return False
-        
+
         logger.info(f"Injector processing successful for {key}")
         logger.debug(f"Injector result: {injector_result}")
-        
-        # Step 3: Link to temporal spine if we have a memory node ID
+
+        # Step 3: Refine relationships in the Q-Learning Agent
+        path = MemoryPath(nodes=[entity['id'] for entity in distiller_result.get('entities', [])])
+        await qlearning_client.refine_relationships(path, reward=1.0) # Positive reward for successful processing
+
+        # Step 4: Link to temporal spine if we have a memory node ID
         memory_node_id = injector_result.get("memory_node_id")
         timestamp = distiller_result.get("timestamp", datetime.now().isoformat())
-        
+
         if memory_node_id:
             # Get or create the time node
             timenode_result = await injector_client.get_or_create_timenode(timestamp)
-            
+
             if "error" not in timenode_result:
                 # Link the memory to the time node
                 link_success = await injector_client.link_memory_to_timenode(memory_node_id, timestamp)
-                
+
                 if link_success:
                     logger.info(f"Successfully linked memory {memory_node_id} to temporal spine")
                 else:
                     logger.warning(f"Failed to link memory {memory_node_id} to temporal spine")
             else:
                 logger.warning(f"Failed to create time node: {timenode_result['error']}")
-        
+
         # Mark as processed
         redis_client.sadd(processed_entries_key, key)
-        
+
         return True
     except httpx.ConnectError as e:
         logger.error(f"Connection error processing cache entry {key}: {str(e)}")
@@ -617,38 +429,38 @@ async def _scan_cache():
     try:
         # Get all keys with the context_cache prefix
         keys = redis_client.keys("context_cache:*")
-        
+
         if not keys:
             logger.debug("No cache entries found to process")
             return
-        
+
         logger.info(f"Found {len(keys)} cache entries to process")
-        
+
         # Get already processed entries
         processed_entries = redis_client.smembers(processed_entries_key)
-        
+
         # Process each unprocessed entry
         for key in keys:
             try:
                 # Extract the actual key name (remove prefix)
                 actual_key = key.replace("context_cache:", "")
-                
+
                 # Skip if already processed
                 if actual_key in processed_entries:
                     continue
-                
+
                 # Get the value
                 entry_data = redis_client.hgetall(key)
                 if not entry_data:
                     continue
-                
+
                 value = entry_data.get("value", "")
                 if not value:
                     continue
-                
+
                 # Process the entry
                 success = await _process_cache_entry(actual_key, value)
-                
+
                 if not success:
                     logger.warning(f"Failed to process cache entry: {actual_key}")
             except redis.ConnectionError as e:
@@ -683,11 +495,11 @@ async def _scan_cache():
 async def continuous_temporal_scanning():
     """Run the continuous temporal scanning process."""
     logger.info("Starting continuous temporal scanning")
-    
+
     # Connect to Redis with retry logic
     max_retries = 5
     retry_delay = 1
-    
+
     for attempt in range(max_retries):
         try:
             redis_client.ping()
@@ -701,13 +513,13 @@ async def continuous_temporal_scanning():
             else:
                 logger.error("Failed to connect to Redis after all retries")
                 return
-    
+
     # Main scanning loop
     while True:
         try:
             # Scan the cache for new entries
             await _scan_cache()
-            
+
             # Wait before next scan
             await asyncio.sleep(5)  # Scan every 5 seconds
         except redis.ConnectionError as e:
@@ -727,7 +539,7 @@ async def _reconnect_redis():
     """Reconnect to Redis with exponential backoff."""
     max_retries = 5
     retry_delay = 1
-    
+
     for attempt in range(max_retries):
         try:
             redis_client.ping()

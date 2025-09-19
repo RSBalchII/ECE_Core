@@ -5,6 +5,7 @@ import unittest
 import asyncio
 import sys
 import os
+from unittest.mock import patch, MagicMock, AsyncMock
 
 # Add the project root directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../../..'))
@@ -42,7 +43,7 @@ class TestArchivistIntegration(unittest.TestCase):
         )
         
         # Send the request to the context endpoint
-        response = self.client.post("/context", json=context_request.dict())
+        response = self.client.post("/context", json=context_request.model_dump())
         
         # Check that we get a response
         self.assertEqual(response.status_code, 200)
@@ -93,18 +94,74 @@ class TestArchivistIntegration(unittest.TestCase):
             "summary": "Test data for integration testing"
         }
         
-        # Send the request to the distiller data endpoint
-        response = self.client.post("/internal/data_to_archive", json=test_data)
-        
-        # Check that we get a response (it might be an error due to the database connection,
-        # but we should still get a response)
-        self.assertIn(response.status_code, [200, 500])
-        
-        # If we get a 200 response, check the structure
-        if response.status_code == 200:
+        with patch('ece.agents.tier3.archivist.archivist_agent.injector_client') as mock_injector_client, \
+             patch('ece.agents.tier3.archivist.archivist_agent.qlearning_client') as mock_qlearning_client, \
+             patch('ece.agents.tier3.archivist.archivist_agent.distiller_client') as mock_distiller_client:
+            
+            # Mock the send_data_for_injection method to return a success response
+            mock_injector_client.send_data_for_injection = AsyncMock(return_value={"success": True, "status": "processed", "memory_node_id": 123})
+            # Mock the refine_relationships method
+            mock_qlearning_client.refine_relationships = AsyncMock(return_value={"status": "success"})
+            # Mock the process_text method
+            mock_distiller_client.process_text = AsyncMock(return_value={
+                "entities": [{"id": "test_entity_1", "type": "Concept", "properties": {"name": "Test Concept"}}],
+                "relationships": [],
+                "summary": "test summary",
+                "timestamp": "2023-01-01T00:00:00"
+            })
+            
+            # Mock get_or_create_timenode and link_memory_to_timenode
+            mock_injector_client.get_or_create_timenode = AsyncMock(return_value={"success": True})
+            mock_injector_client.link_memory_to_timenode = AsyncMock(return_value=True)
+
+            # Send the request to the distiller data endpoint
+            response = self.client.post("/internal/data_to_archive", json=test_data)
+            
+            # Check that we get a successful response
+            self.assertEqual(response.status_code, 200)
             response_data = response.json()
-            self.assertIn("status", response_data)
-            self.assertIn("message", response_data)
+            self.assertEqual(response_data["status"], "processed")
+
+    def test_handle_truncated_entries(self):
+        """Test the handle_truncated_entries endpoint."""
+        # Create a list of truncated keys
+        truncated_keys = ["context_cache:key1", "context_cache:key2"]
+        
+        with patch('ece.agents.tier3.archivist.archivist_agent.redis_client') as mock_redis_client, \
+             patch('ece.agents.tier3.archivist.archivist_agent.distiller_client') as mock_distiller_client, \
+             patch('ece.agents.tier3.archivist.archivist_agent.injector_client') as mock_injector_client, \
+             patch('ece.agents.tier3.archivist.archivist_agent.qlearning_client') as mock_qlearning_client:
+            
+            # Mock the hgetall method to return a value
+            mock_redis_client.hgetall.return_value = {"value": "test_value", "created_at": "2023-01-01T00:00:00"}
+            
+            # Mock distiller_client.process_text
+            mock_distiller_client.process_text = AsyncMock(return_value={
+                "entities": [{"id": "test_entity_1", "type": "Concept", "properties": {"name": "Test Concept"}}],
+                "relationships": [],
+                "summary": "test summary",
+                "timestamp": "2023-01-01T00:00:00"
+            })
+            
+            # Mock injector_client.send_data_for_injection
+            mock_injector_client.send_data_for_injection = AsyncMock(return_value={"success": True, "status": "processed", "memory_node_id": 123})
+            
+            # Mock qlearning_client.refine_relationships
+            mock_qlearning_client.refine_relationships = AsyncMock(return_value={"status": "success"})
+            
+            # Mock get_or_create_timenode and link_memory_to_timenode
+            mock_injector_client.get_or_create_timenode = AsyncMock(return_value={"success": True})
+            mock_injector_client.link_memory_to_timenode = AsyncMock(return_value=True)
+
+            # Send the request to the endpoint
+            response = self.client.post("/internal/handle_truncated_entries", json=truncated_keys)
+            
+            # Check that we get a successful response
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {"status": "processed"})
+            
+            # Verify that refine_relationships was called for each truncated key
+            self.assertEqual(mock_qlearning_client.refine_relationships.call_count, len(truncated_keys))
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,51 +1,138 @@
-version: '3.8'
-
 services:
-  context-engine:
-    build: .
-    ports:
-      - "8001:8000"
+  chimaera-dev:
+    # Build the image from the Dockerfile in the current directory
+    build:
+      context: .
+    # Keep the container running and allow for interactive sessions
+    tty: true
+    stdin_open: true
     volumes:
+      # Mount the entire local project directory to /app in the container
+      # This means changes you make on your host machine are instantly reflected in the container
       - .:/app
-    environment:
-      - PYTHONPATH=/app
-      - OLLAMA_API_BASE_URL=http://host.docker.internal:11434/api/chat
-      - TAVILY_API_KEY=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
+      # Mount Ollama's model directory from the host to /models in the container
+      # Using Ollama's default model storage location on Linux
+      - ~/.ollama/models:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ports:
+      - "8000:8000"
     depends_on:
       - neo4j
-      - redis
+      - archivist
+    env_file:
+      - .env
+    command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--log-level", "debug"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - main_net
 
   neo4j:
-    image: neo4j:5.15.0
+    image: neo4j:latest
     ports:
-      - "7475:7474"
-      - "7688:7687"
+      - "7474:7474"
+      - "7687:7687"
     volumes:
       - neo4j_data:/data
-      - neo4j_logs:/logs
     environment:
-      - NEO4J_AUTH=neo4j/password
-      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_AUTH=neo4j/password # Change this to a strong password in production
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
       interval: 10s
-      timeout: 30s
+      timeout: 5s
       retries: 5
+    networks:
+      - main_net
 
   redis:
-    image: redis/redis-stack:latest
+    image: redis:latest
     ports:
-      - "6380:6379"
-      - "8002:8001"
+      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    networks:
+      - main_net
+
+  distiller:
+    build:
+      context: .
+      dockerfile: ./dockerfiles/python-fastapi/Dockerfile
+    volumes:
+      - .:/app
+    command: ["uvicorn", "ece.agents.tier3.distiller.distiller_agent:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+    ports:
+      - "8001:8001"
+    networks:
+      - main_net
+
+  injector:
+    build:
+      context: .
+      dockerfile: ./dockerfiles/python-fastapi/Dockerfile
+    volumes:
+      - .:/app
+    command: ["uvicorn", "ece.agents.tier3.injector.injector_app:app", "--host", "0.0.0.0", "--port", "8004", "--reload"]
+    ports:
+      - "8004:8004"
+    networks:
+      - main_net
+
+  archivist:
+    build:
+      context: .
+    command: ["uvicorn", "ece.agents.tier3.archivist.archivist_agent:app", "--host", "0.0.0.0", "--port", "8003", "--reload"]
+    volumes:
+      - .:/app
+    ports:
+      - "8003:8003"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      distiller:
+        condition: service_started
+      injector:
+        condition: service_started
+      qlearning:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8003/health || exit 1"]
       interval: 10s
-      timeout: 3s
-      retries: 3
+      timeout: 5s
+      retries: 5
+    networks:
+      - main_net
+
+  qlearning:
+    build:
+      context: .
+    command: ["uvicorn", "ece.agents.tier3.qlearning.qlearning_app:app", "--host", "0.0.0.0", "--port", "8002", "--reload"]
+    volumes:
+      - .:/app
+    ports:
+      - "8002:8002"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    networks:
+      - main_net
+
+networks:
+  main_net:
+    driver: bridge
 
 volumes:
   neo4j_data:
-  neo4j_logs:
   redis_data:

@@ -10,7 +10,7 @@ import asyncio
 import logging
 import random
 import numpy as np
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 
@@ -78,22 +78,40 @@ class QLearningGraphAgent:
             except Exception as e:
                 logger.error(f"Failed to connect to graph manager: {e}")
         
-    async def find_optimal_path(self, start_node: str, end_node: str) -> List[MemoryPath]:
+    async def find_optimal_path(self, keywords: List[str]) -> List[MemoryPath]:
         """
-        Find the optimal path between start and end nodes using Q-learning.
-        
+        Find optimal paths related to a list of keywords.
+
         Args:
-            start_node: The starting node ID
-            end_node: The target node ID
+            keywords: A list of keywords to search for.
             
         Returns:
             List of MemoryPath objects ranked by Q-values
         """
-        logger.info(f"Finding optimal path from {start_node} to {end_node}")
+        logger.info(f"Finding optimal paths for keywords: {keywords}")
         
-        # Use Q-learning to find the best path
-        path = await self._q_learning_pathfinding(start_node, end_node)
-        return [path] if path else []
+        if not self.graph_manager:
+            logger.warning("No graph manager available")
+            return []
+
+        # Find nodes related to the keywords
+        nodes = await self.graph_manager.find_nodes_by_keywords(keywords)
+        
+        if not nodes:
+            logger.info("No nodes found for the given keywords.")
+            return []
+
+        # For simplicity, find paths between all pairs of found nodes
+        paths = []
+        for i in range(len(nodes)):
+            for j in range(i + 1, len(nodes)):
+                start_node = nodes[i]['id']
+                end_node = nodes[j]['id']
+                path = await self._q_learning_pathfinding(start_node, end_node)
+                if path:
+                    paths.append(path)
+        
+        return paths
         
     async def update_q_values(self, path: MemoryPath, reward: float) -> None:
         """
@@ -500,3 +518,8 @@ class QLearningGraphAgent:
         length_score = max(0.0, 1.0 - (path.length / max_reasonable_length))
         
         return length_score * 0.5  # Max 0.5 for non-target paths
+
+    async def refine_relationships(self, path: MemoryPath, reward: float):
+        """Refine relationships in the graph based on a path and a reward."""
+        logger.info(f"Refining relationships for path with reward {reward}")
+        await self.update_q_values(path, reward)

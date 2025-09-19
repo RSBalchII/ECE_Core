@@ -8,9 +8,10 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     libffi-dev \
     libssl-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file into the container
+# Copy requirements.txt into the container
 COPY requirements.txt .
 
 # Install any needed packages specified in requirements.txt
@@ -23,4 +24,4 @@ COPY . .
 EXPOSE 8000
 
 # Define the command to run the application with uvicorn
-CMD ["uvicorn", "ece.agents.tier1.orchestrator.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

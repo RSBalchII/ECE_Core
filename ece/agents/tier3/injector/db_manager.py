@@ -91,7 +91,7 @@ class Neo4jManager:
                     
         # If we've exhausted all retries, raise the last exception
         raise last_exception
-            
+        
     def execute_transaction(self, queries: List[Dict[str, Any]]) -> bool:
         """
         Execute multiple Cypher queries within a single transaction with retry logic.
@@ -288,15 +288,15 @@ class Neo4jManager:
         if 'entities' in data:
             logger.debug(f"Processing {len(data['entities'])} entities")
             for entity in data['entities']:
+                label = entity.get('type', 'Entity')
                 # Create MERGE query for each entity
                 # Using ON CREATE and ON MATCH to handle both new and existing nodes
-                query = """
+                query = f"""
                 MERGE (n:{label} {{id: $id}})
                 ON CREATE SET n += $properties, n.created = timestamp(), n.poml_metadata = $poml_metadata
                 ON MATCH SET n += $properties, n.last_updated = timestamp(), n.poml_metadata = $poml_metadata
                 """
                 parameters = {
-                    "label": entity.get('type', 'Entity'),
                     "id": entity.get('id'),
                     "properties": entity.get('properties', {}),
                     "poml_metadata": data.get('poml_metadata', '')
@@ -310,9 +310,12 @@ class Neo4jManager:
         if 'relationships' in data:
             logger.debug(f"Processing {len(data['relationships'])} relationships")
             for relationship in data['relationships']:
+                start_label = relationship.get('start_type', 'Entity')
+                end_label = relationship.get('end_type', 'Entity')
+                rel_type = relationship.get('type', 'RELATIONSHIP')
                 # Create MERGE query for each relationship
                 # Using ON CREATE and ON MATCH to handle both new and existing relationships
-                query = """
+                query = f"""
                 MERGE (a:{start_label} {{id: $start_id}})
                 MERGE (b:{end_label} {{id: $end_id}})
                 MERGE (a)-[r:{rel_type}]->(b)
@@ -320,11 +323,8 @@ class Neo4jManager:
                 ON MATCH SET r += $properties, r.last_updated = timestamp(), r.poml_metadata = $poml_metadata
                 """
                 parameters = {
-                    "start_label": relationship.get('start_type', 'Entity'),
                     "start_id": relationship.get('start_id'),
-                    "end_label": relationship.get('end_type', 'Entity'),
                     "end_id": relationship.get('end_id'),
-                    "rel_type": relationship.get('type', 'RELATIONSHIP'),
                     "properties": relationship.get('properties', {}),
                     "poml_metadata": data.get('poml_metadata', '')
                 }

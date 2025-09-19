@@ -1,175 +1,99 @@
-# External Context Engine Configuration
+# config.yaml
+# Main configuration for the External Context Engine (ECE) using the Youtu-agent framework.
+# Version 2.0 with Decision Tree for Schema-Guided Reasoning.
 
-# Orchestrator configuration
-orchestrator:
-  # Decision tree for routing tasks to appropriate agents
-  decision_tree:
-    # Intents and their corresponding agents
-    intents:
-      # This intent is now more specific and will be checked first.
-      parallel_thinking:
-        agent: ThinkerAgent # This keyword maps to the parallel thinking workflow
-        keywords:
-          - analyze the strengths and weaknesses
-          - compare and contrast
-          - debate the pros and cons
-          - provide multiple perspectives on
-          - evaluate the differences between
-      web_search:
-        agent: WebSearchAgent
-        keywords:
-          - search
-          - find
-          - lookup
-          - research
-          - google
-      multi_modal_processing:
-        agent: MultiModalIngestionAgent
-        keywords:
-          - image
-          - video
-          - document
-          - pdf
-          - media
-      coherence_check:
-        agent: CoherenceAgent
-        keywords:
-          - coherence
-          - consistency
-          - flow
-          - readability
-      safety_check:
-        agent: SafetyAgent
-        keywords:
-          - safety
-          - appropriate
-          - filter
-          - moderation
-      distill_text:
-        agent: DistillerAgent
-        keywords:
-          - distill
-          - extract
-          - entities
-          - relationships
-          - structure
-          - summarize
-      extract_information:
-        agent: ExtractorAgent
-        # "analyze" has been removed to avoid conflict with parallel thinking.
-        keywords:
-          - extract the information
-          - get the data from
-          - parse the contents of
-      inject_context:
-        agent: InjectorAgent
-        keywords:
-          - inject
-          - insert
-          - add to knowledge base
-          - integrate
-          - incorporate
-      archive_memory:
-        agent: ArchivistAgent
-        keywords:
-          - archive
-          - store
-          - memory
-          - persist
-          - save
-      find_path:
-        agent: QLearningGraphAgent
-        keywords:
-          - find path
-          - reason
-          - traverse graph
-          - navigate
-          - path finding
-      cache_operation:
-        agent: CacheManager
-        keywords:
-          - cache
-          - retrieve
-          - store in cache
-          - cached
-          - memory cache
+# === LLM Backend Configuration ===
+llm:
+  provider: ollama
+  config:
+    model: "granite3.3:2b"
 
-      exploratory_problem_solving:
-        agent: ExploratoryAgent
-        keywords:
-          - write code
-          - create a script
-          - solve the problem of
-          - develop an algorithm for
-
-    # The default agent for general conversation remains the same.
-    default_agent: ConversationalAgent 
-
-# Agent configurations
-agents:
-  ThinkerAgent:
-    default_model: "codegemma:7b-instruct-v1.1-q4_K_M"
-  SynthesisThinker:
-    default_model: "codegemma:7b-instruct-v1.1-q4_K_M"
-  ExplorerAgent:
-    default_model: "codegemma:7b-instruct-v1.1-q4_K_M" # Placeholder model
-  CritiqueAgent:
-    default_model: "codegemma:7b-instruct-v1.1-q4_K_M" # Placeholder model
-    success_threshold: 0.8 # Example threshold
-  WebSearchAgent:
-    enabled: true
-    api_key: "YOUR_SEARCH_API_KEY"
-    max_results: 10
-    
-  MultiModalIngestionAgent:
-    enabled: true
-    supported_formats:
-      - image/jpeg
-      - image/png
-      - video/mp4
-      - application/pdf
-    max_file_size: "10MB"
-    
-  CoherenceAgent:
-    enabled: true
-    model: "codegemma:7b-instruct-v1.1-q4_K_M"
-    threshold: 0.8
-    
-  SafetyAgent:
-    enabled: true
-    model: "content-filter-safe"
-    threshold: 0.9
-  
-  ExtractorAgent:
-    enabled: true
-    supported_types:
-      - text
-      - pdf
-      - docx
-      - html
-    max_file_size: "50MB"
-
-  ArchivistAgent:
-    enabled: true
-    neo4j_uri: "bolt://localhost:7688"
-    neo4j_user: "neo4j"
-    neo4j_password: "password"
-
-  QLearningGraphAgent:
-    enabled: true
-    learning_rate: 0.1
-    discount_factor: 0.9
-    epsilon: 0.1
-    max_episodes: 1000
-    q_table_path: "./data/q_table.npy"
-
-# Cache configuration
+# === Cache Configuration ===
 cache:
   redis_url: "redis://redis:6379"
-  default_ttl: 3600
-  max_size: 10000
 
-# Logging configuration
-logging:
-  level: INFO
-  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+# === Archivist Configuration ===
+archivist:
+  url: "http://archivist:8003"
+
+# === Agent Definitions ===
+
+OrchestraAgent:
+  name: "Orchestrator"
+  role: "Central coordinator for the ECE, using a decision tree for transparent reasoning."
+  goal: >
+    Receive a user request, classify its intent using the decision tree, and then
+    delegate the task to the appropriate specialist agent or tool.
+
+  # The SGR Decision Tree defines the Orchestrator's reasoning process.
+  decision_tree:
+    - intent: "Memory Storage"
+      keywords: ["remember", "archive", "save this", "store this", "distill"]
+      description: "User wants to store information in the long-term memory."
+      action_plan:
+        - "Use DistillerAgent to summarize the raw text."
+        - "Use ArchivistAgent to persist the structured summary to the knowledge graph."
+    - intent: "Memory Retrieval"
+      keywords: ["what do you know", "find", "search for", "tell me about", "what was"]
+      description: "User wants to retrieve information from long-term memory."
+      action_plan:
+        - "Use ExtractorAgent with the user's question to query the knowledge graph."
+    - intent: "Graph Optimization"
+      keywords: ["optimize yourself", "run analysis", "improve the graph", "inject"]
+      description: "User wants to trigger a long-running graph optimization process."
+      action_plan:
+        - "Use InjectorAgent to begin the asynchronous analysis."
+    - intent: "Complex Reasoning"
+      keywords: ["analyze", "evaluate", "plan", "what if", "strategize"]
+      description: "User has a complex query that requires deep thought or planning."
+      action_plan:
+        - "Delegate the task to a specialized Thinker Agent." # Placeholder for HRM
+    - intent: "Default"
+      description: "A general conversational query."
+      action_plan:
+        - "Respond directly using the core LLM."
+
+  tools:
+    - DistillerAgent
+    - ArchivistAgent
+    - ExtractorAgent
+    - InjectorAgent
+
+# --- Specialist Agent/Tool Definitions ---
+
+ThinkerAgent:
+  name: "Thinker"
+  role: "Specialized Reasoning Agent"
+  goal: "Provide a specific perspective on a complex problem."
+  model: "qwen3:4b-thinking-2507-q4_K_M"
+  synthesis_model: "qwen3:4b-thinking-2507-q4_K_M"
+  personas: ["Optimist", "Pessimist", "Creative", "Analytical", "Pragmatic"]
+
+
+DistillerAgent:
+  name: "Distiller"
+  role: "Raw Data Analysis Agent"
+  goal: >
+    Analyze raw, unstructured session logs and conversation transcripts to identify and
+    summarize high-coherency insights and key conceptual relationships in a structured format.
+
+ArchivistAgent:
+  name: "Archivist"
+  role: "Knowledge Graph Persistence Agent"
+  goal: >
+    Take structured data (JSON) and persist it into the Neo4j knowledge graph,
+    creating and updating nodes and relationships.
+
+ExtractorAgent:
+  name: "Extractor"
+  role: "Knowledge Retrieval Agent"
+  goal: >
+    Receive a specific query, traverse the Neo4j knowledge graph to find the most
+    relevant information, and return it as a structured context.
+
+InjectorAgent:
+  name: "Injector"
+  role: "Graph Optimization & RL Agent"
+  goal: >
+    Periodically analyze the knowledge graph to identify areas for optimization and
+    use reinforcement learning to infer new connections.
