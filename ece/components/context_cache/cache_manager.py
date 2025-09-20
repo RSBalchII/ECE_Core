@@ -386,3 +386,28 @@ class CacheManager:
         except Exception as e:
             print(f"Error performing semantic search: {str(e)}")
             return []
+    
+    def get_all_entries(self) -> Dict[str, str]:
+        """
+        Get all entries from the cache.
+        
+        Returns:
+            A dictionary containing all cache entries.
+        """
+        try:
+            # Get all keys with the context_cache prefix
+            keys = self.redis_client.keys('context_cache:*')
+            
+            # Retrieve all entries
+            entries = {}
+            for key in keys:
+                result = self.redis_client.hgetall(key)
+                if result:
+                    # Remove the prefix from the key for the returned dictionary
+                    clean_key = key.replace('context_cache:', '')
+                    entries[clean_key] = result.get('value', '')
+            
+            return entries
+        except Exception as e:
+            print(f"Error getting all cache entries: {str(e)}")
+            return {}

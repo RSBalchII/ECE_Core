@@ -11,6 +11,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
 from .injector_agent import InjectorAgent
+from ece.common.poml_schemas import POML, MemoryNode
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -61,29 +62,25 @@ async def health_check():
     return {"status": "healthy"}
 
 @app.post("/internal/data_to_inject")
-async def receive_data_for_injection(data: InjectionData):
+async def receive_data_for_injection(poml_request: POML):
     """
     Internal endpoint to receive structured data from the Archivist for injection into Neo4j.
     
     Args:
-        data: InjectionData containing entities, relationships, and summary
+        poml_request: POML document containing the data to be injected.
         
     Returns:
         Status of data injection
     """
     try:
-        logger.info(f"Received data for injection: {len(data.entities)} entities, {len(data.relationships)} relationships")
+        logger.info(f"Received POML data for injection")
         
-        # Convert InjectionData to dict for the injector agent
-        data_dict = {
-            "entities": data.entities,
-            "relationships": data.relationships,
-            "summary": data.summary
-        }
+        # Extract data from the POML document
+        data = poml_request.directive.task.get("data", {})
         
-        # Log the data being sent to the injector agent
-        logger.debug(f"Data to send to injector agent: {data_dict}")
-        logger.debug(f"Data dict type: {type(data_dict)}")
+        # Log the incoming data (at debug level to avoid logging sensitive information in production)
+        logger.debug(f"Received POML data for injection: {type(data)}")
+        logger.debug(f"Data content: {data}")
         
         # Check if injector_agent is properly initialized
         if not hasattr(injector_agent, 'receive_data_for_injection'):
@@ -97,7 +94,7 @@ async def receive_data_for_injection(data: InjectionData):
         
         # Call the injector agent to process the data
         logger.info("Calling injector_agent.receive_data_for_injection")
-        result = injector_agent.receive_data_for_injection(data_dict)
+        result = injector_agent.receive_data_for_injection(data)
         logger.info(f"Received result from injector_agent: {result}")
         logger.debug(f"Result type: {type(result)}")
         
@@ -108,7 +105,32 @@ async def receive_data_for_injection(data: InjectionData):
         
         if result.get("success"):
             logger.info("Data successfully injected")
-            return {"status": "processed", "message": "Data injected successfully"}
+            # Return a POML response
+            response_poml = MemoryNode(
+                identity={
+                    "name": "InjectorAgent",
+                    "version": "1.0",
+                    "type": "Specialized Data Injection Agent"
+                },
+                operational_context={
+                    "project": "External Context Engine (ECE) v3.0",
+                    "objective": "Inject data into the Neo4j knowledge graph."
+                },
+                directive={
+                    "goal": "Provide status of data injection operation.",
+                    "task": {
+                        "name": "InjectData",
+                        "steps": [
+                            "Receive data from Archivist",
+                            "Translate data to Cypher queries",
+                            "Execute queries in transaction"
+                        ]
+                    }
+                },
+                node_data=result,
+                node_type="InjectionResult"
+            )
+            return response_poml.dict()
         else:
             error_msg = result.get('error', 'Unknown error')
             logger.debug(f"error_msg: {error_msg}, type: {type(error_msg)}")
@@ -117,7 +139,35 @@ async def receive_data_for_injection(data: InjectionData):
                 logger.error("error_msg is callable, which is unexpected")
                 raise HTTPException(status_code=500, detail="error_msg is callable")
             logger.error(f"Failed to inject data: {error_msg}")
-            raise HTTPException(status_code=500, detail=f"Failed to inject data: {error_msg}")
+            # Create an error response in POML format
+            error_response = MemoryNode(
+                identity={
+                    "name": "InjectorAgent",
+                    "version": "1.0",
+                    "type": "Specialized Data Injection Agent"
+                },
+                operational_context={
+                    "project": "External Context Engine (ECE) v3.0",
+                    "objective": "Inject data into the Neo4j knowledge graph."
+                },
+                directive={
+                    "goal": "Provide status of data injection operation.",
+                    "task": {
+                        "name": "InjectData",
+                        "steps": [
+                            "Receive data from Archivist",
+                            "Translate data to Cypher queries",
+                            "Execute queries in transaction"
+                        ]
+                    }
+                },
+                node_data={
+                    "success": False,
+                    "error": error_msg
+                },
+                node_type="InjectionError"
+            )
+            return error_response.dict()
     except HTTPException:
         # Re-raise HTTP exceptions directly
         raise
@@ -129,7 +179,35 @@ async def receive_data_for_injection(data: InjectionData):
         if callable(error_str):
             logger.error("error_str is callable, which is unexpected")
             raise HTTPException(status_code=500, detail="error_str is callable")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {error_str}")
+        # Create an error response in POML format
+        error_response = MemoryNode(
+            identity={
+                "name": "InjectorAgent",
+                "version": "1.0",
+                "type": "Specialized Data Injection Agent"
+            },
+            operational_context={
+                "project": "External Context Engine (ECE) v3.0",
+                "objective": "Inject data into the Neo4j knowledge graph."
+            },
+            directive={
+                "goal": "Provide status of data injection operation.",
+                "task": {
+                    "name": "InjectData",
+                    "steps": [
+                        "Receive data from Archivist",
+                        "Translate data to Cypher queries",
+                        "Execute queries in transaction"
+                    ]
+                }
+            },
+            node_data={
+                "success": False,
+                "error": error_str
+            },
+            node_type="InjectionError"
+        )
+        return error_response.dict()
 
 @app.post("/internal/temporal/get_or_create_timenode")
 async def get_or_create_timenode(request: TemporalNodeRequest):
@@ -150,17 +228,98 @@ async def get_or_create_timenode(request: TemporalNodeRequest):
         
         if result.get("success"):
             logger.info("Time node created successfully")
-            return result.get("data", {})
+            # Return a POML response
+            response_poml = MemoryNode(
+                identity={
+                    "name": "InjectorAgent",
+                    "version": "1.0",
+                    "type": "Specialized Data Injection Agent"
+                },
+                operational_context={
+                    "project": "External Context Engine (ECE) v3.0",
+                    "objective": "Inject data into the Neo4j knowledge graph."
+                },
+                directive={
+                    "goal": "Provide status of temporal node creation operation.",
+                    "task": {
+                        "name": "CreateTimeNode",
+                        "steps": [
+                            "Receive timestamp from Archivist",
+                            "Create chronological tree of nodes",
+                            "Return time node information"
+                        ]
+                    }
+                },
+                node_data=result.get("time_node", {}),
+                node_type="TemporalNodeResult"
+            )
+            return response_poml.dict()
         else:
             error_msg = result.get('error', 'Unknown error')
             logger.error(f"Failed to create time node: {error_msg}")
-            raise HTTPException(status_code=500, detail=f"Failed to create time node: {error_msg}")
+            # Create an error response in POML format
+            error_response = MemoryNode(
+                identity={
+                    "name": "InjectorAgent",
+                    "version": "1.0",
+                    "type": "Specialized Data Injection Agent"
+                },
+                operational_context={
+                    "project": "External Context Engine (ECE) v3.0",
+                    "objective": "Inject data into the Neo4j knowledge graph."
+                },
+                directive={
+                    "goal": "Provide status of temporal node creation operation.",
+                    "task": {
+                        "name": "CreateTimeNode",
+                        "steps": [
+                            "Receive timestamp from Archivist",
+                            "Create chronological tree of nodes",
+                            "Return time node information"
+                        ]
+                    }
+                },
+                node_data={
+                    "success": False,
+                    "error": error_msg
+                },
+                node_type="TemporalNodeError"
+            )
+            return error_response.dict()
     except HTTPException:
         # Re-raise HTTP exceptions directly
         raise
     except Exception as e:
         logger.error(f"Error processing time node request: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        # Create an error response in POML format
+        error_response = MemoryNode(
+            identity={
+                "name": "InjectorAgent",
+                "version": "1.0",
+                "type": "Specialized Data Injection Agent"
+            },
+            operational_context={
+                "project": "External Context Engine (ECE) v3.0",
+                "objective": "Inject data into the Neo4j knowledge graph."
+            },
+            directive={
+                "goal": "Provide status of temporal node creation operation.",
+                "task": {
+                    "name": "CreateTimeNode",
+                    "steps": [
+                        "Receive timestamp from Archivist",
+                        "Create chronological tree of nodes",
+                        "Return time node information"
+                    ]
+                }
+            },
+            node_data={
+                "success": False,
+                "error": str(e)
+            },
+            node_type="TemporalNodeError"
+        )
+        return error_response.dict()
 
 @app.post("/internal/temporal/link_memory_to_timenode")
 async def link_memory_to_timenode(request: MemoryLinkRequest):
@@ -181,23 +340,104 @@ async def link_memory_to_timenode(request: MemoryLinkRequest):
         
         if result.get("success"):
             logger.info("Memory node linked to time node successfully")
-            return {"success": True, "message": "Memory node linked to time node successfully"}
+            # Return a POML response
+            response_poml = MemoryNode(
+                identity={
+                    "name": "InjectorAgent",
+                    "version": "1.0",
+                    "type": "Specialized Data Injection Agent"
+                },
+                operational_context={
+                    "project": "External Context Engine (ECE) v3.0",
+                    "objective": "Inject data into the Neo4j knowledge graph."
+                },
+                directive={
+                    "goal": "Provide status of memory linking operation.",
+                    "task": {
+                        "name": "LinkMemoryToTimeNode",
+                        "steps": [
+                            "Receive memory node ID and timestamp from Archivist",
+                            "Link memory node to temporal node",
+                            "Return operation status"
+                        ]
+                    }
+                },
+                node_data=result,
+                node_type="LinkMemoryResult"
+            )
+            return response_poml.dict()
         else:
             error_msg = result.get('error', 'Unknown error')
             logger.error(f"Failed to link memory node to time node: {error_msg}")
-            raise HTTPException(status_code=500, detail=f"Failed to link memory node to time node: {error_msg}")
+            # Create an error response in POML format
+            error_response = MemoryNode(
+                identity={
+                    "name": "InjectorAgent",
+                    "version": "1.0",
+                    "type": "Specialized Data Injection Agent"
+                },
+                operational_context={
+                    "project": "External Context Engine (ECE) v3.0",
+                    "objective": "Inject data into the Neo4j knowledge graph."
+                },
+                directive={
+                    "goal": "Provide status of memory linking operation.",
+                    "task": {
+                        "name": "LinkMemoryToTimeNode",
+                        "steps": [
+                            "Receive memory node ID and timestamp from Archivist",
+                            "Link memory node to temporal node",
+                            "Return operation status"
+                        ]
+                    }
+                },
+                node_data={
+                    "success": False,
+                    "error": error_msg
+                },
+                node_type="LinkMemoryError"
+            )
+            return error_response.dict()
     except HTTPException:
         # Re-raise HTTP exceptions directly
         raise
     except Exception as e:
         logger.error(f"Error processing memory link request: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        # Create an error response in POML format
+        error_response = MemoryNode(
+            identity={
+                "name": "InjectorAgent",
+                "version": "1.0",
+                "type": "Specialized Data Injection Agent"
+            },
+            operational_context={
+                "project": "External Context Engine (ECE) v3.0",
+                "objective": "Inject data into the Neo4j knowledge graph."
+            },
+            directive={
+                "goal": "Provide status of memory linking operation.",
+                "task": {
+                    "name": "LinkMemoryToTimeNode",
+                    "steps": [
+                        "Receive memory node ID and timestamp from Archivist",
+                        "Link memory node to temporal node",
+                        "Return operation status"
+                    ]
+                }
+            },
+            node_data={
+                "success": False,
+                "error": str(e)
+            },
+            node_type="LinkMemoryError"
+        )
+        return error_response.dict()
 
 # Cleanup on shutdown
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on application shutdown."""
-    injector_agent.db_manager.disconnect()
+    injector_agent.neo4j_manager.disconnect()
 
 if __name__ == "__main__":
     uvicorn.run(

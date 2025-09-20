@@ -1,4 +1,5 @@
-# Core External Context Engine (ECE) - Project Specification v3.0
+# Core External Context Engine (ECE) - Project Specification v3.1
+## Updated to Reflect Current Implementation
 
 ## 1. Vision Statement
 
@@ -16,16 +17,20 @@ The ECE is a multi-agent system built on a tiered architecture. It is designed f
 
 The immediate goal is to implement a closed-loop cycle of context processing, learning, and memory management. This demonstrates the core functionality of the ECE.
 
-*   **Context Cache:** A fixed-size, short-term memory buffer that is fully operational.
-*   **Distiller Agent:** Periodically reads the entire contents of the Context Cache, condenses it into a targeted, summarized memory, and sends the condensed memory to the Archivist Agent.
+*   **Context Cache:** A fixed-size, short-term memory buffer that is fully operational using Redis for key-value storage and vector similarity search.
+*   **Distiller Agent:** Periodically reads the entire contents of the Context Cache, condenses it into a targeted, summarized memory using NLP (spaCy) for entity extraction, and sends the condensed memory to the Archivist Agent.
 *   **Archivist Agent:**
     *   Acts as a communication hub, routing data between the Q-Learning Agent, Distiller, and Injector.
     *   Intercepts and captures truncated data from the Context Cache before it's lost, ensuring no data loss.
+    *   Implements periodic self-analysis through the Cohesion Loop, creating timeline-style explanations of events.
+    *   Continuously scans the Redis cache for new entries and processes them through the full pipeline.
 *   **Injector Agent:**
     *   Checks for verbatim duplicates before writing any new data to the graph.
     *   If the data is new, it creates a new node.
     *   If the data is a duplicate, it locates the existing node and appends the new information as a timestamped "additional context," showing the evolution of the concept.
-*   **Q-Learning Agent:** Actively analyzes the data flow to refine relationships within the graph.
+    *   Uses MERGE operations in Neo4j to handle both creation and updating of nodes and relationships.
+    *   Implements content history tracking for nodes and relationships.
+*   **Q-Learning Agent:** Actively analyzes the data flow to refine relationships within the graph using reinforcement learning algorithms.
 
 ## 4. Core Protocols & Innovations
 
@@ -33,61 +38,95 @@ The immediate goal is to implement a closed-loop cycle of context processing, le
 * **Sequential Thinking Workflow:** To manage resources effectively, the `Orchestrator` uses a semaphore to ensure that the `Thinker` agents access the LLM sequentially.
 * **Keyword-Based Context Retrieval:** The `Orchestrator` extracts keywords from the user's prompt and passes them to the `Archivist` to retrieve relevant context from the knowledge graph.
 * **Exploratory Problem-Solving Loop:** An iterative, game-like workflow where an `ExplorerAgent` proposes solutions, a `SandboxModule` executes them, and a `CritiqueAgent` scores them.
-* **POML Inter-Agent Communication:** All internal communication between agents is conducted via `POML` (Persona-Oriented Markup Language) directives.
-* **Continuous Temporal Scanning:** The `Archivist` maintains a persistent "flow of time" by chronologically linking all memories as they are processed from the cache.
+* **POML Inter-Agent Communication:** All internal communication between agents is conducted via `POML` (Persona-Oriented Markup Language) directives with structured metadata.
+* **Continuous Temporal Scanning:** The `Archivist` maintains a persistent "flow of time" by chronologically linking all memories as they are processed from the cache using a Year->Month->Day node structure in Neo4j.
+* **Self-Sustaining Memory System (Cohesion Loop):** The `Orchestrator` periodically analyzes the context cache every 5 seconds without user input, creating timeline-style explanations and querying the `Archivist` for related memories with resource limits (`max_contexts` parameter).
 
-## 5. New Agent & Protocol Specifications
+## 5. Data Flow and Storage Implementation
 
-The following specifications are designed to evolve the ECE from a text-based agent orchestrator into a robust, secure, and multi-modal cognitive architecture.
+### 5.1. Context Cache Implementation
+- Uses Redis for high-speed key-value storage
+- Supports TTL (time-to-live) for automatic cache management
+- Implements vector embeddings for semantic search capabilities
+- Maintains statistics tracking for cache hit/miss rates
 
-### 5.1. The "Vault" Agent (Tier 0 Security)
+### 5.2. Distiller Agent Implementation
+- Processes raw text using spaCy NLP library for entity extraction
+- Identifies named entities (PERSON, ORG, GPE, DATE, etc.)
+- Structures data into entities and relationships format
+- Adds timestamp information for temporal tracking
 
-*   **Purpose:** To serve as a hardened, zero-trust gateway for all inputs. Its primary function is to isolate the core ECE from malicious or malformed prompts, preventing injection, data poisoning, and other attack vectors.
-*   **Core Responsibilities:**
-    1.  **Input Sanitization:** Scan all incoming text for known attack patterns like invisible characters, escape sequences, and common injection payloads.
-    2.  **Threat Detection:** Employ a specialized, small-footprint model (e.g., a security-focused Gemma or IBM model) to classify the *intent* of prompts, identifying meta-prompts designed to manipulate the system.
-    3.  **Quarantine & Alert Protocol:** Upon detecting a high-confidence threat, the Vault agent will:
-        *   Block the prompt from proceeding to the Orchestrator.
-        *   Log the full, raw prompt to a secure log file (e.g., `logs/threat_alerts.md`).
-        *   Return a generic, safe response to the user without revealing security trigger details.
-*   **Architectural Placement:** It must be the first point of contact for any external input, positioned directly **before** the `OrchestratorAgent`.
+### 5.3. Archivist Agent Implementation
+- Acts as central coordinator between Distiller, Injector, and Q-Learning agents
+- Continuously monitors Redis cache for new entries
+- Transforms data from Distiller format to Injector format
+- Applies business rules for filtering and processing
+- Manages temporal linking of memories to chronological nodes
 
-### 5.2. POML Inter-Agent Communication Protocol
+### 5.4. Injector Agent Implementation
+- Connects to Neo4j graph database using official Neo4j driver
+- Translates structured JSON data into Cypher MERGE queries
+- Implements duplicate detection using node ID matching
+- Maintains content history through array properties
+- Creates chronological spine using Year->Month->Day node structure
+- Links memory nodes to temporal nodes via OCCURRED_AT relationships
 
-*   **Purpose:** To establish a structured, machine-readable format for all data exchanged between agents, moving from simple strings to self-describing data objects.
-*   **Core Structure:** All inter-agent messages will be wrapped in a POML (Persona Object Markup Language) block.
-    *   **Example:**
-        ```xml
-        <poml>
-            <metadata>
-                <timestamp>2025-09-17T22:55:10-06:00</timestamp>
-                <source_agent>ThinkerAgent_Philosopher</source_agent>
-                <target_agent>ArchivistAgent</target_agent>
-                <data_type>agent_thought_process</data_type>
-                <session_id>session_xyz</session_id>
-            </metadata>
-            <content><![CDATA[The agent's detailed text output goes here.]]></content>
-        </poml>
-        ```
-*   **Implementation:** All agents must be refactored to format their outputs into this structure. The `ArchivistAgent` and `QLearningAgent` must be updated to parse these blocks, using the metadata to create richer, more interconnected nodes and relationships in the graph database.
+### 5.5. Neo4j Schema Implementation
+- **Entity Nodes:** Represent extracted concepts with properties and content history
+- **Relationships:** Connect entities with typed relationships and content history
+- **Temporal Nodes:** Chronological structure (Year->Month->Day) for time-based organization
+- **Content History:** Arrays tracking the evolution of nodes and relationships over time
 
-### 5.3. The "Janitor" Agent (Memory & Graph Hygiene)
+## 6. Agent Communication Protocol
 
-*   **Purpose:** To perform asynchronous, background maintenance on the graph database to ensure its long-term health, performance, and integrity.
-*   **Core Responsibilities:**
-    1.  **Organic POML Conversion:** Periodically scan the graph for legacy nodes containing unstructured text. It will then re-process this data, wrap it in the proper POML format, and update the node, allowing the graph to organically upgrade itself over time.
-    2.  **Data Integrity:** Standardize all timestamps to the ISO 8601 format.
-    3.  **De-duplication:** Identify and merge redundant nodes to maintain database efficiency.
-*   **Activation:** The agent can be triggered on a schedule (e.g., nightly), after large data ingestions, or manually by the user.
+All inter-agent communication follows the POML (Persona-Oriented Markup Language) protocol:
 
-### 5.4. The "Oculus" Agent (Tier 1 Visual Cortex & Motor Control)
+```xml
+<poml>
+    <identity>
+        <name>ArchivistAgent</name>
+        <version>1.0</version>
+        <type>Memory Cortex Controller</type>
+    </identity>
+    <operational_context>
+        <project>External Context Engine (ECE) v3.0</project>
+        <objective>Send data to Injector for persistence in Neo4j knowledge graph.</objective>
+    </operational_context>
+    <directive>
+        <goal>Request data injection into Neo4j knowledge graph.</goal>
+        <task>
+            <name>InjectData</name>
+            <data>{structured_data}</data>
+        </task>
+    </directive>
+    <timestamp>2025-09-20T10:30:00Z</timestamp>
+</poml>
+```
 
-*   **Purpose:** To provide the ECE with the ability to perceive, understand, and interact with on-screen visual information via a standard GUI.
-*   **Core Components:**
-    1.  **Screen Capture Utility:** A tool to capture screen frames at a frequency of 1-2 seconds.
-    2.  **Visual Language Model (VLM):** A specialized model (e.g., "Holo") fine-tuned for UI understanding to identify and describe functional elements like buttons, text fields, and menus.
-    3.  **Input Control Library:** A library (e.g., `pyautogui`) to provide programmatic control over the mouse and keyboard.
-*   **Operational Loop (See-Think-Act):**
-    1.  **See:** Perceive the current screen state via a captured frame.
-    2.  **Think:** Use the VLM and OCR to generate a structured (POML) description of the on-screen UI elements and their coordinates. Compare this state to the high-level objective received from the Orchestrator and plan the next single action (e.g., "move mouse to [x,y] and click").
-    3.  **Act:** Execute the planned action using the input control library. The loop then repeats, perceiving the result of the action in the next frame.
+## 7. Completed Agents and Features
+
+### 7.1. Fully Implemented Agents
+- ✅ **Orchestrator Agent** - Central coordinator with decision tree routing
+- ✅ **Distiller Agent** - NLP-based text processing and entity extraction
+- ✅ **Archivist Agent** - Memory cortex controller with continuous scanning
+- ✅ **Injector Agent** - Neo4j data persistence with duplicate handling
+- ✅ **Q-Learning Agent** - Graph optimization and relationship refinement
+
+### 7.2. Core Features
+- ✅ **Context Cache** - Redis-based short-term memory
+- ✅ **Continuous Temporal Scanning** - Automatic processing of cache entries
+- ✅ **POML Communication** - Structured inter-agent messaging
+- ✅ **Cohesion Loop** - Periodic self-analysis and timeline synthesis
+- ✅ **Asynchronous Processing** - Non-blocking operations with background tasks
+- ✅ **Duplicate Handling** - Content history tracking in Neo4j
+
+## 8. Future Enhancements (Not Yet Implemented)
+
+### 8.1. Security Layer
+- **Vault Agent (Tier 0 Security):** Hardened gateway for input sanitization and threat detection
+
+### 8.2. Maintenance Agents
+- **Janitor Agent:** Background maintenance for data integrity and de-duplication
+- **Oculus Agent:** Visual cortex for screen capture and UI interaction
+
+This updated specification reflects the current implementation status of the ECE system, with all core MVP components fully functional and integrated.

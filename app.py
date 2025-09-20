@@ -36,6 +36,18 @@ app = FastAPI(
 # In a real application, session_id would come from user session management
 orchestrator_agent = OrchestratorAgent(session_id=str(uuid.uuid4()))
 
+
+@app.on_event("startup")
+async def startup_event():
+    """Start the cohesion loop when the application starts"""
+    orchestrator_agent.start_cohesion_loop()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop the cohesion loop when the application shuts down"""
+    orchestrator_agent.stop_cohesion_loop()
+
 @app.get("/")
 async def root():
     """Root endpoint for health check."""

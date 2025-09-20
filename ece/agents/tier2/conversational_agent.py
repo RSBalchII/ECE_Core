@@ -17,7 +17,10 @@ class ConversationalAgent:
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": prompt}
             ],
-            "stream": False
+            "stream": False,
+            "options": {
+                "num_gpu": 37
+            }
         }
         
         try:

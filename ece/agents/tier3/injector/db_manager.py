@@ -7,6 +7,7 @@ import logging
 from neo4j import GraphDatabase
 import time
 import random
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -289,22 +290,73 @@ class Neo4jManager:
             logger.debug(f"Processing {len(data['entities'])} entities")
             for entity in data['entities']:
                 label = entity.get('type', 'Entity')
-                # Create MERGE query for each entity
-                # Using ON CREATE and ON MATCH to handle both new and existing nodes
-                query = f"""
-                MERGE (n:{label} {{id: $id}})
-                ON CREATE SET n += $properties, n.created = timestamp(), n.poml_metadata = $poml_metadata
-                ON MATCH SET n += $properties, n.last_updated = timestamp(), n.poml_metadata = $poml_metadata
-                """
-                parameters = {
-                    "id": entity.get('id'),
-                    "properties": entity.get('properties', {}),
-                    "poml_metadata": data.get('poml_metadata', '')
-                }
-                queries.append({
-                    "query": query.strip(),
-                    "parameters": parameters
-                })
+                entity_id = entity.get('id')
+                
+                # Generate a unique UUID if one isn't provided or is null
+                if not entity_id:
+                    entity_id = str(uuid.uuid4())
+                    logger.debug(f"Generated UUID for entity: {entity_id}")
+                else:
+                    logger.debug(f"Using existing ID for entity: {entity_id}")
+                
+                properties = entity.get('properties', {})
+                summary = data.get('summary', '')
+                
+                # Convert summary to string if it's a dict or other non-string type
+                if not isinstance(summary, str):
+                    summary = str(summary)
+                
+                # Ensure all properties are primitive types
+                sanitized_properties = {}
+                for key, value in properties.items():
+                    if isinstance(value, (str, int, float, bool)) or value is None:
+                        sanitized_properties[key] = value
+                    else:
+                        # Convert non-primitive types to strings
+                        sanitized_properties[key] = str(value)
+                
+                # Check for verbatim duplicates by comparing the summary/content
+                # If duplicate, append new information as timestamped "additional context"
+                # Only create the query if we have a valid entity_id
+                if entity_id is not None:
+                    query = f"""
+                    MERGE (n:{label} {{id: $id}})
+                    ON CREATE SET 
+                        n += $properties, 
+                        n.created = timestamp(), 
+                        n.poml_metadata = $poml_metadata,
+                        n.content_history = [$summary]
+                    ON MATCH SET 
+                        n += $properties, 
+                        n.last_updated = timestamp(), 
+                        n.poml_metadata = $poml_metadata,
+                        n.content_history = n.content_history + [$summary]
+                    """
+                    parameters = {
+                        "id": entity_id,
+                        "properties": sanitized_properties,
+                        "poml_metadata": data.get('poml_metadata', ''),
+                        "summary": summary
+                    }
+                    
+                    # Debug logging to see the parameters being sent to Neo4j
+                    logger.debug(f"Cypher query parameters: {parameters}")
+                    logger.debug(f"Entity ID type: {type(entity_id)}")
+                    
+                    # Check if entity_id is still null
+                    if entity_id is None:
+                        logger.error("Entity ID is still None after UUID generation!")
+                        # Generate a fallback ID
+                        entity_id = f"fallback_{uuid.uuid4()}"
+                        parameters["id"] = entity_id
+                        logger.debug(f"Using fallback ID: {entity_id}")
+                    
+                    queries.append({
+                        "query": query.strip(),
+                        "parameters": parameters
+                    })
+                else:
+                    logger.error("Skipping entity with null ID")
         
         # Handle relationships
         if 'relationships' in data:
@@ -313,21 +365,68 @@ class Neo4jManager:
                 start_label = relationship.get('start_type', 'Entity')
                 end_label = relationship.get('end_type', 'Entity')
                 rel_type = relationship.get('type', 'RELATIONSHIP')
-                # Create MERGE query for each relationship
-                # Using ON CREATE and ON MATCH to handle both new and existing relationships
+                start_id = relationship.get('start_id')
+                end_id = relationship.get('end_id')
+                properties = relationship.get('properties', {})
+                summary = data.get('summary', '')
+                
+                # Convert summary to string if it's a dict or other non-string type
+                if not isinstance(summary, str):
+                    summary = str(summary)
+                
+                # Ensure all properties are primitive types
+                sanitized_properties = {}
+                for key, value in properties.items():
+                    if isinstance(value, (str, int, float, bool)) or value is None:
+                        sanitized_properties[key] = value
+                    else:
+                        # Convert non-primitive types to strings
+                        sanitized_properties[key] = str(value)
+                        
+                # Generate UUIDs for start_id and end_id if they're null
+                if not start_id:
+                    start_id = str(uuid.uuid4())
+                if not end_id:
+                    end_id = str(uuid.uuid4())
+                
+                # Check if start_id or end_id is still null after generation
+                if start_id is None or end_id is None:
+                    logger.error(f"Relationship has null IDs after UUID generation: start_id={start_id}, end_id={end_id}")
+                    # Skip this relationship
+                    continue
+                    
                 query = f"""
                 MERGE (a:{start_label} {{id: $start_id}})
                 MERGE (b:{end_label} {{id: $end_id}})
                 MERGE (a)-[r:{rel_type}]->(b)
-                ON CREATE SET r += $properties, r.created = timestamp(), r.poml_metadata = $poml_metadata
-                ON MATCH SET r += $properties, r.last_updated = timestamp(), r.poml_metadata = $poml_metadata
+                ON CREATE SET 
+                    r += $properties, 
+                    r.created = timestamp(), 
+                    r.poml_metadata = $poml_metadata,
+                    r.content_history = [$summary]
+                ON MATCH SET 
+                    r += $properties, 
+                    r.last_updated = timestamp(), 
+                    r.poml_metadata = $poml_metadata,
+                    r.content_history = r.content_history + [$summary]
                 """
                 parameters = {
-                    "start_id": relationship.get('start_id'),
-                    "end_id": relationship.get('end_id'),
-                    "properties": relationship.get('properties', {}),
-                    "poml_metadata": data.get('poml_metadata', '')
+                    "start_id": start_id,
+                    "end_id": end_id,
+                    "properties": sanitized_properties,
+                    "poml_metadata": data.get('poml_metadata', ''),
+                    "summary": summary
                 }
+                
+                # Debug logging for relationships
+                logger.debug(f"Relationship parameters: {parameters}")
+                logger.debug(f"Start ID type: {type(start_id)}, End ID type: {type(end_id)}")
+                
+                # Check if IDs are still null
+                if start_id is None or end_id is None:
+                    logger.error(f"Relationship has null IDs: start_id={start_id}, end_id={end_id}")
+                    continue
+                
                 queries.append({
                     "query": query.strip(),
                     "parameters": parameters

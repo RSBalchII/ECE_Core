@@ -24,7 +24,10 @@ class WebSearchAgent:
                     {"role": "system", "content": "You are a helpful AI assistant that answers questions based on web search results."},
                     {"role": "user", "content": prompt}
                 ],
-                "stream": False
+                "stream": False,
+                "options": {
+                    "num_gpu": 37
+                }
             }
 
             url = f"{self.ollama_base_url}/api/chat"

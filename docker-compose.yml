@@ -27,6 +27,9 @@ services:
       - archivist
     env_file:
       - .env
+    environment:
+      - OLLAMA_MODEL_LOAD_MODE=full
+      - OLLAMA_NUM_GPU_LAYERS=37
     command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--log-level", "debug"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -87,6 +90,9 @@ services:
       - "8004:8004"
     networks:
       - main_net
+    depends_on:
+      neo4j:
+        condition: service_healthy
 
   archivist:
     build:

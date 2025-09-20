@@ -1,0 +1,57 @@
+{
+  "query_type": "memory_query",
+  "description": "Specification for memory querying in the ECE system",
+  "parameters": [
+    {
+      "name": "context_id",
+      "type": "string",
+      "required": true,
+      "description": "Unique identifier for context cache entry"
+    },
+    {
+      "name": "max_contexts",
+      "type": "integer",
+      "required": false,
+      "default": 5,
+      "min": 1,
+      "max": 20,
+      "description": "Maximum memory contexts to return (resource limit to prevent memory bloat)"
+    }
+  ],
+  "response_format": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "properties": {
+        "memory_id": {
+          "type": "string",
+          "description": "Unique identifier for the memory"
+        },
+        "context_id": {
+          "type": "string",
+          "description": "Identifier of the context this memory is related to"
+        },
+        "content": {
+          "type": "string",
+          "description": "Content of the related memory"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when the memory was created"
+        },
+        "relevance_score": {
+          "type": "number",
+          "format": "float",
+          "description": "Relevance score of the memory to the context (0.0 to 1.0)"
+        }
+      },
+      "required": ["memory_id", "context_id", "content", "timestamp", "relevance_score"]
+    }
+  },
+  "validation_rules": [
+    "max_contexts must be between 1 and 20",
+    "context_id must be a valid UUID string",
+    "All returned memories must be limited to max_contexts count"
+  ]
+}

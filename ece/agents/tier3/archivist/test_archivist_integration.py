@@ -43,7 +43,7 @@ class TestArchivistIntegration(unittest.TestCase):
         )
         
         # Send the request to the context endpoint
-        response = self.client.post("/context", json=context_request.model_dump())
+        response = self.client.post("/context", json=context_request.dict())
         
         # Check that we get a response
         self.assertEqual(response.status_code, 200)

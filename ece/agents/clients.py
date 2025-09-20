@@ -95,7 +95,7 @@ class QLearningAgentClient:
 
             response = await self.client.post(
                 f"{self.base_url}/find_optimal_path",
-                json=request_data.model_dump()
+                json=request_data.dict()
             )
 
             if response.status_code == 200:
@@ -122,7 +122,7 @@ class QLearningAgentClient:
         """
         try:
             request_data = {
-                "path": path.model_dump(),
+                "path": path.dict(),
                 "reward": reward
             }
 
@@ -161,16 +161,53 @@ class InjectorClient:
             logger.info(f"Sending data to Injector at {self.base_url}/internal/data_to_inject")
             logger.debug(f"Data being sent: {data}")
 
-            # Ensure summary is a string
-            if not isinstance(data.get("summary"), str):
-                data["summary"] = str(data.get("summary")) if data.get("summary") is not None else ""
+            # Convert datetime objects to ISO strings in the data
+            from datetime import datetime
+            def convert_datetime(obj):
+                if isinstance(obj, dict):
+                    return {k: convert_datetime(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [convert_datetime(item) for item in obj]
+                elif isinstance(obj, datetime):
+                    return obj.isoformat()
+                else:
+                    return obj
             
-            data = sanitize_entities_for_injection(data)
+            sanitized_data = convert_datetime(data)
+            logger.debug(f"Sanitized data: {sanitized_data}")
+
+            # Create a POML request
+            from ece.common.poml_schemas import POML
+            poml_request = POML(
+                identity={
+                    "name": "ArchivistAgent",
+                    "version": "1.0",
+                    "type": "Memory Cortex Controller"
+                },
+                operational_context={
+                    "project": "External Context Engine (ECE) v3.0",
+                    "objective": "Send data to Injector for persistence in Neo4j knowledge graph."
+                },
+                directive={
+                    "goal": "Request data injection into Neo4j knowledge graph.",
+                    "task": {
+                        "name": "InjectData",
+                        "data": sanitized_data
+                    }
+                }
+            )
+            
+            # Convert POML to dict and ensure all datetime objects are properly serialized
+            poml_dict = poml_request.dict()
+            logger.debug(f"POML dict before final sanitization: {poml_dict}")
+
+            # Final sanitization pass to ensure no datetime objects remain
+            final_sanitized_data = convert_datetime(poml_dict)
+            logger.debug(f"Final sanitized POML dict: {final_sanitized_data}")
 
             response = await self.client.post(
                 f"{self.base_url}/internal/data_to_inject",
-                content=json.dumps(data),
-                headers={'Content-Type': 'application/json'},
+                json=final_sanitized_data,  # Use the fully sanitized data
                 timeout=30.0  # Add a timeout
             )
 
@@ -181,7 +218,12 @@ class InjectorClient:
                 result = response.json()
                 logger.info(f"Successful response from Injector: {result}")
                 logger.debug(f"Result type: {type(result)}")
-                return result
+                
+                # Extract the actual result from the POML response
+                if "node_data" in result:
+                    return result["node_data"]
+                else:
+                    return result
             else:
                 error_text = response.text
                 logger.error(f"Injector returned status {response.status_code} with body: {error_text}")
@@ -232,18 +274,40 @@ class InjectorClient:
             # Parse the timestamp
             dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
 
-            data = {
-                "timestamp": dt.isoformat()
-            }
+            # Create a POML request
+            from ece.common.poml_schemas import POML
+            poml_request = POML(
+                identity={
+                    "name": "ArchivistAgent",
+                    "version": "1.0",
+                    "type": "Memory Cortex Controller"
+                },
+                operational_context={
+                    "project": "External Context Engine (ECE) v3.0",
+                    "objective": "Request creation of temporal node in Neo4j knowledge graph."
+                },
+                directive={
+                    "goal": "Request creation of temporal node.",
+                    "task": {
+                        "name": "CreateTimeNode",
+                        "timestamp": dt.isoformat()
+                    }
+                }
+            )
 
             response = await self.client.post(
                 f"{self.base_url}/internal/temporal/get_or_create_timenode",
-                json=data,
+                json=poml_request.dict(),
                 timeout=30.0
             )
 
             if response.status_code == 200:
-                return response.json()
+                result = response.json()
+                # Extract the actual result from the POML response
+                if "node_data" in result:
+                    return result["node_data"]
+                else:
+                    return result
             else:
                 logger.error(f"Temporal service returned status {response.status_code}")
                 return {"error": f"Temporal service returned status {response.status_code}"}
@@ -266,26 +330,47 @@ class InjectorClient:
             # Parse the timestamp
             dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
 
-            data = {
-                "memory_node_id": memory_node_id,
-                "timestamp": dt.isoformat()
-            }
+            # Create a POML request
+            from ece.common.poml_schemas import POML
+            poml_request = POML(
+                identity={
+                    "name": "ArchivistAgent",
+                    "version": "1.0",
+                    "type": "Memory Cortex Controller"
+                },
+                operational_context={
+                    "project": "External Context Engine (ECE) v3.0",
+                    "objective": "Request linking of memory node to temporal node in Neo4j knowledge graph."
+                },
+                directive={
+                    "goal": "Request linking of memory node to temporal node.",
+                    "task": {
+                        "name": "LinkMemoryToTimeNode",
+                        "memory_node_id": memory_node_id,
+                        "timestamp": dt.isoformat()
+                    }
+                }
+            )
 
             response = await self.client.post(
                 f"{self.base_url}/internal/temporal/link_memory_to_timenode",
-                json=data,
+                json=poml_request.dict(),
                 timeout=30.0
             )
 
             if response.status_code == 200:
                 result = response.json()
-                return result.get("success", False)
+                # Extract the actual result from the POML response
+                if "node_data" in result:
+                    return result["node_data"].get("success", False)
+                else:
+                    return result.get("success", False)
             else:
                 logger.error(f"Temporal service returned status {response.status_code}")
                 return False
         except Exception as e:
             logger.error(f"Error calling temporal service: {str(e)}")
-            return {"error": f"Error calling temporal service: {str(e)}"}
+            return False
 
 class ArchivistClient:
     """Client for communicating with the Archivist agent."""

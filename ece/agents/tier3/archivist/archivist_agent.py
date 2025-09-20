@@ -98,6 +98,12 @@ async def health_check():
     """Health check endpoint."""
     return {"status": "healthy"}
 
+class MemoryQueryRequest(BaseModel):
+    """Model for memory query requests."""
+    context_id: str
+    max_contexts: int = 5  # Default to 5 contexts to prevent memory bloat
+
+
 @app.post("/context", response_model=ContextResponse)
 async def get_context(request: ContextRequest):
     """
@@ -189,29 +195,66 @@ async def receive_distiller_data(data: DistillerData):
         # Apply business logic to filter and process the data
         # For demonstration, we'll implement some basic filtering rules:
 
-        # 1. Filter entities - only send entities with certain types or properties
+        # Transform and filter entities - convert Distiller format to Injector format and add IDs
         filtered_entities = []
-        for entity in data.entities:
+        for i, entity in enumerate(data.entities):
+            # Transform entity from Distiller format to Injector format
+            # Distiller format: {"text": "...", "label": "...", "description": "..."}
+            # Injector format: {"id": "...", "type": "...", "properties": {...}}
+            entity_text = entity.get('text', '')
+            entity_label = entity.get('label', 'Entity')
+            
+            # Generate a more robust ID that handles edge cases
+            if entity_text:
+                entity_id = f"entity_{i}_{abs(hash(entity_text))}"
+            else:
+                entity_id = f"entity_{i}_no_text"
+                
+            transformed_entity = {
+                "id": entity_id,  # Generate ID based on index and text content
+                "type": entity_label,  # Use label as type
+                "properties": {
+                    "name": entity_text,
+                    "description": entity.get('description', ''),
+                    "source_text": entity_text
+                }
+            }
+            
+            # Apply business rules for filtering
             # Example business rule: Only send entities with a 'name' property
-            if entity.get('properties', {}).get('name'):
+            if transformed_entity['properties'].get('name'):
                 # Example business rule: Only send entities of certain types
-                entity_type = entity.get('type', '')
-                if entity_type in ['Concept', 'Person', 'Organization', 'Event', 'Product']:
-                    filtered_entities.append(entity)
+                # Include common spaCy entity types and our custom types
+                entity_type = transformed_entity.get('type', '')
+                if entity_type in ['Concept', 'Person', 'PERSON', 'Organization', 'ORG', 'Event', 'EVENT', 'Product', 'PRODUCT', 'GPE', 'DATE', 'TIME', 'ENTITY']:
+                    filtered_entities.append(transformed_entity)
 
-        # 2. Filter relationships - only send relationships with certain types or properties
+        # Transform and filter relationships - convert to expected format
         filtered_relationships = []
-        for relationship in data.relationships:
+        for i, relationship in enumerate(data.relationships):
+            # Transform relationship to expected format
+            # For now, we'll create a simple relationship structure
+            # In a real implementation, the Distiller would provide more detailed relationship info
+            transformed_relationship = {
+                "type": relationship.get('type', 'RELATED_TO'),
+                "start_id": f"relationship_start_{i}",
+                "end_id": f"relationship_end_{i}",
+                "start_type": relationship.get('start_type', 'Entity'),
+                "end_type": relationship.get('end_type', 'Entity'),
+                "properties": relationship.get('properties', {})
+            }
+            
+            # Apply business rules for filtering
             # Example business rule: Only send relationships with a 'type' property
-            if relationship.get('type'):
+            if transformed_relationship.get('type'):
                 # Example business rule: Only send relationships of certain types
-                rel_type = relationship.get('type', '')
+                rel_type = transformed_relationship.get('type', '')
                 if rel_type in ['RELATED_TO', 'PART_OF', 'CREATED_BY', 'WORKS_FOR', 'LOCATED_IN']:
-                    filtered_relationships.append(relationship)
+                    filtered_relationships.append(transformed_relationship)
 
         # 3. Apply additional business rules
-        # Example: Only send data if there are at least 1 entity and 1 relationship
-        if len(filtered_entities) < 1 or len(filtered_relationships) < 1:
+        # Example: Only send data if there are at least 1 entity OR 1 relationship
+        if len(filtered_entities) < 1 and len(filtered_relationships) < 1:
             logger.info("Data does not meet minimum criteria for archiving")
             return {"status": "filtered", "message": "Data filtered out by business rules"}
 
@@ -236,6 +279,9 @@ async def receive_distiller_data(data: DistillerData):
             "relationships": filtered_relationships,
             "summary": data.summary
         }
+        
+        # Log the data being sent to the injector for debugging
+        logger.debug(f"Data being sent to injector: {data_dict}")
 
         # Log before sending to Injector
         logger.info("Sending filtered data to Injector")
@@ -264,11 +310,29 @@ async def receive_distiller_data(data: DistillerData):
         logger.info(f"Received response from Injector: {result}")
         logger.debug(f"Result type: {type(result)}")
 
-        if result.get("success"):
+        # Check if the result indicates success
+        # The result structure has changed - success is now in node_data.success
+        success = False
+        if isinstance(result, dict):
+            # Check the new structure first
+            if 'node_data' in result and isinstance(result['node_data'], dict):
+                success = result['node_data'].get('success', False)
+            # Fall back to the old structure
+            else:
+                success = result.get('success', False)
+
+        if success:
             logger.info("Data successfully sent to Injector")
             return {"status": "processed", "message": "Data sent to Injector successfully"}
         else:
-            error_msg = result.get('error', 'Unknown error')
+            # Extract error message from the new structure first
+            error_msg = 'Unknown error'
+            if isinstance(result, dict):
+                if 'node_data' in result and isinstance(result['node_data'], dict):
+                    error_msg = result['node_data'].get('error', 'Unknown error')
+                else:
+                    error_msg = result.get('error', 'Unknown error')
+            
             logger.debug(f"error_msg: {error_msg}, type: {type(error_msg)}")
             # Check if error_msg is callable (it shouldn't be)
             if callable(error_msg):
@@ -354,19 +418,122 @@ async def _process_cache_entry(key: str, value: str) -> bool:
 
         logger.info(f"Distiller processing successful for {key}")
         logger.debug(f"Distiller result: {distiller_result}")
+        logger.debug(f"Distiller result type: {type(distiller_result)}")
 
         # Step 2: Send to Injector for database storage
-        injector_result = await injector_client.send_data_for_injection(distiller_result)
+        # Transform and filter entities - convert Distiller format to Injector format and add IDs
+        filtered_entities = []
+        if 'entities' in distiller_result:
+            for i, entity in enumerate(distiller_result['entities']):
+                # Transform entity from Distiller format to Injector format
+                # Distiller format: {"text": "...", "label": "...", "description": "..."}
+                # Injector format: {"id": "...", "type": "...", "properties": {...}}
+                entity_text = entity.get('text', '')
+                entity_label = entity.get('label', 'Entity')
+                
+                # Generate a more robust ID that handles edge cases
+                if entity_text:
+                    entity_id = f"entity_{i}_{abs(hash(entity_text))}"
+                else:
+                    entity_id = f"entity_{i}_no_text"
+                    
+                transformed_entity = {
+                    "id": entity_id,  # Generate ID based on index and text content
+                    "type": entity_label,  # Use label as type
+                    "properties": {
+                        "name": entity_text,
+                        "description": entity.get('description', ''),
+                        "source_text": entity_text
+                    }
+                }
+                
+                # Apply business rules for filtering
+                # Example business rule: Only send entities with a 'name' property
+                if transformed_entity['properties'].get('name'):
+                    # Example business rule: Only send entities of certain types
+                    # Include common spaCy entity types and our custom types
+                    entity_type = transformed_entity.get('type', '')
+                    if entity_type in ['Concept', 'Person', 'PERSON', 'Organization', 'ORG', 'Event', 'EVENT', 'Product', 'PRODUCT', 'GPE', 'DATE', 'TIME', 'ENTITY']:
+                        filtered_entities.append(transformed_entity)
 
-        if injector_result.get("status") != "processed":
-            logger.error(f"Injector processing failed for {key}: {injector_result.get('message', 'Unknown error')}")
+        # Transform and filter relationships - convert to expected format
+        filtered_relationships = []
+        if 'relationships' in distiller_result:
+            for i, relationship in enumerate(distiller_result['relationships']):
+                # Transform relationship to expected format
+                # For now, we'll create a simple relationship structure
+                # In a real implementation, the Distiller would provide more detailed relationship info
+                transformed_relationship = {
+                    "type": relationship.get('type', 'RELATED_TO'),
+                    "start_id": f"relationship_start_{i}",
+                    "end_id": f"relationship_end_{i}",
+                    "start_type": relationship.get('start_type', 'Entity'),
+                    "end_type": relationship.get('end_type', 'Entity'),
+                    "properties": relationship.get('properties', {})
+                }
+                
+                # Apply business rules for filtering
+                # Example business rule: Only send relationships with a 'type' property
+                if transformed_relationship.get('type'):
+                    # Example business rule: Only send relationships of certain types
+                    rel_type = transformed_relationship.get('type', '')
+                    if rel_type in ['RELATED_TO', 'PART_OF', 'CREATED_BY', 'WORKS_FOR', 'LOCATED_IN']:
+                        filtered_relationships.append(transformed_relationship)
+
+        # Create properly structured data for the injector
+        structured_data = {
+            "entities": filtered_entities,
+            "relationships": filtered_relationships,
+            "summary": distiller_result.get('summary', '')
+        }
+        
+        logger.debug(f"Structured data for injector: {structured_data}")
+        
+        # Ensure all datetime objects are converted to strings before sending
+        def convert_datetime_objects(obj):
+            """Convert datetime objects to ISO format strings recursively."""
+            if isinstance(obj, dict):
+                return {k: convert_datetime_objects(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_datetime_objects(item) for item in obj]
+            elif isinstance(obj, datetime):
+                return obj.isoformat()
+            else:
+                return obj
+        
+        sanitized_structured_data = convert_datetime_objects(structured_data)
+        logger.debug(f"Sanitized structured data: {sanitized_structured_data}")
+        injector_result = await injector_client.send_data_for_injection(sanitized_structured_data)
+
+        # Check if the result indicates success
+        # The result structure has changed - success is now in node_data.success
+        success = False
+        if isinstance(injector_result, dict):
+            # Check the new structure first
+            if 'node_data' in injector_result and isinstance(injector_result['node_data'], dict):
+                success = injector_result['node_data'].get('success', False)
+            # Fall back to the old structure
+            else:
+                success = injector_result.get('success', False)
+
+        if not success:
+            # Extract error message from the new structure first
+            error_msg = 'Unknown error'
+            if isinstance(injector_result, dict):
+                if 'node_data' in injector_result and isinstance(injector_result['node_data'], dict):
+                    error_msg = injector_result['node_data'].get('error', 'Unknown error')
+                else:
+                    error_msg = injector_result.get('error', 'Unknown error')
+            
+            logger.error(f"Injector processing failed for {key}: {error_msg}")
             return False
 
         logger.info(f"Injector processing successful for {key}")
         logger.debug(f"Injector result: {injector_result}")
 
         # Step 3: Refine relationships in the Q-Learning Agent
-        path = MemoryPath(nodes=[entity['id'] for entity in distiller_result.get('entities', [])])
+        # Use the transformed entity IDs for the path
+        path = MemoryPath(nodes=[entity['id'] for entity in filtered_entities])
         await qlearning_client.refine_relationships(path, reward=1.0) # Positive reward for successful processing
 
         # Step 4: Link to temporal spine if we have a memory node ID
@@ -553,6 +720,59 @@ async def _reconnect_redis():
             else:
                 logger.error("Failed to reconnect to Redis after all retries")
                 return False
+
+class MemoryQueryRequest(BaseModel):
+    """Model for memory query requests."""
+    context_id: str
+    max_contexts: int = 5  # Default to 5 contexts to prevent memory bloat
+
+
+@app.post("/memory_query")
+async def memory_query(request: MemoryQueryRequest):
+    """
+    Internal endpoint to handle memory queries from the Orchestrator for the Cohesion Loop.
+    
+    Args:
+        request: MemoryQueryRequest containing context_id and max_contexts
+        
+    Returns:
+        List of relevant memory contexts
+    """
+    try:
+        logger.info(f"Received memory query for context_id: {request.context_id} with max_contexts: {request.max_contexts}")
+        
+        # Validate max_contexts to prevent memory bloat
+        if request.max_contexts < 1 or request.max_contexts > 20:
+            raise HTTPException(status_code=400, detail="max_contexts must be between 1 and 20")
+        
+        # TODO: In a real implementation, query the QLearningAgent for relevant memories
+        # This would involve:
+        # 1. Looking up the context_id in the knowledge graph
+        # 2. Finding related memories using the QLearningAgent
+        # 3. Limiting results to max_contexts
+        
+        # Placeholder implementation - in a real system, this would query the knowledge graph
+        related_memories = [
+            {
+                "memory_id": f"memory_{i}",
+                "context_id": request.context_id,
+                "content": f"Related memory content {i} for context {request.context_id}",
+                "timestamp": datetime.now().isoformat(),
+                "relevance_score": 1.0 - (i * 0.1)  # Decreasing relevance
+            }
+            for i in range(min(request.max_contexts, 5))  # Limit to max_contexts
+        ]
+        
+        logger.info(f"Returning {len(related_memories)} related memories")
+        return related_memories
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions directly
+        raise
+    except Exception as e:
+        logger.error(f"Error processing memory query: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 
 # Start the continuous temporal scanning when the app starts
 @app.on_event("startup")

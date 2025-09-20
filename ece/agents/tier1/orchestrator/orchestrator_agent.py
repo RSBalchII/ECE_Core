@@ -48,7 +48,10 @@ class BaseThinker:
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                "stream": False
+                "stream": False,
+                "options": {
+                    "num_gpu": 37
+                }
             }
             url = f"{self.ollama_base_url}/api/chat"
 
@@ -94,7 +97,10 @@ class SynthesisThinker(BaseThinker):
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                "stream": False
+                "stream": False,
+                "options": {
+                    "num_gpu": 37
+                }
             }
             url = f"{self.ollama_base_url}/api/chat"
 
@@ -162,6 +168,118 @@ class OrchestratorAgent:
         # --- FIX: Initialize ArchivistClient with the URL from config.yaml ---
         archivist_url = self.config.get('archivist', {}).get('url', 'http://archivist:8003')
         self.archivist_client = ArchivistClient(base_url=archivist_url)
+
+        # Start the cohesion loop
+        self.cohesion_loop_task = None
+
+    def start_cohesion_loop(self):
+        """Start the periodic cohesion loop that analyzes context every 5 seconds"""
+        if self.cohesion_loop_task is None:
+            self.cohesion_loop_task = asyncio.create_task(self._run_cohesion_loop())
+            print("Cohesion loop started")
+
+    def stop_cohesion_loop(self):
+        """Stop the periodic cohesion loop"""
+        if self.cohesion_loop_task:
+            self.cohesion_loop_task.cancel()
+            self.cohesion_loop_task = None
+            print("Cohesion loop stopped")
+
+    async def _run_cohesion_loop(self):
+        """Run the periodic cohesion loop that analyzes context every 5 seconds"""
+        while True:
+            try:
+                # Wait for 5 seconds between each analysis
+                await asyncio.sleep(5)
+                
+                # Get current context cache
+                context_cache = self.cache_manager.get_all_entries()
+                
+                # If there's context to analyze
+                if context_cache:
+                    print("Cohesion loop: Analyzing context cache...")
+                    
+                    # Create an empty prompt to trigger analysis
+                    empty_prompt = ""
+                    
+                    # Analyze the context (this will route to the Archivist)
+                    analysis = await self._analyze_context_cache(context_cache)
+                    
+                    # Store the analysis results
+                    analysis_id = str(uuid.uuid4())
+                    self.cache_manager.store(f"cohesion_analysis:{analysis_id}", analysis)
+                    
+                    print(f"Cohesion loop: Analysis completed and stored with ID {analysis_id}")
+                else:
+                    print("Cohesion loop: No context to analyze")
+                    
+            except asyncio.CancelledError:
+                print("Cohesion loop cancelled")
+                break
+            except Exception as e:
+                print(f"Cohesion loop error: {e}")
+                # Continue running even if there's an error
+                continue
+
+    async def _analyze_context_cache(self, context_cache):
+        """Analyze the context cache and create a timeline-style explanation"""
+        print("Analyzing context cache for timeline synthesis...")
+        
+        # Convert context cache to a string for analysis
+        context_str = ""
+        for key, value in context_cache.items():
+            context_str += f"{key}: {value}\n"
+        
+        # Create a prompt for timeline synthesis
+        synthesis_prompt = f"""Analyze the following context cache and create a timeline-style explanation of events.
+        Identify key events, compare current state to previous context states, and create a coherent narrative.
+        
+        Context Cache:
+        {context_str}
+        
+        Please provide:
+        1. A timeline of key events
+        2. Comparison of current state to previous states
+        3. Any patterns or insights you notice
+        """
+        
+        # Route to Archivist for analysis (this would typically involve calling the Archivist agent)
+        # For now, we'll use the synthesis thinker to generate the analysis
+        analysis = await self.synthesis_thinker.think(synthesis_prompt)
+        
+        # Query the Archivist for related memories using the memory query endpoint
+        # Generate a unique context ID for this analysis
+        context_id = str(uuid.uuid4())
+        
+        # Create memory query request
+        memory_query_data = {
+            "context_id": context_id,
+            "max_contexts": 5  # Resource limit to prevent memory bloat
+        }
+        
+        try:
+            # Call the Archivist's memory query endpoint
+            archivist_response = await self.archivist_client.client.post(
+                f"{self.archivist_client.base_url}/memory_query",
+                json=memory_query_data,
+                timeout=30.0
+            )
+            
+            if archivist_response.status_code == 200:
+                related_memories = archivist_response.json()
+                print(f"Retrieved {len(related_memories)} related memories from Archivist")
+                
+                # Add the related memories to the analysis
+                analysis += f"\n\nRelated Memories:\n"
+                for memory in related_memories:
+                    analysis += f"- {memory.get('content', '')} (Relevance: {memory.get('relevance_score', 0):.2f})\n"
+            else:
+                print(f"Failed to retrieve memories from Archivist: {archivist_response.status_code}")
+                
+        except Exception as e:
+            print(f"Error querying Archivist for memories: {e}")
+        
+        return analysis
 
 
     def _route_prompt(self, prompt: str) -> str:

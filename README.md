@@ -19,6 +19,62 @@ The ECE is built on a tiered architecture:
 * **Tier 2 (Thinkers):** A dynamic pool of specialized reasoning agents that work sequentially on complex problems, with their access to the LLM managed by a semaphore.
 * **Tier 3 (Memory Cortex):** The long-term memory system that continuously scans the context cache, distills information, and injects it into the knowledge graph.
 
+## Core Cohesion Loop (v3.0)
+
+The Core Cohesion Loop is a self-sustaining memory system that **periodically analyzes and synthesizes context** without requiring user input. This is the foundation of our memory architecture.
+
+### How It Works
+
+1. **Periodic Ping Mechanism**:
+   - The Orchestrator agent **receives an empty prompt** every 5 seconds
+   - This triggers the "thinking" cycle without user input
+   - The Orchestrator reads the context cache and initiates analysis
+
+2. **Archivist's Role**:
+   - The Archivist agent **synthesizes context** from the context cache
+   - It creates a **timeline-style explanation** of events
+   - It compares the current state to previous context states
+   - It queries the QLearning agent for relevant memory associations
+
+3. **Memory Querying**:
+   - When the Archivist needs context for a specific event:
+     ```python
+     # Example POML query format
+     {
+       "type": "memory_query",
+       "context_id": "cd06bd2f-846a-4d28-9ab4-090e9ee9abc8",
+       "max_contexts": 5  # Resource limit to prevent memory bloat
+     }
+     ```
+   - The QLearning agent responds with relevant memory associations
+
+4. **Resource Management**:
+   - `max_contexts` parameter ensures only the most relevant memories are retrieved
+   - Default value: 5 (can be adjusted based on system load)
+   - This prevents memory bloat and maintains system responsiveness
+
+### Why This Matters
+
+This implementation creates a **self-sustaining memory system** that:
+- Works without user input (periodic analysis)
+- Maintains memory efficiency through resource limits
+- Provides contextual awareness through timeline synthesis
+- Enables the system to "think" about past interactions
+
+## System Status
+
+All core MVP components have been successfully implemented and are fully operational:
+- Context Cache (Redis-based short-term memory)
+- Distiller Agent (NLP-based text processing)
+- Archivist Agent (Memory cortex controller)
+- Injector Agent (Neo4j data persistence)
+- Q-Learning Agent (Graph optimization)
+
+For detailed specifications, see:
+- [Updated Specification](specs/updated_spec.md)
+- [Implementation Plan](specs/updated_plan.md)
+- [Task Status](specs/updated_tasks.md)
+
 ## Getting Started
 
 1.  **Clone the repository:**

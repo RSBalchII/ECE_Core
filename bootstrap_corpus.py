@@ -1,14 +1,17 @@
+# ECE/External-Context-Engine-ECE/bootstrap_corpus.py (MODIFIED)
 import httpx
 import os
 import asyncio
 import json
+from datetime import datetime  # Add datetime import
 from rich.console import Console
+from ece.agents.tier3.injector.db_manager import Neo4jManager  # Correct import
 
-# --- Configuration ---
-ORCHESTRATOR_URL = "http://localhost:8001/process_prompt"
+# --- Configuration --- (unchanged)
+ORCHESTRATOR_URL = "http://localhost:8000/process_prompt"
 CORPUS_FILE_PATH = "combined_text.txt"
 CHUNK_SIZE = 4500
-STATE_FILE = "bootstrap_state.json"  # File to store our progress
+STATE_FILE = "bootstrap_state.json"
 # ---------------------
 
 def load_state():
@@ -34,6 +37,15 @@ async def bootstrap_corpus():
     console = Console()
     console.print(f"[bold green]Starting corpus bootstrapping process...[/bold green]")
 
+    # === NEW CODE: Initialize Neo4jManager with correct connection details ===
+    neo4j_manager = Neo4jManager(
+        uri="bolt://neo4j:7687",  # Use the service name from docker-compose.yml
+        user="neo4j",
+        password="password"
+    )
+    neo4j_manager.connect()
+    # === END NEW CODE ===
+
     try:
         with open(CORPUS_FILE_PATH, 'r', encoding='utf-8', errors='ignore') as f:
             full_text = f.read()
@@ -57,14 +69,38 @@ async def bootstrap_corpus():
             console.print(f"\n[yellow]Processing chunk {i + 1} of {num_chunks}...[/yellow]")
             
             prompt = f"BOOTSTRAP_DISTILL: {chunk}"
-            payload = {"prompt": prompt}
-
+            # Use GET method with query parameters for the orchestrator endpoint
             try:
-                response = await client.post(ORCHESTRATOR_URL, json=payload)
+                response = await client.get(ORCHESTRATOR_URL, params={"prompt": prompt})
                 
                 if response.status_code == 200:
                     console.print(f"[green]Chunk {i + 1} successfully processed.[/green]")
-                    save_state(i) # Save progress only on success
+                    # Save progress only on success
+                    save_state(i)
+                    
+                    # === NEW CODE: Write processed data to Neo4j ===
+                    processed_data = response.json().get("response", "")
+                    if processed_data:
+                        # Create a simple entity structure for the processed data
+                        data = {
+                            "entities": [
+                                {
+                                    "id": f"context_chunk_{i+1}",
+                                    "type": "ContextChunk",
+                                    "properties": {
+                                        "content": str(processed_data),
+                                        "chunk_number": i+1,
+                                        "timestamp": str(datetime.now().isoformat())
+                                    }
+                                }
+                            ],
+                            "summary": str(processed_data)[:100] + "..." if len(str(processed_data)) > 100 else str(processed_data)
+                        }
+                        # Translate to Cypher queries and execute transaction
+                        cypher_queries = neo4j_manager._translate_to_cypher(data)
+                        if cypher_queries:
+                            neo4j_manager.execute_transaction(cypher_queries)
+                    # === END NEW CODE ===
                 else:
                     console.print(f"[bold red]Error on chunk {i + 1}:[/bold red] HTTP {response.status_code} - {response.text}")
                     console.print("[bold yellow]Stopping. You can restart the script to resume from this point.[/bold yellow]")
