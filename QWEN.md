@@ -1,6 +1,6 @@
 # External Context Engine (ECE) - Memory Management System
 
-## Project Overview
+## 📋 Project Overview
 
 The External Context Engine (ECE) is a sophisticated cognitive architecture designed to provide persistent memory and context management for AI systems. This repository contains the implementation of Phase 3 of the ECE, which focuses on creating an intelligent memory management system with Q-Learning powered context retrieval. Version 3.4 enhances the architecture with Universal Tool Calling Protocol (UTCP) integration, replacing bespoke wrapper APIs with standardized tool definitions that can be discovered and called through a central UTCP Tool Registry.
 
@@ -28,7 +28,7 @@ The ECE follows a three-tier architecture:
 - **Knowledge Graph**: Neo4j database for structured memory storage
 - **LLM Integration**: Ollama for local LLM inference
 
-## Building and Running
+## 🚀 Building and Running
 
 ### Prerequisites
 - Docker and Docker Compose
@@ -74,7 +74,7 @@ curl -X POST http://localhost:8000/memory/query \
   -d '{"query": "memory management", "max_tokens": 1000000}'
 ```
 
-## Key Features
+## 🧠 Key Features
 
 ### Intelligent Memory Management
 - **Archivist Agent**: Central coordinator for knowledge graph operations
@@ -106,7 +106,7 @@ curl -X POST http://localhost:8000/memory/query \
 - **Error Handling**: Comprehensive error handling and logging
 - **Scalable Architecture**: Designed for high-performance deployment
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 External-Context-Engine-ECE/
@@ -139,7 +139,7 @@ External-Context-Engine-ECE/
 └── poml/                          # POML persona files
 ```
 
-## Dependencies
+## 🛠️ Dependencies
 
 Key dependencies include:
 - fastapi==0.104.1
@@ -160,7 +160,7 @@ Key dependencies include:
 - rich>=13.0.0
 - docker>=6.0.0
 
-## API Endpoints
+## 📊 API Endpoints
 
 ### Orchestrator Agent
 - `GET /`: Health check for Orchestrator
@@ -210,7 +210,7 @@ class UTCPClient:
         """Register a tool with the UTCP registry"""
 ```
 
-## Data Flows
+## 🔄 Data Flows
 
 ### 1. Universal Context Retrieval Flow (Critical)
 This is the foundational, non-negotiable data flow for ALL incoming prompts. It ensures every action is informed by long-term memory.
@@ -275,7 +275,7 @@ The process for the ECE's self-reflection, triggered by an empty prompt.
 3. **Self-Reflection**: The Orchestrator generates a "thought" or a summary of its current internal state based on the cache contents.
 4. **Append to Cache**: This generated "thought" is appended back into the Context Cache, creating a visible "line of thought." This output is NOT sent back to the user.
 
-## Development Conventions
+## 🛠️ Development Conventions
 
 ### Code Structure
 - `/ece/agents/tier1/orchestrator/`: Orchestrator agent implementation
@@ -320,7 +320,7 @@ mypy src/
 black src/
 ```
 
-## UTCP Tool Definition Schema
+## 📋 UTCP Tool Definition Schema
 ```json
 {
   "type": "object",
@@ -366,7 +366,7 @@ black src/
 }
 ```
 
-## Performance Metrics
+## 📈 Performance Metrics
 
 - **Context Retrieval**: < 2 seconds for graphs under 10K nodes
 - **Memory Storage**: < 100ms for single concept insertion
@@ -374,7 +374,7 @@ black src/
 - **Context Building**: < 200ms for 4K token summaries
 - **Cache Hit Rate**: > 80% with 32GB allocation
 
-## Configuration
+## 🔧 Configuration
 
 ### Environment Variables
 The system relies on several environment variables:
@@ -386,7 +386,7 @@ The system relies on several environment variables:
 ### System Configuration (`config.yaml`)
 Contains LLM settings, agent definitions, decision tree routing logic, and cache configuration.
 
-## Security
+## 🔒 Security
 
 The system includes:
 - Service-to-service authentication
@@ -394,14 +394,14 @@ The system includes:
 - Input validation via Pydantic models
 - Docker-based network isolation
 
-## Monitoring and Logging
+## 📊 Monitoring and Logging
 
 - Structured JSON logging with correlation IDs
 - Health check endpoints for all services
 - Cache statistics tracking
 - Async operation tracking with session IDs
 
-## ECE Client
+## 🖥️ ECE Client
 
 The `ece_client.py` file provides a rich command-line interface for interacting with the ECE:
 - Rich terminal experience with syntax highlighting and markdown support
