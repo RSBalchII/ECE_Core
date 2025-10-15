@@ -1,305 +1,158 @@
-# External Context Engine (ECE) Specification v3.4
+# External Context Engine (ECE) - Specification v4.2
 
-## Overview
+## 1. Project Vision: The Ark
 
-The External Context Engine (ECE) is a sophisticated system designed to manage, retrieve, and utilize contextual information for AI-driven tasks. Version 3.4 enhances the architecture with Universal Tool Calling Protocol (UTCP) integration, replacing bespoke wrapper APIs with standardized tool definitions that can be discovered and called through a central UTCP Tool Registry. This upgrade enables dynamic tool discovery and calling between ECE agents while maintaining all existing functionality including tool integration capabilities that enable the system to help write and modify its own code. The system now includes specialized agents for file operations, directory access, web search, and a rich command-line interface that enables seamless human-machine collaboration.
+The primary goal of the ECE project is the creation of "The Ark," a sovereign, local-first AI that functions as the Architect's **Externalized Executive Function**. It must be private, efficient, and powerful, operating entirely on local hardware without reliance on cloud services.
 
-## Core Components
+---
 
-- **UTCP Tool Registry**: Central service for tool discovery and registration, providing standardized access to all ECE capabilities
-- **UTCP Client**: Standardized client library for discovering and calling tools via the registry
-- **Orchestrator**: The central routing component that manages prompt ingestion and distribution to appropriate agents, including new tool agents.
-- **Archivist**: Responsible for context retrieval from long-term memory and managing the context cache.
-- **QLearningAgent**: Interfaces with the Neo4j knowledge graph to retrieve relevant context.
-- **Injector**: Handles the conversion of short-term memory (cache) into long-term memory (graph).
-- **Synthesizer**: Processes outputs from Thinker agents to produce final analyses.
-- **FileSystemAgent**: Specialized agent for file system operations, enabling code reading/writing capabilities.
-- **WebSearchAgent**: Provides web search functionality using Tavily API for current information.
-- **ECE-CLI**: Default frontend interface providing rich command-line interaction with persistent context.
-- **Redis Context Cache**: A short-term memory storage system.
-- **Neo4j Knowledge Graph**: A long-term memory storage system.
+## 2. Architectural Philosophy
 
-## UTCP Architecture
+The ECE architecture represents a deliberate move **away from brittle, monolithic AI systems**. The core philosophy is to build a robust, self-correcting, and intelligent **multi-agent system** composed of smaller, specialized, and independently deployable components.
 
-### Tool Definition Schema
-```json
-{
-  "type": "object",
-  "properties": {
-    "id": {
-      "type": "string",
-      "description": "Unique identifier for the tool in format agent.function_name"
-    },
-    "name": {
-      "type": "string",
-      "description": "Human-readable name of the tool"
-    },
-    "description": {
-      "type": "string",
-      "description": "Brief description of what the tool does"
-    },
-    "category": {
-      "type": "string",
-      "description": "Category of the tool (e.g., data_processing, retrieval, analysis)"
-    },
-    "parameters": {
-      "type": "object",
-      "description": "JSON Schema for the tool parameters"
-    },
-    "returns": {
-      "type": "object",
-      "description": "JSON Schema for the tool response"
-    },
-    "endpoint": {
-      "type": "string",
-      "description": "The service endpoint where the tool is available"
-    },
-    "version": {
-      "type": "string",
-      "description": "Version of the tool definition"
-    },
-    "agent": {
-      "type": "string",
-      "description": "The agent that provides this tool"
-    }
-  },
-  "required": ["id", "name", "description", "parameters", "returns", "endpoint", "version", "agent"]
-}
+---
+
+## 3. LLM Configuration
+
+The ECE supports multiple LLM providers with a flexible configuration system. The configuration is managed through the `config.yaml` file:
+
+```yaml
+llm:
+  active_provider: ollama  # Can be ollama, docker_desktop, or llama_cpp
+  providers:
+    ollama:
+      model: "granite3.1-moe:3b-instruct-q8_0"
+      api_base: "http://localhost:11434/v1"
+    docker_desktop:
+      model: "ai/mistral:latest"
+      api_base: "http://localhost:12434/v1"
+    llama_cpp:
+      model_path: "/path/to/your/model.gguf"
+      api_base: "http://localhost:8080/v1"
 ```
 
-### Registry API Endpoints
-- `GET /tools` - Get all available tools
-- `GET /tools/{tool_id}` - Get specific tool definition
-- `POST /tools` - Register a new tool
-- `DELETE /tools/{tool_id}` - Remove a tool
-- `GET /health` - Health check for the registry
+### Supported Providers
 
-### UTCP Client Interface
-```python
-class UTCPClient:
-    def __init__(self, registry_url: str):
-        """Initialize the UTCP client with the registry URL"""
-        
-    async def discover_tool(self, tool_id: str) -> ToolDefinition:
-        """Discover a specific tool by ID"""
-        
-    async def discover_tools_by_agent(self, agent_name: str) -> List[ToolDefinition]:
-        """Discover all tools provided by a specific agent"""
-        
-    async def discover_tools_by_category(self, category: str) -> List[ToolDefinition]:
-        """Discover all tools in a specific category"""
-        
-    async def call_tool(self, tool_id: str, **kwargs) -> Any:
-        """Call a tool by ID with the provided parameters"""
-        
-    async def list_all_tools(self) -> List[ToolDefinition]:
-        """List all available tools in the registry"""
-```
+- **Ollama**: Default provider using local Ollama instance
+- **Docker Desktop**: OpenAI-compatible endpoint for Docker-based models
+- **Llama.cpp**: High-performance local inference with GGUF models
 
-## Data Flows
+To switch providers, simply change the `active_provider` value in the configuration file.
 
-### 1. Universal Context Retrieval Flow (Critical)
+### Setting up llama.cpp on Windows
 
-This is the foundational, non-negotiable data flow for ALL incoming prompts. It ensures every action is informed by long-term memory.
+To use the llama.cpp provider, build the llama.cpp project on Windows:
 
-1. **Ingestion**: The Orchestrator receives the initial prompt from the client (ECE-CLI).
-2. **Universal Routing**: The Orchestrator IMMEDIATELY routes the prompt (or its keywords) to the Archivist via UTCP `archivist.get_context` tool. This is a mandatory first step for ALL prompt types (analysis, conversational, memory query).
-3. **Graph Query**: The Archivist queries the QLearningAgent using UTCP `qlearning.find_optimal_path` tool for relevant context from the Neo4j knowledge graph.
-4. **Context Summarization**: The Archivist receives the context nodes from the QLearningAgent and summarizes them into a coherent context block, including specific examples (code, conversations). The size of this block must be configurable.
-5. **Context Injection**: The Archivist returns the enriched, summarized context block to the Orchestrator.
-6. **Enriched Execution**: The Orchestrator prepends the enriched context to the original prompt and ONLY THEN routes the new, combined payload to the appropriate agent (Synthesizer, ConversationalAgent, FileSystemAgent, WebSearchAgent, etc.) using UTCP tools for execution.
+1. **Prerequisites**:
+   - Git for Windows
+   - CMake
+   - Visual Studio Community with "Desktop development with C++" workload
+   - (Optional) NVIDIA CUDA Toolkit for GPU acceleration
 
-### 2. Tool Access Flow (Critical for Self-Development)
+2. **Build Steps**:
+   - Clone the repository: `git clone https://github.com/ggerganov/llama.cpp`
+   - Create build directory: `mkdir build && cd build`
+   - Configure CMake: `cmake .. -G "Visual Studio 17 2022"` (for CPU) or `cmake .. -G "Visual Studio 17 2022" -DLLAMA_CUBLAS=ON` (for CUDA)
+   - Build: `cmake --build . --config Release`
 
-Defines how the ECE accesses local files and web resources to enable self-modification.
+3. **Running the Server**:
+   - Start with: `server.exe -m path\to\model.gguf -c 4096`
+   - Update config.yaml to point to the correct model path and server endpoint
 
-1. **Tool Detection**: The Orchestrator identifies when a prompt requires file or web access using UTCP tool discovery.
-2. **Tool Routing**: The Orchestrator routes file/directory requests to FileSystemAgent or web requests to WebSearchAgent via UTCP tools.
-3. **File Access**: The FileSystemAgent performs file operations (read, write, create, delete) while respecting security boundaries.
-4. **Web Search**: The WebSearchAgent performs online queries using Tavily API for current information.
-5. **Result Injection**: Tool results are injected back into the context before final response generation.
-6. **Cache Update**: Tool access results are stored in the Redis cache for future reference.
+---
 
-### 3. Complex Reasoning & Output Flow (High Priority)
+## 3. Core Technical Strategy
 
-Defines the correct asynchronous process for handling complex reasoning tasks and delivering results.
+The system is designed to achieve state-of-the-art reasoning capabilities on local hardware by implementing principles from cutting-edge research.
 
-1. **Initiation**: The Orchestrator starts the asynchronous reasoning task and returns an `analysis_id` to the client.
-2. **Synthesis**: The Synthesizer agent processes the outputs from the Thinker agents into a final, complete analysis.
-3. **Result Storage**: The Synthesizer sends the final analysis back to the Orchestrator.
-4. **Cache Update**: The Orchestrator MUST store the final analysis in the Redis cache using the format "analysis:<analysis_id>" and update the task status to "complete".
-5. **Client Retrieval**: The client can now successfully retrieve the completed analysis by polling the `/get_analysis_result` endpoint with the `analysis_id`.
+### 3.1. Cognitive Model: Markovian Thinking
 
-### 4. Memory Preservation (Cache Truncation) Flow (Medium Priority)
+Inspired by the "Markovian Thinker" and "Delethink" research, the ECE's core reasoning process is **not based on an ever-growing context window**. Instead, it operates on a **Markovian principle**, where reasoning is broken down into a sequence of fixed-size "chunks."
 
-The process for converting short-term memory (cache) into long-term memory (graph) before data is lost.
+-   **Chunked Reasoning:** An agent processes information in a small, fixed-size context window (e.g., 4k or 8k tokens).
+-   **Context Reset:** After each chunk is processed, the context is reset.
+-   **Textual State (Carryover):** The model is trained to generate a concise **textual summary** of its reasoning at the end of each chunk. This "carryover" is the *only* information passed to the next chunk, acting as the complete state of the reasoning process.
 
-1. **Periodic Scan**: The Archivist will periodically perform a "tail read" on the Redis Context Cache (e.g., the oldest 1000 characters).
-2. **Pre-emptive Archiving**: The Archivist sends this oldest block of context directly to the Injector agent using UTCP `injector.data_to_inject` tool.
-3. **Graph Solidification**: The Injector receives the context, performs its de-duplication checks, and writes the information to the Neo4j knowledge graph.
+This approach decouples thinking length from context size, enabling **linear compute time and constant memory usage**, which is essential for achieving deep reasoning on local hardware.
 
-### 5. Self-Development and Code Modification Flow (High Priority)
+### 3.4. Context Management: Prompt Truncation and Overflow Prevention
 
-Enables the ECE to autonomously modify its own codebase based on requirements and feedback.
+To address the critical `context overflow` issue, the ECE implements a robust prompt management system:
 
-1. **Self-Modification Trigger**: The Orchestrator identifies when system code changes are needed.
-2. **Code Analysis**: The ECE uses UTCP-discovered FileSystemAgent tools to read current implementation files.
-3. **Context Integration**: The ECE combines current code context with specifications and requirements.
-4. **Code Generation**: Thinker agents generate appropriate code modifications.
-5. **Code Writing**: The ECE uses UTCP-discovered FileSystemAgent tools to write updated code.
-6. **Verification**: The changes are verified against specifications and stored in the knowledge graph.
+-   **Context-Aware Prompt Management:** The system includes a context-aware prompt manager that dynamically adjusts content based on model capabilities and context window limits.
+-   **Intelligent Truncation:** Uses token counting and content preservation techniques to maintain critical information when prompts are truncated.
+-   **Fallback Strategies:** Implements graceful fallback approaches (summarization, chunking) when context limits are reached.
+-   **Monitoring:** Comprehensive metrics and monitoring for prompt sizes and context usage across the system.
 
-### 6. CLI Interaction Flow (Critical for User Experience)
+### 3.2. Agentic Framework: The Dual-LLM PEVG Model
 
-Defines how the ECE-CLI provides the primary interface for user interaction with rich context management.
+Our **Planner, Executor, Verifier, Generator (PEVG)** framework is powered by a dual-LLM strategy that leverages Markovian Thinking:
 
-1. **Session Initialization**: ECE-CLI establishes a persistent session with context preservation across interactions.
-2. **Command Processing**: CLI interprets user input and sends to Orchestrator with session context.
-3. **Response Formatting**: Orchestrator responses are formatted with rich output (POML emotional lexicon, structured data).
-4. **Context Persistence**: Conversation history is maintained across CLI sessions using the context cache.
-5. **Multi-turn Interactions**: Complex conversations are supported with memory of previous exchanges.
+-   **Primary LLM (The Generator):** A powerful, general-purpose model (e.g., Phi-3) responsible for generating the final, high-quality, user-facing responses. It operates on a standard, larger context window.
+-   **TRM Service (The Markovian Thinker):** A small, hyper-specialized, and extremely fast model (e.g., a fine-tuned `AI21-Jamba-Reasoning-3B`) that powers the iterative, self-corrective reasoning loop. This is our Executor and Verifier.
+-   **EnhancedOrchestratorAgent:** The current implementation uses EnhancedOrchestratorAgent which implements context-aware prompt management, parallel thinking with specialized thinkers, and synthesis of responses. It includes a `process_prompt_with_context_management` method that handles prompt processing with context retrieval from the Archivist, parallel thinking with multiple specialized thinkers, and synthesis of responses.
 
-### 7. Cohesion Loop (Line of Thought) Flow (Low Priority)
+### 3.5. Markovian Thinking Architecture
 
-The process for the ECE's self-reflection, triggered by an empty prompt.
+To enable deep reasoning on local hardware, the ECE implements a sophisticated Markovian Thinking architecture based on the research paper "The Markovian Thinker":
 
-1. **Trigger**: The Orchestrator receives an empty prompt from the client.
-2. **Cache Analysis**: The Orchestrator reads the current content of the Context Cache.
-3. **Self-Reflection**: The Orchestrator generates a "thought" or a summary of its current internal state based on the cache contents.
-4. **Append to Cache**: This generated "thought" is appended back into the Context Cache, creating a visible "line of thought." This output is NOT sent back to the user.
+-   **TRM Client Integration:** The system includes a TRM_Client class to communicate with specialized Tokenized Reasoning Model services.
+-   **Iterative Refinement:** Implements a "propose -> critique -> refine" loop for improving thought processes.
+-   **Chunked Reasoning:** Breaks complex problems into fixed-size chunks with textual carryover to maintain context, allowing extremely long reasoning while using bounded memory.
+-   **Intelligent Routing:** Determines when to use Markovian thinking based on query complexity and length using the ReasoningAnalyzer.
+-   **Carryover Management:** Maintains consistency between reasoning iterations through textual state carryover.
+-   **Delethink Environment:** Implements the Delethink RL environment concept where reasoning proceeds in fixed-size chunks, and at each boundary the environment resets the context and reinitializes the prompt with a short carryover from the previous chunk.
+-   **Linear Compute Scaling:** Enables linear compute with constant memory with respect to thinking length, decoupling "how long the model thinks" from "how much context it must process."
+-   **Fallback Mechanisms:** Includes robust fallback to parallel thinking when Markovian reasoning encounters issues.
 
-## CLI Interface Specification
+### 3.6. Coordination in Multi-Agent Systems
 
-### ECE-CLI (Local-CLI)
-- **Purpose**: Default frontend providing rich command-line interaction with persistent context and memory; to be open-sourced as "local-cli" for community use
-- **Architecture**: Inspired by Gemini and Qwen CLIs with enhanced context awareness
-- **Local Integration**: Optimized for local Ollama model execution
-- **Open Source Mission**: Independent from corporate platforms to enable community-driven development
-- **Features**:
-  - Persistent conversation sessions across CLI restarts
-  - Rich history with ability to reference previous exchanges
-  - Context-aware responses leveraging ECE's memory systems
-  - Support for POML emotional lexicon and persona
-  - Multi-modal command capabilities
-  - Configuration management for local models
-  - Session export/import functionality
-  - Quality of life improvements matching Gemini/Qwen CLI experience
+Based on research findings from "Emergent Coordination in Multi-Agent Language Models", the ECE implements enhanced coordination between agents:
 
-### Key CLI Features (Inspired by Gemini/Qwen CLIs)
-- **Session Management**: Named sessions with context preservation
-- **History Navigation**: Browse and reference previous conversation turns
-- **Context Anchoring**: Ability to focus on specific parts of conversation history
-- **Configuration Profiles**: Multiple model/setting profiles
-- **Rich Output Formatting**: Support for markdown, code blocks, and POML emotion codes
-- **File Integration**: Direct file input/output capabilities
-- **Code Interaction**: Enhanced support for code-related tasks with syntax highlighting
-- **Enhanced UX**: Arrow key navigation, proper text editing, smooth command history
-- **Welcome Screen**: Attractive startup screen inspired by Gemini/Qwen CLIs
-- **Text Editing**: Proper cursor movement and text editing capabilities
+-   **Thinker Personas:** Each thinker agent is assigned a detailed persona with background, expertise, and personality traits to create stable identity-linked differentiation.
+-   **Theory of Mind (ToM) Integration:** Thinker agents are instructed to consider what other agents might do and how their actions might affect the group outcome, enabling more effective collaboration.
+-   **Role Complementarity:** Different thinkers are assigned complementary roles (Optimist, Pessimist, Analytical, Creative, Pragmatic, Strategic, Ethical) to ensure diverse perspectives contribute to the solution.
+-   **Coordination Analysis:** The system includes metrics to measure synergy, diversity, and complementarity among thinker agents to ensure productive collective intelligence.
+-   **Emergent Behavior Steering:** Prompt design and role assignments are used to steer the system from mere aggregates to higher-order collectives with coordinated behavior.
 
-### Local-CLI Open Source Initiative
-- **Mission**: Provide an alternative to corporate AI platforms
-- **Independence**: Self-hosted, privacy-focused, community-driven
-- **Extensibility**: Allow users to customize and extend functionality
-- **Quality of Life**: Match and exceed the experience of commercial CLIs
-- **Community**: Foster open source development and contribution
+### 3.3. Performance Optimization: Python, Cython, and C++
 
-### Quality of Life Improvements
-- **Arrow Key Navigation**: Arrow keys should navigate text cursor position instead of creating invisible characters
-- **Text Editing**: Full command-line editing with proper cursor movement
-- **Command History**: Enhanced command history with arrow-up/down navigation
-- **Welcome Screen**: Professional welcome screen with branding and usage instructions
-- **Input Validation**: Proper input validation and error handling
-- **Performance**: Optimized response times and smooth interaction
-- **Customization**: User-configurable appearance and behavior settings
+To achieve the required performance, the ECE will adopt a hybrid development model:
+-   **Python:** Used for high-level orchestration and non-performance-critical logic.
+-   **C++/Cython:** Performance-critical components, identified through profiling with tools like `cProfile` and `snakeviz`, will be rewritten in C++ and bridged to Python using Cython.
+-   **Profiling-Driven Development:** Regular performance profiling will be integrated into the development process to continuously identify and address bottlenecks as the system evolves.
 
-### Local Ollama Integration
-- **Model Management**: Direct communication with local Ollama instance
-- **Performance Optimization**: Leverages local resources for faster responses
-- **Privacy**: Keeps sensitive conversations on local system
-- **Flexibility**: Supports multiple local models simultaneously
+---
 
-- **Capabilities**: 
-  - Read files with proper encoding handling
-  - List directory contents
-  - Write and update files
-  - Execute shell commands (requires careful security considerations)
+## 4. System Components & Deployment
 
-- **Integration**: Works with context cache to store accessed files for reference
+-   **OrchestratorAgent:** The central Planner, delegating tasks via UTCP.
+-   **Tool Agents:** `FileSystemAgent`, `WebSearchAgent`.
+-   **Memory Cortex:** `Distiller`, `Archivist`, `QLearning`, and `Injector` agents.
+-   **Local-First Deployment:** The system is built to run on local scripts, with a future goal of being packaged into a single executable using **PyInstaller**.
+-   **Packaging Strategy:** The system will be packaged into a distributable executable with embedded configuration files and a bootstrapping mechanism to check for required services (Neo4j, Redis) before starting agents.
 
-### WebSearchAgent
-- **Purpose**: Provide web search capabilities using Tavily API
-- **Security**: Implements rate limiting and safe search parameters
-- **Capabilities**:
-  - Current information retrieval
-  - Fact checking
-  - Trend analysis
-- **Integration**: Results are stored in context cache for future reference
+---
 
-## UTCP Agent Specifications
+## 5. Validation, Refinement, and Evolution Strategy
 
-### FileSystemAgent
-- **Purpose**: Provide secure access to the file system for reading, writing, and directory operations
-- **Security**: Implements read/write boundaries to prevent unauthorized access
-- **Capabilities**: 
-  - Read files with proper encoding handling
-  - List directory contents
-  - Write and update files
-  - Execute shell commands (requires careful security considerations)
-- **Integration**: Works with context cache to store accessed files for reference
-- **UTCP Registration**: Registers tools as `filesystem.read_file`, `filesystem.write_file`, etc.
+With the core architecture complete, the ECE transitions from implementation to validation, refinement, and continuous evolution:
 
-### WebSearchAgent
-- **Purpose**: Provide web search capabilities using Tavily API
-- **Security**: Implements rate limiting and safe search parameters
-- **Capabilities**:
-  - Current information retrieval
-  - Fact checking
-  - Trend analysis
-- **Integration**: Results are stored in context cache for future reference
-- **UTCP Registration**: Registers tools as `web_search.query`, etc.
+### 5.1 System Validation & GUI Testing (Phase 6)
+The system undergoes rigorous end-to-end testing, focusing on real-world usage scenarios to ensure all components work together seamlessly.
 
-### Orchestrator Agent
-- **Purpose**: Central coordinator for routing prompts and managing agent interactions
-- **UTCP Integration**: Uses UTCP to discover and call all other agent tools
-- **Capabilities**: 
-  - Tool discovery and selection
-  - Dynamic agent routing
-  - Context management
-- **UTCP Registration**: Registers tools as `orchestrator.process_prompt`, `orchestrator.get_analysis_result`, etc.
+### 5.2 TRM Specialization (Phase 7)
+The mock TRM service will be replaced with fine-tuned specialized models trained on custom datasets for improved reasoning capabilities.
 
-### Archivist Agent
-- **Purpose**: Master controller of the memory cortex, managing knowledge graph operations
-- **UTCP Integration**: Registers all memory-related tools in the registry
-- **Capabilities**:
-  - Context retrieval from Neo4j knowledge graph
-  - Enhanced context coordination with QLearningAgent
-  - Memory query operations
-- **UTCP Registration**: Registers tools as `archivist.get_context`, `archivist.get_enhanced_context`, `archivist.memory_query`, etc.
+### 5.3 Continuous Improvement (Phase 8)
+The system enters a continuous evolution phase with:
+- Active performance monitoring and optimization
+- Expansion of specialized TRM models for different tasks
+- Continuous curation and expansion of the knowledge graph
+- Enhanced self-modification capabilities
 
-### QLearning Agent
-- **Purpose**: Reinforcement learning agent for optimal path finding in knowledge graph
-- **UTCP Integration**: Registers path-finding and relationship refinement tools
-- **Capabilities**:
-  - Optimal path finding between concepts
-  - Relationship refinement using reinforcement learning
-  - Up to 1M token processing with GPU acceleration
-- **UTCP Registration**: Registers tools as `qlearning.find_optimal_path`, `qlearning.refine_relationships`, etc.
+---
 
-### Injector Agent
-- **Purpose**: Persists structured data to the Neo4j knowledge graph
-- **UTCP Integration**: Registers data injection and temporal node tools
-- **Capabilities**:
-  - Data injection into Neo4j
-  - Temporal spine creation and linking
-  - Node and relationship creation
-- **UTCP Registration**: Registers tools as `injector.data_to_inject`, `injector.get_or_create_timenode`, `injector.link_memory_to_timenode`, etc.
+## 6. Co-Evolutionary Mandate
 
-### Distiller Agent
-- **Purpose**: Processes raw text to extract structured information for storage
-- **UTCP Integration**: Registers text processing tools
-- **Capabilities**:
-  - Entity extraction using spaCy
-  - Relationship identification
-  - Text summarization
-- **UTCP Registration**: Registers tools as `distiller.process_text`, etc.
+The system must be capable of understanding and modifying its own codebase, a goal directly supported by the deep reasoning capabilities enabled by Markovian Thinking.

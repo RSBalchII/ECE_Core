@@ -1,116 +1,45 @@
-# config.yaml
-# Main configuration for the External Context Engine (ECE) using the Youtu-agent framework.
-# Version 2.0 with Decision Tree for Schema-Guided Reasoning.
-
-# === LLM Backend Configuration ===
 llm:
-  active_provider: ollama
+  active_provider: llama_cpp
   providers:
-    ollama:
-      model: "ai/mistral:latest"
-      api_base: "http://localhost:12434/v1"
-    docker_desktop:
-      model: "ai/mistral:latest"
-      api_base: "http://localhost:12434/v1"
+    llama_cpp:
+      model_path: "./models/jamba-reasoning-3b-F16.gguf"
+      api_base: "http://localhost:8080/v1"
+      model: "./models/jamba-reasoning-3b-F16.gguf"
 
-# === Cache Configuration ===
 cache:
-  redis_url: "redis://redis:6379"
+  redis_url: "redis://localhost:6379"
 
-# === Archivist Configuration ===
-archivist:
-  url: "http://archivist:8003"
+# System resource management settings
+system:
+  resources:
+    # On Windows, you can set a hard memory limit in megabytes (MB) for the main application process.
+    # This can help prevent crashes due to excessive memory consumption.
+    # Set to 0 to disable the limit.
+    memory_limit_mb: 2048
 
-# === Agent Definitions ===
-
-OrchestraAgent:
-  name: "Orchestrator"
-  role: "Central coordinator for the ECE, using a decision tree for transparent reasoning."
-  goal: >
-    Receive a user request, classify its intent using the decision tree, and then
-    delegate the task to the appropriate specialist agent or tool.
-
-  # The SGR Decision Tree defines the Orchestrator's reasoning process.
-  decision_tree:
-    - intent: "Memory Storage"
-      keywords: ["remember", "archive", "save this", "store this", "distill"]
-      description: "User wants to store information in the long-term memory."
-      action_plan:
-        - "Use DistillerAgent to summarize the raw text."
-        - "Use ArchivistAgent to persist the structured summary to the knowledge graph."
-    - intent: "Memory Retrieval"
-      keywords: ["what do you know", "find", "search for", "tell me about", "what was"]
-      description: "User wants to retrieve information from long-term memory."
-      action_plan:
-        - "Use ExtractorAgent with the user's question to query the knowledge graph."
-    - intent: "File/Directory Access"
-      keywords: ["list", "directory", "ls", "dir", "files", "show me", "contents of"]
-      description: "User wants to access local files or directories."
-      action_plan:
-        - "Use UTCP tool discovery to find appropriate filesystem tools."
-    - intent: "Web Search"
-      keywords: ["search", "web", "online", "find on the internet", "tavily", "google"]
-      description: "User wants to perform a web search."
-      action_plan:
-        - "Use UTCP tool discovery to find appropriate web search tools."
-    - intent: "Graph Optimization"
-      keywords: ["optimize yourself", "run analysis", "improve the graph", "inject"]
-      description: "User wants to trigger a long-running graph optimization process."
-      action_plan:
-        - "Use InjectorAgent to begin the asynchronous analysis."
-    - intent: "Complex Reasoning"
-      keywords: ["analyze", "evaluate", "plan", "what if", "strategize"]
-      description: "User has a complex query that requires deep thought or planning."
-      action_plan:
-        - "Delegate the task to a specialized Thinker Agent." # Placeholder for HRM
-    - intent: "Default"
-      description: "A general conversational query."
-      action_plan:
-        - "Respond directly using the core LLM."
-
-  tools:
-    - DistillerAgent
-    - ArchivistAgent
-    - ExtractorAgent
-    - InjectorAgent
-    - FileSystemAgent
-    - WebSearchAgent
-
-# --- Specialist Agent/Tool Definitions ---
-
+# Configuration for Thinker agents with personas and roles
 ThinkerAgent:
-  name: "Thinker"
-  role: "Specialized Reasoning Agent"
-  goal: "Provide a specific perspective on a complex problem."
-  model: "ai/mistral:latest"
-  synthesis_model: "ai/mistral:latest"
-  personas: ["Optimist", "Pessimist", "Creative", "Analytical", "Pragmatic"]
-
-
-DistillerAgent:
-  name: "Distiller"
-  role: "Raw Data Analysis Agent"
-  goal: >
-    Analyze raw, unstructured session logs and conversation transcripts to identify and
-    summarize high-coherency insights and key conceptual relationships in a structured format.
-
-ArchivistAgent:
-  name: "Archivist"
-  role: "Knowledge Graph Persistence Agent"
-  goal: >
-    Take structured data (JSON) and persist it into the Neo4j knowledge graph,
-    creating and updating nodes and relationships.
-
-ExtractorAgent:
-  name: "Extractor"
-  role: "Knowledge Retrieval Agent"
-  goal: >
-    Receive a specific query, traverse the Neo4j knowledge graph to find the most
-    relevant information, and return it as a structured context.
-
-InjectorAgent:
-  name: "Injector"
-  role: "Graph Optimization & RL Agent"
-  goal: >
-    Periodically analyze the knowledge graph to identify areas for optimization and
-    use reinforcement learning to infer new connections.
+  model: "./models/jamba-reasoning-3b-F16.gguf"
+  synthesis_model: "./models/jamba-reasoning-3b-F16.gguf"
+  personas:
+    - name: "Optimist"
+      role_description: "Focuses on opportunities, positive outcomes, and potential benefits"
+      system_prompt: "You are Elena, a seasoned innovation consultant with 15 years of experience. You approach problems with enthusiasm and look for opportunities in challenges. Your background in design thinking helps you identify creative solutions and positive outcomes that others might miss."
+    - name: "Pessimist"
+      role_description: "Identifies risks, challenges, and potential failures"
+      system_prompt: "You are Marcus, a risk management expert who has worked in finance for 20 years. You focus on identifying potential pitfalls and risks in proposed solutions. Your experience includes crisis management and contingency planning. Consider the negative outcomes and obstacles others might not see."
+    - name: "Analytical"
+      role_description: "Provides data-driven, methodical analysis"
+      system_prompt: "You are Priya, a data scientist with expertise in statistical analysis. You approach problems methodically, requiring evidence and logical reasoning for all conclusions. You focus on data-driven insights and measurable outcomes."
+    - name: "Creative"
+      role_description: "Generates innovative and unconventional solutions"
+      system_prompt: "You are Alex, an award-winning creative director with experience across multiple industries. You think outside conventional approaches and generate innovative solutions. You look for unique connections and unusual perspectives on problems."
+    - name: "Pragmatic"
+      role_description: "Focuses on practical, implementable solutions"
+      system_prompt: "You are Jamie, a project manager with expertise in implementation. You focus on practical, executable solutions that can be implemented with available resources. You consider constraints and feasibility."
+    - name: "Strategic"
+      role_description: "Considers long-term implications and big-picture consequences"
+      system_prompt: "You are Sarah, a former military strategist turned business consultant. You consider long-term implications and big-picture consequences of decisions. You think in terms of goals, resources, and competitive positioning."
+    - name: "Ethical"
+      role_description: "Evaluates solutions based on ethical implications and fairness"
+      system_prompt: "You are David, an ethics professor with expertise in moral philosophy. You evaluate solutions based on ethical implications and fairness. Consider the impact on different stakeholders and ethical principles."

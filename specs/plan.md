@@ -1,233 +1,146 @@
-# External Context Engine (ECE) Implementation Plan v3.4
+# ECE - Development Plan v4.1
 
-## Overview
+This document outlines the phased development plan for the External Context Engine, focusing on the transition to a local, high-performance architecture.
 
-This document outlines the implementation plan for the External Context Engine (ECE) v3.4, aligning with the updated specifications. The plan focuses on implementing the Universal Tool Calling Protocol (UTCP) integration, replacing bespoke wrapper APIs with standardized tool definitions that can be discovered and called through a central UTCP Tool Registry. This upgrade enables dynamic tool discovery and calling between ECE agents while maintaining all existing functionality including tool integration capabilities that enable the system to help write and modify its own code. The plan includes phases for UTCP infrastructure implementation, agent migration, and continued self-development capabilities.
+---
 
-## Implementation Phases
+## Phase 1: Transition to Local-First Development (Current Focus)
 
-### Phase 1: Documentation Update and Task Definition (Completed)
-- Update `spec.md` to reflect v3.4 architecture with UTCP integration
-- Update `plan.md` (this document) with UTCP integration plan
-- Update `task.md` with new tasks for UTCP implementation and continued self-development
+**Goal:** Eliminate the Docker dependency for core development and enable a streamlined, script-based local workflow.
 
-### Phase 2: UTCP Infrastructure Implementation (Current)
-- **Priority 1: UTCP Tool Registry Service**
-  - Design and implement central UTCP Tool Registry for tool discovery
-  - Implement API endpoints for tool registration and discovery
-  - Create tool definition schema validation
-  - Add health check and monitoring endpoints
-- **Priority 2: UTCP Client Library**  
-  - Design and implement standardized UTCP client interface
-  - Implement tool discovery functionality
-  - Implement tool calling functionality with parameter validation
-  - Add error handling and retry mechanisms
-- **Priority 3: Agent Tool Registration**
-  - Update Orchestrator to register its tools with the UTCP Registry
-  - Update Archivist to register its tools with the UTCP Registry
-  - Update Distiller to register its tools with the UTCP Registry
-  - Update QLearning to register its tools with the UTCP Registry
-  - Update Injector to register its tools with the UTCP Registry
+1.  **Configuration Update:** Modify all service URLs in `.env` and `config.yaml` to point to `localhost`. This includes updating LLM provider configurations as detailed in `spec.md`.
+2.  **Script Creation:** Develop individual and master startup scripts for all agents and services.
+3.  **Testing:** Thoroughly test the local script-based setup to ensure all agents can communicate correctly.
+4.  **Documentation:** Update the main `README.md` to reflect the new local setup process.
 
-### Phase 3: Tool Agent Implementation (Planned)
-- **Priority 1: FileSystemAgent**
-  - Design and implement secure file system operations
-  - Implement read, write, create, and delete capabilities with security boundaries
-  - Integrate with context cache for file content storage
-- **Priority 2: WebSearchAgent**  
-  - Enhance existing web search capabilities with Tavily API
-  - Implement rate limiting and safe search parameters
-  - Add result storage in context cache
-- **Priority 3: Orchestrator Enhancement**
-  - Update decision tree with tool agent routing
-  - Implement security boundaries for tool access
-  - Test tool integration workflows
+---
 
-### Phase 4: Agent Migration to UTCP (Planned)
-- **Priority 1: Replace Bespoke HTTP Clients**
-  - Replace Orchestrator's ArchivistClient with UTCP tool calls
-  - Replace Archivist's clients (DistillerClient, QLearningAgentClient, InjectorClient) with UTCP tool calls
-- **Priority 2: Maintain Backward Compatibility**
-  - Ensure seamless transition during migration
-  - Test all agent communications via UTCP
-  - Monitor performance during migration
-- **Priority 3: Remove Deprecated Code**
-  - Remove old HTTP client code after successful migration
-  - Clean up deprecated functions and imports
-  - Update configuration to use UTCP client
+## Phase 2: Core Architectural Upgrade (Markovian Thinking)
 
-### Phase 5: CLI Quality of Life Improvements (Planned)
-- **Priority 1: Enhanced User Experience**
-  - Implement proper arrow key navigation for text editing
-  - Create professional welcome screen inspired by Gemini/Qwen CLIs
-  - Enable command history navigation with up/down arrows
-  - Add input validation and error handling
-- **Priority 2: Local-CLI Open Source Initiative**
-  - Prepare CLI for independent open-source release
-  - Create branding as "local-cli" to emphasize independence
-  - Document open-source contribution process
-  - Add customization options for users
-- **Priority 3: Performance and Usability**
-  - Optimize response times and interaction smoothness
-  - Implement user-configurable appearance settings
-  - Add advanced command history features
-  - Create help and documentation within CLI
+**Goal:** Implement the Markovian Thinking paradigm to enable deep reasoning on local hardware. This involves integrating a dual-LLM PEVG model with a specialized TRM service.
 
-### Phase 6: Self-Development Flow Implementation (Planned)
-- **Priority 1: Self-Analysis Flow**
-  - Enable ECE to read and understand its own codebase
-  - Store code files in context cache for analysis
-  - Create pattern recognition for code structures
-- **Priority 2: Self-Modification Flow**
-  - Implement safe code modification capabilities
-  - Add safeguards and validation for changes
-  - Create version control integration
-- **Priority 3: Self-Verification Flow**
-  - Generate tests for code changes
-  - Validate changes against specifications
-  - Implement build/test automation
+1.  **TRM Service Integration:** Develop a client (the `TRM_Solver` class) to interact with the specialized TRM Service (the "Markovian Thinker").
+2.  **OrchestratorAgent Upgrade:** Refactor the `OrchestratorAgent` to implement the full Markovian reasoning loop as described in `specs/reasoning_flow.md`. This includes managing the interaction between the Primary LLM and the TRM Service.
+3.  **Integration and Testing:** Conduct thorough testing to validate the new Markovian-based reasoning workflow.
 
-### Phase 7: Advanced Self-Development (Future)
-- **Priority 1: Autonomous Improvement Loops**
-  - Implement iterative self-improvement cycles
-  - Create learning from usage patterns
-  - Develop feature suggestion capabilities
-- **Priority 2: Specification Evolution**
-  - Allow ECE to propose specification updates
-  - Implement feedback integration from usage
-  - Self-align with strategic goals
+---
 
-### Phase 8: Llama.cpp Integration (Planned)
-- **Priority 1: Llama.cpp Provider Implementation**
-  - Develop a new provider for Llama.cpp in `llm_providers`.
-  - Ensure it's compatible with the existing `LLMProvider` interface.
-- **Priority 2: Configuration Update**
-  - Add `llama_cpp` to the `config.yaml` with appropriate settings (e.g., `model_path`, `api_base`).
-  - Update `llm_configuration.md` to reflect the new provider.
-- **Priority 3: Docker Integration**
-  - Add a new service to `docker-compose.yml` for the Llama.cpp server.
-  - Ensure the ECE can connect to the Llama.cpp container.
-- **Priority 4: Testing and Validation**
-  - Create unit and integration tests for the Llama.cpp provider.
-  - Validate that the ECE can generate responses using Llama.cpp.
+## Phase 3: Performance Profiling and Optimization
 
-## Detailed Task Breakdown
+**Goal:** Identify and refactor performance bottlenecks using C++ and Cython.
 
-### Task T-001: Implement UTCP Tool Registry Service
-- **Description**: Design and implement the central UTCP Tool Registry for standardized tool discovery and access across all ECE agents.
-- **Priority**: High
-- **Target Components**: UTCP Tool Registry
-- **Status**: Planned
+1.  **Profiling:** Use `cProfile` and `snakeviz` to conduct a thorough performance analysis of the entire ECE stack under load. This includes all agents with a particular focus on the `QLearningAgent` and `DistillerAgent` which are expected to have significant computational overhead.
+2.  **C++ Implementation:** Rewrite the most computationally expensive functions (identified in profiling) in C++. The initial focus will be on the `QLearningAgent`, specifically Q-table updates, pathfinding algorithms, and embedding generation functions.
+3.  **Cython Integration:** Bridge the new C++ code into the Python application using Cython extensions, creating efficient interfaces between Python and C++ components.
+4.  **Build System Integration:** Update the build process to include compilation of C++ code and Cython extensions, ensuring seamless integration into the development and deployment pipeline.
+5.  **Benchmarking:** Re-run performance tests to measure the impact of the optimizations, comparing before and after metrics for key operations.
+6.  **Documentation:** Update development documentation to include guidelines for implementing performance-critical components using C++ and Cython.
 
-### Task T-002: Implement UTCP Client Library
-- **Description**: Design and implement the standardized UTCP client interface for discovering and calling tools via the registry.
-- **Priority**: High
-- **Target Components**: UTCP Client
-- **Status**: Planned
+---
 
-### Task T-003: Agent Tool Registration Implementation
-- **Description**: Update each ECE agent to register its available tools with the UTCP Registry using standardized tool definitions.
-- **Priority**: High
-- **Target Agents**: OrchestratorAgent, ArchivistAgent, DistillerAgent, QLearningAgent, InjectorAgent
-- **Status**: Planned
+## Phase 4: Core Logic and Stability Enhancements
 
-### Task T-004: Replace Bespoke HTTP Clients with UTCP Calls
-- **Description**: Replace all custom HTTP client implementations with standardized UTCP tool calls for inter-agent communication.
-- **Priority**: High
-- **Target Agents**: OrchestratorAgent, ArchivistAgent
-- **Status**: Planned
+**Goal:** Resolve the critical `context overflow` issue and improve the overall stability of the system.
 
-### Task T-005: Implement FileSystemAgent
-- **Description**: Design and implement the `FileSystemAgent` for secure file operations, enabling the ECE to read and write its own codebase.
-- **Priority**: High
-- **Target Agents**: FileSystemAgent, ContextCache
-- **Status**: Planned
+1.  **Prompt Management:** Implement robust prompt truncation and management logic within the `OrchestratorAgent`. This includes developing a context-aware prompt manager that can dynamically adjust content based on model capabilities and context window limits.
+2.  **Intelligent Truncation:** Use token counting and intelligent content preservation techniques to ensure critical information is maintained when prompts are truncated.
+3.  **Error Handling:** Enhance error handling and reporting across all agents with detailed logging for debugging context overflow issues.
+4.  **Fallback Strategies:** Implement graceful fallback strategies when context limits are reached, using summarization or chunking approaches.
+5.  **Integration Testing:** Create a comprehensive suite of integration tests specifically targeting prompt management and context overflow scenarios.
+6.  **Monitoring:** Add detailed metrics and monitoring for prompt sizes and context usage across the system.
+7.  **Documentation:** Update development documentation to include best practices for prompt management and context handling.
 
-### Task T-006: Implement WebSearchAgent Enhancement
-- **Description**: Enhance the existing `WebSearchAgent` to utilize the Tavily API with proper rate limiting and security boundaries.
-- **Priority**: High
-- **Target Agents**: WebSearchAgent
-- **Status**: Planned
+---
 
-### Task T-007: Update Orchestrator Decision Tree
-- **Description**: Modify the Orchestrator's decision tree to route file and web requests to the appropriate tool agents.
-- **Priority**: High
-- **Target Agents**: OrchestratorAgent
-- **Status**: Planned
+## Phase 5: Packaging and Distribution
 
-### Task T-008: Implement Security Boundaries
-- **Description**: Define and implement security boundaries for tool agent access to prevent unauthorized operations.
-- **Priority**: High
-- **Target Agents**: All agents
-- **Status**: Planned
+**Goal:** Package the ECE into a single, distributable executable for ease of deployment.
 
-### Task T-009: Implement Self-Analysis Capability
-- **Description**: Enable the ECE to read and analyze its own codebase using the new tool agents.
-- **Priority**: Medium
-- **Target Agents**: FileSystemAgent, OrchestratorAgent
-- **Status**: Planned
+1.  **PyInstaller Setup:** Configure PyInstaller with proper hooks and spec file to handle all ECE dependencies including FastAPI, async components, and C++ extensions.
+2.  **Build Automation:** Develop cross-platform build scripts to automate the PyInstaller packaging process for Windows, Linux, and macOS.
+3.  **Bootstrapping Mechanism:** Implement a bootstrapping mechanism in the packaged application to check for required services (Neo4j, Redis) before starting agents.
+4.  **Embedded Configuration:** Add embedded configuration files to the executable to simplify deployment while allowing for customization.
+5.  **Distribution Testing:** Create comprehensive testing procedures to verify the executable works correctly on clean systems without Python dependencies.
+6.  **Versioning and Updates:** Implement versioning and update mechanisms for the packaged application.
+7.  **Documentation:** Document the packaging process and deployment requirements for end users.
 
-### Task T-010: Implement Self-Modification Capability
-- **Description**: Allow the ECE to modify its own code with proper validation and safeguards.
-- **Priority**: Medium
-- **Target Agents**: FileSystemAgent, OrchestratorAgent
-- **Status**: Planned
+## Phase 17: Architectural Evolution (Markovian Thinking)
 
-### Task T-011: Implement Self-Verification Flow
-- **Description**: Create automated testing and validation for self-modifications.
-- **Priority**: Medium
-- **Target Agents**: All agents
-- **Status**: Planned
+**Goal:** Implement the Markovian Thinking paradigm to enable deep reasoning on local hardware through a dual-LLM PEVG model with a specialized TRM service.
 
-## Implementation Timeline
+1.  **TRM Service Integration:** [COMPLETED] Develop the TRM_Client class to interact with the specialized TRM Service (the "Markovian Thinker").
+2.  **Markovian Thinker Implementation:** [COMPLETED] Implement the core Markovian reasoning logic that breaks down complex problems into chunks with textual carryover.
+3.  **OrchestratorAgent Integration:** [COMPLETED] Refactor the OrchestratorAgent to implement the full Markovian reasoning loop, including: (1) calling the Primary LLM for the initial draft, (2) iteratively calling the TRM_Client for refinement, (3) managing the "carryover" state between chunks, and (4) sending the final, polished thought process to the Primary LLM for the final answer.
+4.  **Chunked Reasoning:** [COMPLETED] Implement chunked reasoning capabilities for processing long texts using the Markovian approach.
+5.  **Intelligent Routing:** [COMPLETED] Add logic to determine when to use Markovian thinking vs. standard processing based on query complexity.
+6.  **Integration and Testing:** [IN PROGRESS] Conduct thorough testing to validate the new Markovian-based reasoning workflow.
 
-- **Week 1-2**: Complete Phase 2 tasks (UTCP Infrastructure Implementation)
-- **Week 3**: Complete Phase 3 tasks (Tool Agent Implementation)
-- **Week 4**: Complete Phase 4 tasks (Agent Migration to UTCP)
-- **Week 5**: Complete Phase 5 tasks (CLI Interface Development)
-- **Week 6**: Complete Phase 6 tasks (Self-Development Flow Implementation)
-- **Week 7**: Testing, integration, and documentation finalization
-- **Week 8+**: Begin Phase 7 (Advanced Self-Development)
+## Phase 18: Enhanced Orchestrator Implementation
 
-## Success Criteria
+**Goal:** Implement the EnhancedOrchestratorAgent with improved context management, parallel thinking, and response synthesis.
 
-- UTCP Tool Registry is operational and serving tool definitions
-- UTCP Client library is implemented and functional across all agents
-- All agents successfully register their tools with the UTCP Registry
-- Bespoke HTTP clients are replaced with UTCP tool calls
-- Tool agents are correctly implemented and securely integrated
-- ECE-CLI provides rich command-line interface with persistent context
-- CLI incorporates POML persona and emotional lexicon display
-- Local Ollama integration provides low-latency, private responses
-- ECE can safely read and analyze its own codebase
-- Self-modification flows include proper validation and safeguards
-- System maintains stability while enabling autonomous development
-- All new tasks from the updated specification are completed
-- Updated documentation accurately reflects the new UTCP integration and self-development capabilities
-- Performance and security standards are maintained during UTCP integration and self-modification
+1.  **Context-Aware Processing:** [COMPLETED] Implement the `process_prompt_with_context_management` method to handle context overflow prevention.
+2.  **Parallel Thinking Architecture:** [COMPLETED] Develop system for engaging multiple specialized thinkers in parallel to process prompts from different perspectives.
+3.  **Response Synthesis:** [COMPLETED] Create synthesis thinker to combine insights from multiple specialized thinkers into coherent responses.
+4.  **Archivist Integration:** [COMPLETED] Ensure proper integration with ArchivistClient for knowledge retrieval and context management.
+5.  **Enhanced Error Handling:** [COMPLETED] Implement robust error handling for individual thinker failures while maintaining system stability.
+6.  **Integration and Testing:** [COMPLETED] Validate the EnhancedOrchestratorAgent's new processing flow end-to-end.
 
-## Security Considerations
+## Phase 19: Markovian Reasoning Integration & Optimization
 
-- All tool access must be logged and auditable
-- File system access boundaries must prevent unauthorized operations
-- Code modification safeguards must prevent breaking changes
-- Rate limiting must prevent abuse of web search capabilities
-- Access to system files must be restricted to prevent privilege escalation
-- CLI configuration must securely store API keys and model settings
+**Goal:** Fully integrate Markovian Thinking with the EnhancedOrchestratorAgent and optimize its operation.
 
-## Self-Development Guidelines
+1.  **[COMPLETED] Markovian Analyzer Integration:** Integrate the reasoning analyzer to determine when to use Markovian vs. parallel thinking based on prompt characteristics.
+2.  **[COMPLETED] Fallback Mechanisms:** Implement robust fallback systems from Markovian to parallel thinking in case of failures.
+3.  **[COMPLETED] Performance Optimization:** Fine-tune chunk size and state carryover parameters for optimal performance.
+4.  **[IN PROGRESS] Comprehensive Testing:** Create extensive test suite covering various reasoning scenarios and edge cases.
+5.  **[IN PROGRESS] Documentation:** Document performance characteristics, ideal use cases, and operation guidelines for Markovian reasoning.
 
-- All code modifications must be reversible
-- Changes must be validated against specifications before application
-- Automated testing must pass before any self-modification is applied
-- Human oversight should be available for critical changes
-- Backup and recovery mechanisms must be in place
+## Phase 20: Multi-Agent Coordination & Emergence
 
-## Local Ollama Integration
+**Goal:** Implement enhanced coordination between agents based on research findings from "Emergent Coordination in Multi-Agent Language Models".
 
-- Direct communication with local Ollama instance for enhanced privacy
-- Optimized resource utilization leveraging local GPU/CPU
-- Reduced latency through local processing
-- Support for multiple local models simultaneously
-- Configuration management for model selection and parameters
-- Model download and management capabilities within the CLI interface
+1.  **[COMPLETED] Thinker Personas:** Assign detailed personas to each thinker agent to create stable identity-linked differentiation and specialized roles.
+2.  **[COMPLETED] Theory of Mind Integration:** Implement instructions for thinkers to consider what other agents might do and how their actions affect the group outcome.
+3.  **[COMPLETED] Coordination Analysis:** Implement metrics to measure synergy, diversity, and complementarity among thinker agents to ensure productive collective intelligence.
+4.  **[COMPLETED] Emergent Behavior Steering:** Use prompt design and role assignments to steer the system from mere aggregates to higher-order collectives.
+5.  **[IN PROGRESS] Performance Validation:** Validate that coordination improvements lead to better collective performance, balancing complementarity with integration.
+6.  **[PENDING] Coordination Documentation:** Document coordination mechanisms, analysis tools, and optimization strategies for multi-agent systems.
+
+---
+
+## Phase 6: System Validation & GUI Testing
+
+**Goal:** Rigorously test the entire end-to-end workflow through the GUI to ensure every agent, every protocol, and every new reasoning loop functions as expected in a real-world use case.
+
+1.  **End-to-End Testing:** Perform comprehensive testing of the complete system workflow from user input to final output.
+2.  **GUI Integration Testing:** Validate that the GUI properly interfaces with all ECE components.
+3.  **Agent Communication Verification:** Ensure all agents communicate correctly through UTCP and other protocols.
+4.  **Markovian Loop Validation:** Test the Markovian reasoning flow with complex real-world queries.
+5.  **Performance Under Load:** Test system performance with multiple concurrent requests.
+6.  **Bug Identification & Fixing:** Identify and resolve any latent bugs or integration issues that emerge during testing.
+
+---
+
+## Phase 7: TRM Fine-Tuning & Specialization
+
+**Goal:** Replace the mock TRM service with a real, fine-tuned model to create specialized reasoning capabilities.
+
+1.  **Dataset Creation:** Collaborate to generate a dataset of critique and refined_plan examples for fine-tuning.
+2.  **TRM Training:** Fine-tune the AI21-Jamba-Reasoning-3B model on the custom dataset to create a specialized "Planner Refinement Model".
+3.  **Model Deployment:** Deploy the fine-tuned model locally on port 8081, replacing the mock service.
+4.  **Validation:** Test the fine-tuned TRM service to ensure it performs better than the mock implementation.
+5.  **Iteration:** Fine-tune additional TRM models for different specialized tasks as needed.
+
+---
+
+## Phase 8: Continuous Improvement & Co-Evolution (The Kaizen Phase)
+
+**Goal:** Enter a continuous loop of improvement to evolve the system into an intelligent, sovereign AI.
+
+1.  **Performance Monitoring:** Actively profile the system during use to identify new bottlenecks for C++/Cython optimization.
+2.  **TRM Expansion:** Identify other tasks within the ECE that would benefit from specialized TRM models (e.g., "Code Refinement Model," "Data Analysis Model").
+3.  **Knowledge Graph Curation:** Continuously refine and expand the Neo4j knowledge graph based on interactions.
+4.  **Architecture Evolution:** Adapt and improve the multi-agent architecture based on usage patterns and requirements.
+5.  **Self-Modification:** Enhance the system's ability to understand and modify its own codebase.
+6.  **Quality Assurance:** Maintain ongoing testing and validation procedures to ensure system reliability.

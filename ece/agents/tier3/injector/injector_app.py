@@ -13,9 +13,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 from .injector_agent import InjectorAgent
 from ece.common.poml_schemas import POML, MemoryNode
 
-# Import UTCP client for tool registration
-from utcp_client.client import UTCPClient
-from utcp_registry.models.tool import ToolDefinition
+# Import UTCP data models for manual creation
+from utcp.data.utcp_manual import UtcpManual
+from utcp.data.tool import Tool
+from utcp_http.http_call_template import HttpCallTemplate
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -29,7 +30,7 @@ app = FastAPI(
 )
 
 # Get Neo4j connection details from environment variables, with defaults for local development
-neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://neo4j:7687')
+neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
 neo4j_user = os.environ.get('NEO4J_USER', 'neo4j')
 neo4j_password = os.environ.get('NEO4J_PASSWORD', 'password')
 
@@ -437,181 +438,159 @@ async def link_memory_to_timenode(request: MemoryLinkRequest):
         )
         return error_response.dict()
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize UTCP Client and register Injector tools on startup."""
-    # Initialize UTCP Client for tool registration
-    utcp_registry_url = os.getenv("UTCP_REGISTRY_URL", "http://utcp-registry:8005")
-    app.state.utcp_client = UTCPClient(utcp_registry_url)
-    
-    # Register Injector tools with UTCP Registry
-    await _register_injector_tools(app.state.utcp_client)
-
-async def _register_injector_tools(utcp_client: UTCPClient):
-    """Register Injector tools with the UTCP Registry."""
-    try:
-        # Register injector.data_to_inject tool
-        data_to_inject_tool = ToolDefinition(
-            id="injector.data_to_inject",
-            name="Data to Inject",
-            description="Inject structured data into the Neo4j knowledge graph",
-            category="storage",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "entities": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": {"type": "string"},
-                                "type": {"type": "string"},
-                                "properties": {"type": "object"}
+@app.get("/utcp")
+async def utcp_manual():
+    """UTCP Manual endpoint for tool discovery."""
+    # Create UTCP Manual with tools provided by this agent
+    manual = UtcpManual(
+        manual_version="1.0.0",
+        utcp_version="1.0.2",
+        tools=[
+            Tool(
+                name="data_to_inject",
+                description="Inject structured data into the Neo4j knowledge graph",
+                tags=["storage", "neo4j", "injector"],
+                inputs={
+                    "type": "object",
+                    "properties": {
+                        "entities": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {"type": "string"},
+                                    "type": {"type": "string"},
+                                    "properties": {"type": "object"}
+                                }
                             }
-                        }
-                    },
-                    "relationships": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "type": {"type": "string"},
-                                "start_id": {"type": "string"},
-                                "end_id": {"type": "string"},
-                                "start_type": {"type": "string"},
-                                "end_type": {"type": "string"},
-                                "properties": {"type": "object"}
+                        },
+                        "relationships": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "type": {"type": "string"},
+                                    "start_id": {"type": "string"},
+                                    "end_id": {"type": "string"},
+                                    "start_type": {"type": "string"},
+                                    "end_type": {"type": "string"},
+                                    "properties": {"type": "object"}
+                                }
                             }
+                        },
+                        "summary": {
+                            "type": "string",
+                            "description": "Summary of the data to inject"
                         }
-                    },
-                    "summary": {
-                        "type": "string",
-                        "description": "Summary of the data to inject"
-                    }
-                }
-            },
-            returns={
-                "type": "object",
-                "properties": {
-                    "success": {
-                        "type": "boolean",
-                        "description": "Whether the injection was successful"
-                    },
-                    "memory_node_id": {
-                        "type": "integer",
-                        "description": "ID of the memory node created"
-                    },
-                    "error": {
-                        "type": "string",
-                        "description": "Error message if injection failed"
-                    }
-                }
-            },
-            endpoint="http://injector:8004/internal/data_to_inject",
-            version="1.0.0",
-            agent="Injector"
-        )
-        
-        success = await utcp_client.register_tool(data_to_inject_tool)
-        if success:
-            logger.info("✅ Registered injector.data_to_inject tool with UTCP Registry")
-        else:
-            logger.error("❌ Failed to register injector.data_to_inject tool with UTCP Registry")
-            
-        # Register injector.get_or_create_timenode tool
-        get_or_create_timenode_tool = ToolDefinition(
-            id="injector.get_or_create_timenode",
-            name="Get or Create Timenode",
-            description="Create a chronological tree of nodes",
-            category="storage",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "timestamp": {
-                        "type": "string",
-                        "description": "The timestamp to create the chronological tree for"
                     }
                 },
-                "required": ["timestamp"]
-            },
-            returns={
-                "type": "object",
-                "properties": {
-                    "success": {
-                        "type": "boolean",
-                        "description": "Whether the operation was successful"
-                    },
-                    "time_node": {
-                        "type": "object",
-                        "properties": {
-                            "year_id": {"type": "string"},
-                            "month_id": {"type": "string"},
-                            "day_id": {"type": "string"}
+                outputs={
+                    "type": "object",
+                    "properties": {
+                        "success": {
+                            "type": "boolean",
+                            "description": "Whether the injection was successful"
+                        },
+                        "memory_node_id": {
+                            "type": "integer",
+                            "description": "ID of the memory node created"
+                        },
+                        "error": {
+                            "type": "string",
+                            "description": "Error message if injection failed"
                         }
-                    },
-                    "error": {
-                        "type": "string",
-                        "description": "Error message if operation failed"
-                    }
-                }
-            },
-            endpoint="http://injector:8004/internal/temporal/get_or_create_timenode",
-            version="1.0.0",
-            agent="Injector"
-        )
-        
-        success = await utcp_client.register_tool(get_or_create_timenode_tool)
-        if success:
-            logger.info("✅ Registered injector.get_or_create_timenode tool with UTCP Registry")
-        else:
-            logger.error("❌ Failed to register injector.get_or_create_timenode tool with UTCP Registry")
-            
-        # Register injector.link_memory_to_timenode tool
-        link_memory_to_timenode_tool = ToolDefinition(
-            id="injector.link_memory_to_timenode",
-            name="Link Memory to Timenode",
-            description="Link a memory node to a temporal node",
-            category="storage",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "memory_node_id": {
-                        "type": "integer",
-                        "description": "The ID of the memory node to link"
-                    },
-                    "timestamp": {
-                        "type": "string",
-                        "description": "The timestamp to link the memory to"
                     }
                 },
-                "required": ["memory_node_id", "timestamp"]
-            },
-            returns={
-                "type": "object",
-                "properties": {
-                    "success": {
-                        "type": "boolean",
-                        "description": "Whether the linking was successful"
+                tool_call_template=HttpCallTemplate(
+                    name="injector_data_to_inject",
+                    call_template_type="http",
+                    url="http://localhost:8004/internal/data_to_inject",
+                    http_method="POST"
+                )
+            ),
+            Tool(
+                name="get_or_create_timenode",
+                description="Create a chronological tree of nodes",
+                tags=["storage", "temporal", "neo4j", "injector"],
+                inputs={
+                    "type": "object",
+                    "properties": {
+                        "timestamp": {
+                            "type": "string",
+                            "description": "The timestamp to create the chronological tree for"
+                        }
                     },
-                    "error": {
-                        "type": "string",
-                        "description": "Error message if linking failed"
+                    "required": ["timestamp"]
+                },
+                outputs={
+                    "type": "object",
+                    "properties": {
+                        "success": {
+                            "type": "boolean",
+                            "description": "Whether the operation was successful"
+                        },
+                        "time_node": {
+                            "type": "object",
+                            "properties": {
+                                "year_id": {"type": "string"},
+                                "month_id": {"type": "string"},
+                                "day_id": {"type": "string"}
+                            }
+                        },
+                        "error": {
+                            "type": "string",
+                            "description": "Error message if operation failed"
+                        }
                     }
-                }
-            },
-            endpoint="http://injector:8004/internal/temporal/link_memory_to_timenode",
-            version="1.0.0",
-            agent="Injector"
-        )
-        
-        success = await utcp_client.register_tool(link_memory_to_timenode_tool)
-        if success:
-            logger.info("✅ Registered injector.link_memory_to_timenode tool with UTCP Registry")
-        else:
-            logger.error("❌ Failed to register injector.link_memory_to_timenode tool with UTCP Registry")
-            
-    except Exception as e:
-        logger.error(f"❌ Error registering Injector tools with UTCP Registry: {e}")
+                },
+                tool_call_template=HttpCallTemplate(
+                    name="injector_get_or_create_timenode",
+                    call_template_type="http",
+                    url="http://localhost:8004/internal/temporal/get_or_create_timenode",
+                    http_method="POST"
+                )
+            ),
+            Tool(
+                name="link_memory_to_timenode",
+                description="Link a memory node to a temporal node",
+                tags=["storage", "temporal", "neo4j", "injector"],
+                inputs={
+                    "type": "object",
+                    "properties": {
+                        "memory_node_id": {
+                            "type": "integer",
+                            "description": "The ID of the memory node to link"
+                        },
+                        "timestamp": {
+                            "type": "string",
+                            "description": "The timestamp to link the memory to"
+                        }
+                    },
+                    "required": ["memory_node_id", "timestamp"]
+                },
+                outputs={
+                    "type": "object",
+                    "properties": {
+                        "success": {
+                            "type": "boolean",
+                            "description": "Whether the linking was successful"
+                        },
+                        "error": {
+                            "type": "string",
+                            "description": "Error message if linking failed"
+                        }
+                    }
+                },
+                tool_call_template=HttpCallTemplate(
+                    name="injector_link_memory_to_timenode",
+                    call_template_type="http",
+                    url="http://localhost:8004/internal/temporal/link_memory_to_timenode",
+                    http_method="POST"
+                )
+            )
+        ]
+    )
+    return manual
 
 # Cleanup on shutdown
 @app.on_event("shutdown")

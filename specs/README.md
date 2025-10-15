@@ -1,22 +1,21 @@
 # ECE Specification Documents
 
-This directory contains all specification documents for the External Context Engine (ECE) project. It is managed by the `spec-kit` framework.
+This directory contains essential specification documents for the External Context Engine (ECE) project.
 
-## Overview
+The following documents are included:
 
-The `spec-kit` is a framework for spec-driven development. It ensures that all code is traceable to a specific requirement and that all requirements are validated.
+- **`spec.md`**: The core architecture, vision, and LLM configuration for the ECE.
+- **`plan.md`**: The high-level development plan and roadmap.
+- **`tasks.md`**: A list of development tasks.
+- **`reasoning_flow.md`**: Details of the Markovian reasoning flow implementation, including the current EnhancedOrchestratorAgent processing flow.
 
-### Key Components
+## Current Development Status
 
-- **`spec-manifest.yml`**: The single source of truth for all spec documents. It tracks metadata such as title, checksum, and approval status.
-- **`task_map.yml`**: A machine-readable map that links tasks defined in `tasks.md` to the source code and test files that implement them.
-- **`memory-management-system/`**: A subdirectory containing the detailed specifications for the Memory Management System (MMS).
+The ECE has successfully implemented the major architectural features and has now transitioned to validation, refinement, and continuous evolution. The current focus includes:
 
-## Workflow
-
-1. **Define Specs**: Write detailed specifications in markdown files within the appropriate subdirectory.
-2. **Define Tasks**: Break down the work into discrete tasks in `tasks.md`, each with a unique `TASK-ID`.
-3. **Implement Code**: Write source code and tests to implement the tasks. Include the `TASK-ID` in the header of each file.
-4. **Validate**: Run `make spec-validate` to ensure that all specs are up-to-date, all tasks are traceable, and all code is compliant.
-
-This automated system ensures that our development process is rigorous, transparent, and maintainable.
+1. **System Validation & GUI Testing**: Rigorous end-to-end testing of the complete system
+2. **UTCP Implementation**: Full alignment with official UTCP 1.0+ specification using decentralized tool discovery
+3. **EnhancedOrchestratorAgent Implementation**: Development and refinement of the EnhancedOrchestratorAgent with improved context management, parallel thinking, and Markovian reasoning capabilities
+4. **Markovian Thinking Integration**: Implementation of the Markovian Thinking paradigm based on the "Delethink" research for extremely long and complete reasoning with linear compute scaling
+5. **Multi-Agent Coordination**: Implementation of enhanced coordination between agents based on research from "Emergent Coordination in Multi-Agent Language Models", including thinker personas, Theory of Mind (ToM) integration, and coordination analysis metrics
+6. **Continuous Improvement & Co-Evolution**: Ongoing enhancement and evolution of the system

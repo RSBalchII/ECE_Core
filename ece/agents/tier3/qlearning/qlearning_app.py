@@ -13,9 +13,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 from qlearning_agent import QLearningGraphAgent, MemoryPath
 from neo4j_manager import Neo4jManager
 
-# Import UTCP client for tool registration
-from utcp_client.client import UTCPClient
-from utcp_registry.models.tool import ToolDefinition
+# Import UTCP data models for manual creation
+from utcp.data.utcp_manual import UtcpManual
+from utcp.data.tool import Tool
+from utcp_http.http_call_template import HttpCallTemplate
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -29,7 +30,7 @@ app = FastAPI(
 )
 
 # Get Neo4j connection details from environment variables, with defaults for local development
-neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://neo4j:7687')
+neo4j_uri = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
 neo4j_user = os.environ.get('NEO4J_USER', 'neo4j')
 neo4j_password = os.environ.get('NEO4J_PASSWORD', 'password')
 
@@ -115,86 +116,39 @@ async def refine_relationships(request: RefineRequest):
 @app.on_event("startup")
 async def startup_event():
     """
-    Start the continuous training loop on startup and register QLearning tools.
+    Start the continuous training loop on startup.
     """
-    # Initialize UTCP Client for tool registration
-    utcp_registry_url = os.getenv("UTCP_REGISTRY_URL", "http://utcp-registry:8005")
-    app.state.utcp_client = UTCPClient(utcp_registry_url)
-    
-    # Register QLearning tools with UTCP Registry
-    await _register_qlearning_tools(app.state.utcp_client)
-    
     await qlearning_agent.start_continuous_training()
 
-async def _register_qlearning_tools(utcp_client: UTCPClient):
-    """Register QLearning tools with the UTCP Registry."""
-    try:
-        # Register qlearning.find_optimal_path tool
-        find_optimal_path_tool = ToolDefinition(
-            id="qlearning.find_optimal_path",
-            name="Find Optimal Path",
-            description="Find the optimal path between two nodes in the knowledge graph",
-            category="analysis",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "start_node": {
-                        "type": "string",
-                        "description": "The starting node for the path"
-                    },
-                    "end_node": {
-                        "type": "string",
-                        "description": "The ending node for the path"
-                    }
-                },
-                "required": ["start_node", "end_node"]
-            },
-            returns={
-                "type": "array",
-                "items": {
+@app.get("/utcp")
+async def utcp_manual():
+    """UTCP Manual endpoint for tool discovery."""
+    # Create UTCP Manual with tools provided by this agent
+    manual = UtcpManual(
+        manual_version="1.0.0",
+        utcp_version="1.0.2",
+        tools=[
+            Tool(
+                name="find_optimal_path",
+                description="Find the optimal path between two nodes in the knowledge graph",
+                tags=["analysis", "qlearning", "pathfinding"],
+                inputs={
                     "type": "object",
                     "properties": {
-                        "nodes": {
-                            "type": "array",
-                            "items": {"type": "string"}
+                        "start_node": {
+                            "type": "string",
+                            "description": "The starting node for the path"
                         },
-                        "relationships": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "type": {"type": "string"},
-                                    "start_id": {"type": "string"},
-                                    "end_id": {"type": "string"}
-                                }
-                            }
-                        },
-                        "score": {"type": "number"},
-                        "length": {"type": "integer"}
-                    }
-                }
-            },
-            endpoint="http://qlearning:8002/find_optimal_path",
-            version="1.0.0",
-            agent="QLearning"
-        )
-        
-        success = await utcp_client.register_tool(find_optimal_path_tool)
-        if success:
-            logger.info("✅ Registered qlearning.find_optimal_path tool with UTCP Registry")
-        else:
-            logger.error("❌ Failed to register qlearning.find_optimal_path tool with UTCP Registry")
-            
-        # Register qlearning.refine_relationships tool
-        refine_relationships_tool = ToolDefinition(
-            id="qlearning.refine_relationships",
-            name="Refine Relationships",
-            description="Refine relationships based on a path and a reward",
-            category="analysis",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "path": {
+                        "end_node": {
+                            "type": "string",
+                            "description": "The ending node for the path"
+                        }
+                    },
+                    "required": ["start_node", "end_node"]
+                },
+                outputs={
+                    "type": "array",
+                    "items": {
                         "type": "object",
                         "properties": {
                             "nodes": {
@@ -215,36 +169,70 @@ async def _register_qlearning_tools(utcp_client: UTCPClient):
                             "score": {"type": "number"},
                             "length": {"type": "integer"}
                         }
-                    },
-                    "reward": {
-                        "type": "number",
-                        "description": "The reward value to apply"
                     }
                 },
-                "required": ["path", "reward"]
-            },
-            returns={
-                "type": "object",
-                "properties": {
-                    "status": {
-                        "type": "string",
-                        "description": "Status of the operation"
+                tool_call_template=HttpCallTemplate(
+                    name="qlearning_find_optimal_path",
+                    call_template_type="http",
+                    url="http://localhost:8002/find_optimal_path",
+                    http_method="POST"
+                )
+            ),
+            Tool(
+                name="refine_relationships",
+                description="Refine relationships based on a path and a reward",
+                tags=["analysis", "qlearning", "refinement"],
+                inputs={
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "object",
+                            "properties": {
+                                "nodes": {
+                                    "type": "array",
+                                    "items": {"type": "string"}
+                                },
+                                "relationships": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "type": {"type": "string"},
+                                            "start_id": {"type": "string"},
+                                            "end_id": {"type": "string"}
+                                        }
+                                    }
+                                },
+                                "score": {"type": "number"},
+                                "length": {"type": "integer"}
+                            }
+                        },
+                        "reward": {
+                            "type": "number",
+                            "description": "The reward value to apply"
+                        }
+                    },
+                    "required": ["path", "reward"]
+                },
+                outputs={
+                    "type": "object",
+                    "properties": {
+                        "status": {
+                            "type": "string",
+                            "description": "Status of the operation"
+                        }
                     }
-                }
-            },
-            endpoint="http://qlearning:8002/refine_relationships",
-            version="1.0.0",
-            agent="QLearning"
-        )
-        
-        success = await utcp_client.register_tool(refine_relationships_tool)
-        if success:
-            logger.info("✅ Registered qlearning.refine_relationships tool with UTCP Registry")
-        else:
-            logger.error("❌ Failed to register qlearning.refine_relationships tool with UTCP Registry")
-            
-    except Exception as e:
-        logger.error(f"❌ Error registering QLearning tools with UTCP Registry: {e}")
+                },
+                tool_call_template=HttpCallTemplate(
+                    name="qlearning_refine_relationships",
+                    call_template_type="http",
+                    url="http://localhost:8002/refine_relationships",
+                    http_method="POST"
+                )
+            )
+        ]
+    )
+    return manual
 
 # Cleanup on shutdown
 @app.on_event("shutdown")

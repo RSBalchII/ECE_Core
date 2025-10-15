@@ -20,7 +20,7 @@ def sanitize_entities_for_injection(data: dict) -> dict:
 class DistillerClient:
     """Client for communicating with the Distiller agent."""
 
-    def __init__(self, base_url: str = os.getenv("DISTILLER_URL", "http://distiller:8001")):
+    def __init__(self, base_url: str = os.getenv("DISTILLER_URL", "http://localhost:8001")):
         self.base_url = base_url
         self.client = httpx.AsyncClient()
 
@@ -72,7 +72,7 @@ class MemoryPath(BaseModel):
 class QLearningAgentClient:
     """Client for communicating with the QLearningAgent."""
 
-    def __init__(self, base_url: str = os.getenv("QLEARNING_URL", "http://qlearning:8002")):
+    def __init__(self, base_url: str = os.getenv("QLEARNING_URL", "http://localhost:8002")):
         self.base_url = base_url
         self.client = httpx.AsyncClient()
 
@@ -143,7 +143,7 @@ class QLearningAgentClient:
 class InjectorClient:
     """Client for communicating with the Injector agent."""
 
-    def __init__(self, base_url: str = os.getenv("INJECTOR_URL", "http://injector:8004")):
+    def __init__(self, base_url: str = os.getenv("INJECTOR_URL", "http://localhost:8004")):
         self.base_url = base_url
         self.client = httpx.AsyncClient()
 
@@ -375,7 +375,7 @@ class InjectorClient:
 class ArchivistClient:
     """Client for communicating with the Archivist agent."""
 
-    def __init__(self, base_url: str = os.getenv("ARCHIVIST_URL", "http://archivist:8003")):
+    def __init__(self, base_url: str = os.getenv("ARCHIVIST_URL", "http://localhost:8003")):
         self.base_url = base_url
         self.client = httpx.AsyncClient()
 

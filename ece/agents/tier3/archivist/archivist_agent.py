@@ -18,9 +18,10 @@ import logging
 import os
 import time
 
-# Import UTCP client for tool registration
-from utcp_client.client import UTCPClient
-from utcp_registry.models.tool import ToolDefinition
+# Import UTCP data models for manual creation
+from utcp.data.utcp_manual import UtcpManual
+from utcp.data.tool import Tool
+from utcp_http.http_call_template import HttpCallTemplate
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -73,13 +74,13 @@ class MemoryLinkRequest(BaseModel):
 from ece.agents.clients import DistillerClient, QLearningAgentClient, InjectorClient
 
 # Initialize clients
-distiller_client = DistillerClient(base_url="http://distiller:8001")
+distiller_client = DistillerClient(base_url="http://localhost:8001")
 qlearning_client = QLearningAgentClient()
 injector_client = InjectorClient()
 
 # Redis client for cache monitoring
 redis_client = redis.Redis(
-    host=os.environ.get('REDIS_HOST', 'redis'),
+    host=os.environ.get('REDIS_HOST', 'localhost'),
     port=int(os.environ.get('REDIS_PORT', 6379)),
     password=os.environ.get('REDIS_PASSWORD'),
     db=0,
@@ -812,195 +813,212 @@ async def memory_query(request: MemoryQueryRequest):
         logger.error(f"Error processing memory query: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+
+class MemoryQueryRequest(BaseModel):
+    """Model for memory query requests."""
+    query: str
+
+
+@app.post("/query_memory")
+async def query_memory(request: MemoryQueryRequest):
+    """
+    Endpoint to query the knowledge graph for relevant memory/context.
+    
+    Args:
+        request: MemoryQueryRequest containing the query
+        
+    Returns:
+        String containing relevant context from the knowledge graph
+    """
+    try:
+        query = request.query
+        logger.info(f"Received query_memory request for query: {query[:100]}...")
+        
+        # For now, we'll return a placeholder response
+        # In a real implementation, this would query the knowledge graph
+        context = f"Relevant context for query: '{query}'\\n\\n" \
+                  f"This is a placeholder response from the Archivist. In a real implementation, " \
+                  f"this would query the Neo4j knowledge graph for relevant memories and context."
+                  
+        logger.info(f"Returning {len(context)} characters of context")
+        return {"context": context}
+        
+    except Exception as e:
+        logger.error(f"Error processing query_memory request: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.get("/utcp")
+async def utcp_manual():
+    """UTCP Manual endpoint for tool discovery."""
+    # Create UTCP Manual with tools provided by this agent
+    manual = UtcpManual(
+        manual_version="1.0.0",
+        utcp_version="1.0.2",
+        tools=[
+            Tool(
+                name="get_context",
+                description="Get context based on query and keywords",
+                tags=["retrieval", "context", "archivist"],
+                inputs={
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The query to search for context"
+                        },
+                        "keywords": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "Keywords to refine the search"
+                        },
+                        "session_id": {
+                            "type": "string",
+                            "description": "The session ID for the request"
+                        }
+                    },
+                    "required": ["query", "keywords"]
+                },
+                outputs={
+                    "type": "object",
+                    "properties": {
+                        "context": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "path_id": {"type": "integer"},
+                                    "nodes": {"type": "array", "items": {"type": "string"}},
+                                    "relationships": {"type": "array", "items": {"type": "object"}},
+                                    "relevance_score": {"type": "number"}
+                                }
+                            }
+                        },
+                        "metadata": {
+                            "type": "object"
+                        }
+                    }
+                },
+                tool_call_template=HttpCallTemplate(
+                    name="archivist_get_context",
+                    call_template_type="http",
+                    url="http://localhost:8003/context",
+                    http_method="POST"
+                )
+            ),
+            Tool(
+                name="get_enhanced_context",
+                description="Get enhanced context with QLearning coordination",
+                tags=["retrieval", "context", "enhanced", "archivist"],
+                inputs={
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The query to search for context"
+                        },
+                        "keywords": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "Keywords to refine the search"
+                        },
+                        "max_tokens": {
+                            "type": "integer",
+                            "description": "Maximum number of tokens to return",
+                            "default": 1000000
+                        },
+                        "session_id": {
+                            "type": "string",
+                            "description": "The session ID for the request"
+                        }
+                    },
+                    "required": ["query", "keywords", "max_tokens", "session_id"]
+                },
+                outputs={
+                    "type": "object",
+                    "properties": {
+                        "enhanced_context": {
+                            "type": "string",
+                            "description": "The enhanced context retrieved"
+                        },
+                        "related_memories": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {"type": "string"},
+                                    "content": {"type": "string"},
+                                    "relevance_score": {"type": "number"}
+                                }
+                            }
+                        },
+                        "token_count": {
+                            "type": "integer",
+                            "description": "Number of tokens in the enhanced context"
+                        }
+                    }
+                },
+                tool_call_template=HttpCallTemplate(
+                    name="archivist_get_enhanced_context",
+                    call_template_type="http",
+                    url="http://localhost:8003/enhanced_context",
+                    http_method="POST"
+                )
+            ),
+            Tool(
+                name="memory_query",
+                description="Query memory for related information in the cohesion loop",
+                tags=["retrieval", "memory", "query", "archivist"],
+                inputs={
+                    "type": "object",
+                    "properties": {
+                        "context_id": {
+                            "type": "string",
+                            "description": "The context ID to query"
+                        },
+                        "max_contexts": {
+                            "type": "integer",
+                            "description": "Maximum number of contexts to retrieve",
+                            "default": 5
+                        }
+                    },
+                    "required": ["context_id"]
+                },
+                outputs={
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "memory_id": {"type": "string"},
+                            "context_id": {"type": "string"},
+                            "content": {"type": "string"},
+                            "timestamp": {"type": "string"},
+                            "relevance_score": {"type": "number"}
+                        }
+                    }
+                },
+                tool_call_template=HttpCallTemplate(
+                    name="archivist_memory_query",
+                    call_template_type="http",
+                    url="http://localhost:8003/memory_query",
+                    http_method="POST"
+                )
+            )
+        ]
+    )
+    return manual
+
 # Start the continuous temporal scanning when the app starts
 @app.on_event("startup")
 async def startup_event():
     """Start the continuous temporal scanning process on startup."""
-    # Initialize UTCP Client for tool registration
-    utcp_registry_url = os.getenv("UTCP_REGISTRY_URL", "http://utcp-registry:8005")
-    app.state.utcp_client = UTCPClient(utcp_registry_url)
-    
-    # Register Archivist tools with UTCP Registry
-    await _register_archivist_tools(app.state.utcp_client)
-    
     # Start the temporal scanning in the background
     asyncio.create_task(continuous_temporal_scanning())
 
-async def _register_archivist_tools(utcp_client: UTCPClient):
-    """Register Archivist tools with the UTCP Registry."""
-    try:
-        # Register archivist.get_context tool
-        get_context_tool = ToolDefinition(
-            id="archivist.get_context",
-            name="Get Context",
-            description="Get context based on query and keywords",
-            category="retrieval",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The query to search for context"
-                    },
-                    "keywords": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "description": "Keywords to refine the search"
-                    },
-                    "session_id": {
-                        "type": "string",
-                        "description": "The session ID for the request"
-                    }
-                },
-                "required": ["query", "keywords"]
-            },
-            returns={
-                "type": "object",
-                "properties": {
-                    "context": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "path_id": {"type": "integer"},
-                                "nodes": {"type": "array", "items": {"type": "string"}},
-                                "relationships": {"type": "array", "items": {"type": "object"}},
-                                "relevance_score": {"type": "number"}
-                            }
-                        }
-                    },
-                    "metadata": {
-                        "type": "object"
-                    }
-                }
-            },
-            endpoint="http://archivist:8003/context",
-            version="1.0.0",
-            agent="Archivist"
-        )
-        
-        success = await utcp_client.register_tool(get_context_tool)
-        if success:
-            logger.info("✅ Registered archivist.get_context tool with UTCP Registry")
-        else:
-            logger.error("❌ Failed to register archivist.get_context tool with UTCP Registry")
-            
-        # Register archivist.get_enhanced_context tool
-        get_enhanced_context_tool = ToolDefinition(
-            id="archivist.get_enhanced_context",
-            name="Get Enhanced Context",
-            description="Get enhanced context with QLearning coordination",
-            category="retrieval",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The query to search for context"
-                    },
-                    "keywords": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "description": "Keywords to refine the search"
-                    },
-                    "max_tokens": {
-                        "type": "integer",
-                        "description": "Maximum number of tokens to return",
-                        "default": 1000000
-                    },
-                    "session_id": {
-                        "type": "string",
-                        "description": "The session ID for the request"
-                    }
-                },
-                "required": ["query", "keywords", "max_tokens", "session_id"]
-            },
-            returns={
-                "type": "object",
-                "properties": {
-                    "enhanced_context": {
-                        "type": "string",
-                        "description": "The enhanced context retrieved"
-                    },
-                    "related_memories": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": {"type": "string"},
-                                "content": {"type": "string"},
-                                "relevance_score": {"type": "number"}
-                            }
-                        }
-                    },
-                    "token_count": {
-                        "type": "integer",
-                        "description": "Number of tokens in the enhanced context"
-                    }
-                }
-            },
-            endpoint="http://archivist:8003/enhanced_context",
-            version="1.0.0",
-            agent="Archivist"
-        )
-        
-        success = await utcp_client.register_tool(get_enhanced_context_tool)
-        if success:
-            logger.info("✅ Registered archivist.get_enhanced_context tool with UTCP Registry")
-        else:
-            logger.error("❌ Failed to register archivist.get_enhanced_context tool with UTCP Registry")
-            
-        # Register archivist.memory_query tool
-        memory_query_tool = ToolDefinition(
-            id="archivist.memory_query",
-            name="Memory Query",
-            description="Query memory for related information in the cohesion loop",
-            category="retrieval",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "context_id": {
-                        "type": "string",
-                        "description": "The context ID to query"
-                    },
-                    "max_contexts": {
-                        "type": "integer",
-                        "description": "Maximum number of contexts to retrieve",
-                        "default": 5
-                    }
-                },
-                "required": ["context_id"]
-            },
-            returns={
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "memory_id": {"type": "string"},
-                        "context_id": {"type": "string"},
-                        "content": {"type": "string"},
-                        "timestamp": {"type": "string"},
-                        "relevance_score": {"type": "number"}
-                    }
-                }
-            },
-            endpoint="http://archivist:8003/memory_query",
-            version="1.0.0",
-            agent="Archivist"
-        )
-        
-        success = await utcp_client.register_tool(memory_query_tool)
-        if success:
-            logger.info("✅ Registered archivist.memory_query tool with UTCP Registry")
-        else:
-            logger.error("❌ Failed to register archivist.memory_query tool with UTCP Registry")
-            
-    except Exception as e:
-        logger.error(f"❌ Error registering Archivist tools with UTCP Registry: {e}")
+
 
 # Cleanup on shutdown
 @app.on_event("shutdown")
@@ -1210,3 +1228,37 @@ async def _extract_keywords_from_query(query: str) -> List[str]:
     words = re.findall(r'\b\w+\b', query.lower())
     keywords = [word for word in words if word not in stop_words and len(word) > 2]
     return list(set(keywords))[:20]  # Return unique keywords, limit to 20
+
+
+class QueryMemoryRequest(BaseModel):
+    """Model for query memory requests."""
+    query: str
+
+
+@app.post("/query_memory")
+async def query_memory(request: QueryMemoryRequest):
+    """
+    Endpoint to query the knowledge graph for relevant memory/context.
+    
+    Args:
+        request: QueryMemoryRequest containing the query
+        
+    Returns:
+        Dictionary with context string containing relevant context from the knowledge graph
+    """
+    try:
+        query = request.query
+        logger.info(f"Received query_memory request for query: {query[:100]}...")
+        
+        # For now, we'll return a placeholder response
+        # In a real implementation, this would query the knowledge graph
+        context = f"Relevant context for query: '{query}'\n\n" \
+                  f"This is a placeholder response from the Archivist. In a real implementation, " \
+                  f"this would query the Neo4j knowledge graph for relevant memories and context."
+                  
+        logger.info(f"Returning {len(context)} characters of context")
+        return {"context": context}
+        
+    except Exception as e:
+        logger.error(f"Error processing query_memory request: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

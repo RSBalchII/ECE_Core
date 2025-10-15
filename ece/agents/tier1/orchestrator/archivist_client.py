@@ -59,3 +59,33 @@ class ArchivistClient:
         except Exception as e:
             self.logger.error(f"Error calling Archivist for enhanced context: {str(e)}")
             return {}
+
+    async def query_memory(self, query: str) -> str:
+        """
+        Query the knowledge graph for relevant memory/context.
+        
+        Args:
+            query: The query to search for in the knowledge graph
+            
+        Returns:
+            A string containing relevant context from the knowledge graph
+        """
+        try:
+            self.logger.info(f"Calling Archivist at {self.base_url}/query_memory with query: {query[:100]}...")
+            response = await self.client.post(
+                f"{self.base_url}/query_memory",
+                json={"query": query},
+                timeout=30.0
+            )
+            if response.status_code == 200:
+                result = response.json()
+                # Return the context content
+                context_content = result.get("context", "") if isinstance(result, dict) else str(result)
+                self.logger.info(f"Received context from Archivist: {len(context_content)} characters")
+                return context_content
+            else:
+                self.logger.error(f"Archivist returned status {response.status_code}")
+                return ""
+        except Exception as e:
+            self.logger.error(f"Error calling Archivist for query_memory: {str(e)}")
+            return ""

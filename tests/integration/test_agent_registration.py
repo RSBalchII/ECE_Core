@@ -2,8 +2,8 @@ import pytest
 import asyncio
 import httpx
 from unittest.mock import AsyncMock, patch
-from utcp_client.client import UTCPClient
-from utcp_registry.models.tool import ToolDefinition
+from utcp.utcp_client import UtcpClient
+from utcp.data.tool import Tool
 
 
 @pytest.mark.asyncio

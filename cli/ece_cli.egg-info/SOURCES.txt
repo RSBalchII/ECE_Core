@@ -1,9 +1,0 @@
-README.md
-pyproject.toml
-setup.py
-ece_cli.egg-info/PKG-INFO
-ece_cli.egg-info/SOURCES.txt
-ece_cli.egg-info/dependency_links.txt
-ece_cli.egg-info/entry_points.txt
-ece_cli.egg-info/requires.txt
-ece_cli.egg-info/top_level.txt

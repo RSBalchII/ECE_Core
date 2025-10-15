@@ -15,9 +15,10 @@ import logging
 import subprocess
 import json
 
-# Import UTCP client for tool registration
-from utcp_client.client import UTCPClient
-from utcp_registry.models.tool import ToolDefinition
+# Import UTCP data models for manual creation
+from utcp.data.utcp_manual import UtcpManual
+from utcp.data.tool import Tool
+from utcp_http.http_call_template import HttpCallTemplate
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -305,261 +306,233 @@ async def execute_command_endpoint(request: ExecuteCommandRequest):
         logger.error(f"Error executing command: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize UTCP Client and register FileSystem tools on startup."""
-    # Initialize UTCP Client for tool registration
-    utcp_registry_url = os.getenv("UTCP_REGISTRY_URL", "http://utcp-registry:8005")
-    app.state.utcp_client = UTCPClient(utcp_registry_url)
-    
-    # Register FileSystem tools with UTCP Registry
-    await _register_filesystem_tools(app.state.utcp_client)
-
-async def _register_filesystem_tools(utcp_client: UTCPClient):
-    """Register FileSystem tools with the UTCP Registry."""
-    try:
-        # Register filesystem.list_directory tool
-        list_directory_tool = ToolDefinition(
-            id="filesystem.list_directory",
-            name="List Directory",
-            description="List the contents of a directory",
-            category="filesystem",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "The directory path to list",
-                        "default": "."
+@app.get("/utcp")
+async def utcp_manual():
+    """UTCP Manual endpoint for tool discovery."""
+    # Create UTCP Manual with tools provided by this agent
+    manual = UtcpManual(
+        manual_version="1.0.0",
+        utcp_version="1.0.2",
+        tools=[
+            Tool(
+                name="list_directory",
+                description="List the contents of a directory",
+                tags=["filesystem", "directory", "list"],
+                inputs={
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "The directory path to list",
+                            "default": "."
+                        },
+                        "include_hidden": {
+                            "type": "boolean",
+                            "description": "Whether to include hidden files and directories",
+                            "default": False
+                        }
                     },
-                    "include_hidden": {
-                        "type": "boolean",
-                        "description": "Whether to include hidden files and directories",
-                        "default": False
+                    "required": []
+                },
+                outputs={
+                    "type": "object",
+                    "properties": {
+                        "success": {
+                            "type": "boolean",
+                            "description": "Whether the operation was successful"
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "The absolute path of the directory"
+                        },
+                        "directories": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "List of subdirectories"
+                        },
+                        "files": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "List of files"
+                        },
+                        "total_items": {
+                            "type": "integer",
+                            "description": "Total number of items in the directory"
+                        },
+                        "error": {
+                            "type": "string",
+                            "description": "Error message if operation failed"
+                        },
+                        "timestamp": {
+                            "type": "string",
+                            "description": "Timestamp of the operation"
+                        }
                     }
                 },
-                "required": []
-            },
-            returns={
-                "type": "object",
-                "properties": {
-                    "success": {
-                        "type": "boolean",
-                        "description": "Whether the operation was successful"
+                tool_call_template=HttpCallTemplate(
+                    name="filesystem_list_directory",
+                    call_template_type="http",
+                    url="http://localhost:8006/list_directory",
+                    http_method="POST"
+                )
+            ),
+            Tool(
+                name="read_file",
+                description="Read the contents of a file",
+                tags=["filesystem", "file", "read"],
+                inputs={
+                    "type": "object",
+                    "properties": {
+                        "file_path": {
+                            "type": "string",
+                            "description": "The path to the file to read"
+                        }
                     },
-                    "path": {
-                        "type": "string",
-                        "description": "The absolute path of the directory"
-                    },
-                    "directories": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of subdirectories"
-                    },
-                    "files": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of files"
-                    },
-                    "total_items": {
-                        "type": "integer",
-                        "description": "Total number of items in the directory"
-                    },
-                    "error": {
-                        "type": "string",
-                        "description": "Error message if operation failed"
-                    },
-                    "timestamp": {
-                        "type": "string",
-                        "description": "Timestamp of the operation"
-                    }
-                }
-            },
-            endpoint="http://filesystem-agent:8006/list_directory",
-            version="1.0.0",
-            agent="FileSystemAgent"
-        )
-        
-        success = await utcp_client.register_tool(list_directory_tool)
-        if success:
-            logger.info("✅ Registered filesystem.list_directory tool with UTCP Registry")
-        else:
-            logger.error("❌ Failed to register filesystem.list_directory tool with UTCP Registry")
-        
-        # Register filesystem.read_file tool
-        read_file_tool = ToolDefinition(
-            id="filesystem.read_file",
-            name="Read File",
-            description="Read the contents of a file",
-            category="filesystem",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "The path to the file to read"
+                    "required": ["file_path"]
+                },
+                outputs={
+                    "type": "object",
+                    "properties": {
+                        "success": {
+                            "type": "boolean",
+                            "description": "Whether the operation was successful"
+                        },
+                        "file_path": {
+                            "type": "string",
+                            "description": "The absolute path of the file"
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "The content of the file"
+                        },
+                        "size": {
+                            "type": "integer",
+                            "description": "Size of the file in characters"
+                        },
+                        "error": {
+                            "type": "string",
+                            "description": "Error message if operation failed"
+                        },
+                        "timestamp": {
+                            "type": "string",
+                            "description": "Timestamp of the operation"
+                        }
                     }
                 },
-                "required": ["file_path"]
-            },
-            returns={
-                "type": "object",
-                "properties": {
-                    "success": {
-                        "type": "boolean",
-                        "description": "Whether the operation was successful"
+                tool_call_template=HttpCallTemplate(
+                    name="filesystem_read_file",
+                    call_template_type="http",
+                    url="http://localhost:8006/read_file",
+                    http_method="POST"
+                )
+            ),
+            Tool(
+                name="write_file",
+                description="Write content to a file",
+                tags=["filesystem", "file", "write"],
+                inputs={
+                    "type": "object",
+                    "properties": {
+                        "file_path": {
+                            "type": "string",
+                            "description": "The path to the file to write"
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "The content to write to the file"
+                        }
                     },
-                    "file_path": {
-                        "type": "string",
-                        "description": "The absolute path of the file"
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "The content of the file"
-                    },
-                    "size": {
-                        "type": "integer",
-                        "description": "Size of the file in characters"
-                    },
-                    "error": {
-                        "type": "string",
-                        "description": "Error message if operation failed"
-                    },
-                    "timestamp": {
-                        "type": "string",
-                        "description": "Timestamp of the operation"
-                    }
-                }
-            },
-            endpoint="http://filesystem-agent:8006/read_file",
-            version="1.0.0",
-            agent="FileSystemAgent"
-        )
-        
-        success = await utcp_client.register_tool(read_file_tool)
-        if success:
-            logger.info("✅ Registered filesystem.read_file tool with UTCP Registry")
-        else:
-            logger.error("❌ Failed to register filesystem.read_file tool with UTCP Registry")
-        
-        # Register filesystem.write_file tool
-        write_file_tool = ToolDefinition(
-            id="filesystem.write_file",
-            name="Write File",
-            description="Write content to a file",
-            category="filesystem",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "The path to the file to write"
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "The content to write to the file"
+                    "required": ["file_path", "content"]
+                },
+                outputs={
+                    "type": "object",
+                    "properties": {
+                        "success": {
+                            "type": "boolean",
+                            "description": "Whether the operation was successful"
+                        },
+                        "file_path": {
+                            "type": "string",
+                            "description": "The absolute path of the file"
+                        },
+                        "size": {
+                            "type": "integer",
+                            "description": "Size of the written content in characters"
+                        },
+                        "error": {
+                            "type": "string",
+                            "description": "Error message if operation failed"
+                        },
+                        "timestamp": {
+                            "type": "string",
+                            "description": "Timestamp of the operation"
+                        }
                     }
                 },
-                "required": ["file_path", "content"]
-            },
-            returns={
-                "type": "object",
-                "properties": {
-                    "success": {
-                        "type": "boolean",
-                        "description": "Whether the operation was successful"
+                tool_call_template=HttpCallTemplate(
+                    name="filesystem_write_file",
+                    call_template_type="http",
+                    url="http://localhost:8006/write_file",
+                    http_method="POST"
+                )
+            ),
+            Tool(
+                name="execute_command",
+                description="Execute a shell command",
+                tags=["filesystem", "command", "shell"],
+                inputs={
+                    "type": "object",
+                    "properties": {
+                        "command": {
+                            "type": "string",
+                            "description": "The shell command to execute"
+                        }
                     },
-                    "file_path": {
-                        "type": "string",
-                        "description": "The absolute path of the file"
-                    },
-                    "size": {
-                        "type": "integer",
-                        "description": "Size of the written content in characters"
-                    },
-                    "error": {
-                        "type": "string",
-                        "description": "Error message if operation failed"
-                    },
-                    "timestamp": {
-                        "type": "string",
-                        "description": "Timestamp of the operation"
-                    }
-                }
-            },
-            endpoint="http://filesystem-agent:8006/write_file",
-            version="1.0.0",
-            agent="FileSystemAgent"
-        )
-        
-        success = await utcp_client.register_tool(write_file_tool)
-        if success:
-            logger.info("✅ Registered filesystem.write_file tool with UTCP Registry")
-        else:
-            logger.error("❌ Failed to register filesystem.write_file tool with UTCP Registry")
-        
-        # Register filesystem.execute_command tool
-        execute_command_tool = ToolDefinition(
-            id="filesystem.execute_command",
-            name="Execute Command",
-            description="Execute a shell command",
-            category="filesystem",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "The shell command to execute"
+                    "required": ["command"]
+                },
+                outputs={
+                    "type": "object",
+                    "properties": {
+                        "success": {
+                            "type": "boolean",
+                            "description": "Whether the command executed successfully"
+                        },
+                        "command": {
+                            "type": "string",
+                            "description": "The executed command"
+                        },
+                        "stdout": {
+                            "type": "string",
+                            "description": "Standard output of the command"
+                        },
+                        "stderr": {
+                            "type": "string",
+                            "description": "Standard error output of the command"
+                        },
+                        "return_code": {
+                            "type": "integer",
+                            "description": "Return code of the command"
+                        },
+                        "error": {
+                            "type": "string",
+                            "description": "Error message if operation failed"
+                        },
+                        "timestamp": {
+                            "type": "string",
+                            "description": "Timestamp of the operation"
+                        }
                     }
                 },
-                "required": ["command"]
-            },
-            returns={
-                "type": "object",
-                "properties": {
-                    "success": {
-                        "type": "boolean",
-                        "description": "Whether the command executed successfully"
-                    },
-                    "command": {
-                        "type": "string",
-                        "description": "The executed command"
-                    },
-                    "stdout": {
-                        "type": "string",
-                        "description": "Standard output of the command"
-                    },
-                    "stderr": {
-                        "type": "string",
-                        "description": "Standard error output of the command"
-                    },
-                    "return_code": {
-                        "type": "integer",
-                        "description": "Return code of the command"
-                    },
-                    "error": {
-                        "type": "string",
-                        "description": "Error message if operation failed"
-                    },
-                    "timestamp": {
-                        "type": "string",
-                        "description": "Timestamp of the operation"
-                    }
-                }
-            },
-            endpoint="http://filesystem-agent:8006/execute_command",
-            version="1.0.0",
-            agent="FileSystemAgent"
-        )
-        
-        success = await utcp_client.register_tool(execute_command_tool)
-        if success:
-            logger.info("✅ Registered filesystem.execute_command tool with UTCP Registry")
-        else:
-            logger.error("❌ Failed to register filesystem.execute_command tool with UTCP Registry")
-            
-    except Exception as e:
-        logger.error(f"❌ Error registering FileSystem tools with UTCP Registry: {e}")
+                tool_call_template=HttpCallTemplate(
+                    name="filesystem_execute_command",
+                    call_template_type="http",
+                    url="http://localhost:8006/execute_command",
+                    http_method="POST"
+                )
+            )
+        ]
+    )
+    return manual
 
 if __name__ == "__main__":
     import uvicorn

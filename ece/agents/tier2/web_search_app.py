@@ -15,10 +15,10 @@ import logging
 # Import the WebSearchAgent
 from ece.agents.tier2.web_search_agent import WebSearchAgent
 
-# Import UTCP client for tool registration
-from utcp_client.client import UTCPClient
-from utcp_registry.models.tool import ToolDefinition
-import asyncio
+# Import UTCP data models for manual creation
+from utcp.data.utcp_manual import UtcpManual
+from utcp.data.tool import Tool
+from utcp_http.http_call_template import HttpCallTemplate
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -75,73 +75,59 @@ async def search(request: SearchRequest):
         logger.error(f"Error performing search: {e}")
         raise HTTPException(status_code=500, detail=f"Error performing search: {str(e)}")
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize UTCP Client and register WebSearch tools on startup."""
-    # Initialize UTCP Client for tool registration
-    utcp_registry_url = os.getenv("UTCP_REGISTRY_URL", "http://utcp-registry:8005")
-    app.state.utcp_client = UTCPClient(utcp_registry_url)
-    
-    # Register WebSearch tools with UTCP Registry
-    await _register_websearch_tools(app.state.utcp_client)
-
-async def _register_websearch_tools(utcp_client: UTCPClient):
-    """Register WebSearch tools with the UTCP Registry."""
-    try:
-        # Register websearch.search tool
-        search_tool = ToolDefinition(
-            id="websearch.search",
-            name="Web Search",
-            description="Perform a web search using the Tavily API",
-            category="web",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query to perform"
+@app.get("/utcp")
+async def utcp_manual():
+    """UTCP Manual endpoint for tool discovery."""
+    # Create UTCP Manual with tools provided by this agent
+    manual = UtcpManual(
+        manual_version="1.0.0",
+        utcp_version="1.0.2",
+        tools=[
+            Tool(
+                name="search",
+                description="Perform a web search using the Tavily API",
+                tags=["web", "search"],
+                inputs={
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The search query to perform"
+                        }
+                    },
+                    "required": ["query"]
+                },
+                outputs={
+                    "type": "object",
+                    "properties": {
+                        "success": {
+                            "type": "boolean",
+                            "description": "Whether the search was successful"
+                        },
+                        "query": {
+                            "type": "string",
+                            "description": "The search query performed"
+                        },
+                        "result": {
+                            "type": "string",
+                            "description": "The search results"
+                        },
+                        "error": {
+                            "type": "string",
+                            "description": "Error message if search failed"
+                        }
                     }
                 },
-                "required": ["query"]
-            },
-            returns={
-                "type": "object",
-                "properties": {
-                    "success": {
-                        "type": "boolean",
-                        "description": "Whether the search was successful"
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "The search query performed"
-                    },
-                    "result": {
-                        "type": "string",
-                        "description": "The search results"
-                    },
-                    "error": {
-                        "type": "string",
-                        "description": "Error message if search failed"
-                    },
-                    "timestamp": {
-                        "type": "string",
-                        "description": "Timestamp of the search"
-                    }
-                }
-            },
-            endpoint="http://websearch-agent:8007/search",
-            version="1.0.0",
-            agent="WebSearchAgent"
-        )
-        
-        success = await utcp_client.register_tool(search_tool)
-        if success:
-            logger.info("✅ Registered websearch.search tool with UTCP Registry")
-        else:
-            logger.error("❌ Failed to register websearch.search tool with UTCP Registry")
-            
-    except Exception as e:
-        logger.error(f"❌ Error registering WebSearch tools with UTCP Registry: {e}")
+                tool_call_template=HttpCallTemplate(
+                    name="web_search",
+                    call_template_type="http",
+                    url="http://localhost:8007/search",  # This would need to be configurable in production
+                    http_method="POST"
+                )
+            )
+        ]
+    )
+    return manual
 
 # Cleanup on shutdown
 @app.on_event("shutdown")

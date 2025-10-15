@@ -14,11 +14,14 @@ def create_full_corpus_recursive():
     
     # Define file extensions to process
     text_extensions = ('.json', '.md', '.poml', '.yaml', '.txt', '.py', '.js', '.html', '.css', '.sh', '.ps1')
+    
+    # Define directories to ignore
+    ignore_dirs = ['llama.cpp', '.git', '.venv', '__pycache__', 'node_modules', 'vendor', 'build', 'dist']
 
     files_to_process = []
     for dirpath, dirnames, filenames in os.walk(root_dir):
-        # Skip hidden directories like .venv, .git, .vscode, etc.
-        dirnames[:] = [d for d in dirnames if not d.startswith('.')]
+        # Skip ignored directories
+        dirnames[:] = [d for d in dirnames if d not in ignore_dirs and not d.startswith('.')]
         
         for f in filenames:
             if f.endswith(text_extensions):
@@ -37,16 +40,19 @@ def create_full_corpus_recursive():
         for file_path in files_to_process:
             print(f"Processing '{file_path}'...")
             try:
-                # --- KEY CHANGE: Auto-detect encoding before reading ---
                 with open(file_path, 'rb') as raw_file:
                     raw_data = raw_file.read()
-                    detection = chardet.detect(raw_data)
-                    # Use detected encoding, fall back to utf-8 if confidence is low
-                    encoding = detection['encoding'] if detection['confidence'] > 0.5 else 'utf-8'
-
-                # Decode the raw data using the detected encoding
-                decoded_content = raw_data.decode(encoding, errors='replace')
                 
+                decoded_content = None
+                try:
+                    # Try decoding with UTF-8 first
+                    decoded_content = raw_data.decode('utf-8')
+                except UnicodeDecodeError:
+                    # If UTF-8 fails, use chardet to detect encoding
+                    detection = chardet.detect(raw_data)
+                    encoding = detection['encoding'] if detection['confidence'] > 0.5 else 'latin-1'
+                    decoded_content = raw_data.decode(encoding, errors='replace')
+
                 outfile.write(f"--- START OF FILE: {file_path} ---\n\n")
                 
                 # If it's a JSON file, attempt to extract 'response_content'
@@ -76,7 +82,7 @@ def create_full_corpus_recursive():
             except Exception as e:
                 print(f"An unexpected error occurred with file '{file_path}': {e}")
                 
-    print(f"nCorpus aggregation complete. All content has been saved to '{output_file}'.")
+    print(f"\nCorpus aggregation complete. All content has been saved to '{output_file}'.")
 
 if __name__ == '__main__':
     create_full_corpus_recursive()

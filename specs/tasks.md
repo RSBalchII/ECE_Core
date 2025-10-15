@@ -1,336 +1,194 @@
-# Core ECE Project - Task List v3.2
-## Updated to Reflect Self-Development and Tool Integration
+# ECE - Task List v4.1
 
-This document outlines the tasks required to implement the ECE v3.2 architecture with tool integration capabilities, enabling the system to help write and modify its own code, with completed tasks marked as such.
+This document outlines the high-priority tasks for the current development cycle of the External Context Engine.
 
-## MVP: Implement Core Cohesion Loop - ENHANCED
+---
 
-- [x] **Task 1: Context Cache**
-  - [x] Ensure it is fully operational as a fixed-size, short-term memory buffer with 32GB RAM allocation.
-- [x] **Task 2: Distiller Agent**
-  - [x] Periodically read the entire contents of the Context Cache.
-  - [x] Condense the raw context into a targeted, summarized memory.
-  - [x] Send the condensed memory to the Archivist Agent.
-- [x] **Task 3: Archivist Agent**
-  - [x] Successfully route data between the Q-Learning Agent, Distiller, and Injector.
-  - [x] Intercept and capture truncated data from the Context Cache before it's lost.
-  - [x] **ENHANCED**: Coordinate with QLearning Agent for optimal path finding and context retrieval.
-- [x] **Task 4: Injector Agent**
-  - [x] Check for verbatim duplicates before writing any new data to the graph.
-  - [x] If the data is new, it creates a new node.
-  - [x] If the data is a duplicate, it locates the existing node and appends the new information as a timestamped "additional context".
-- [x] **Task 5: Q-Learning Agent**
-  - [x] Ensure it is operational and actively analyzing the data flow to refine relationships within the graph.
-  - [x] **ENHANCED**: Process up to 1M tokens of context with GPU acceleration (RTX 4090).
+## T-001: Local Development Transition
 
-## Phase 1: Foundational Upgrades - ENHANCED
+**Objective:** Transition the ECE from a Docker-dependent architecture to a fully local, script-based development environment.
 
-- [x] **Task 1.1: Stabilize Core Environment**
-  - [x] Resolve all startup errors and Docker networking issues.
-  - [x] Ensure all Tier 2 agents are correctly configured and communicating with the Ollama server.
-- [x] **Task 1.2: Implement POML Protocol**
-  - [x] Define the core `POML` schemas for inter-agent communication.
-  - [x] Refactor all agent API endpoints to send and receive `POML` directives.
-  - [x] **ENHANCED**: Add metadata to POML for context flow tracking.
+-   **T-001.1:** Update all configuration files (`.env`, `config.yaml`) to use `localhost` for all service URLs (Redis, Neo4j, UTCP Registry, etc.). This includes properly configuring LLM providers as detailed in `spec.md`.
+-   **T-001.2:** Create individual startup scripts (`.bat` or `.sh`) for each agent and service (`Distiller`, `Injector`, `Archivist`, `QLearning`, `UTCP Registry`, `FileSystemAgent`, `WebSearchAgent`).
+-   **T-001.3:** Create a main master script (`start_ece_local.bat`) that launches all necessary services and agents in the correct order.
+-   **T-001.4:** Document the new local setup process in `README.md`.
 
-## Phase 2: Implement Memory Cortex - ENHANCED
+---
 
-- [x] **Task 2.1: Implement ArchivistAgent**
-  - [x] Resolve the `404` error between the Orchestrator and the Archivist.
-  - [x] Implement the `continuous_temporal_scanning` function as a robust, always-on process.
-  - [x] Implement intelligent context retrieval in the `/context` endpoint.
-  - [x] **ENHANCED**: Add `/enhanced_context` endpoint that coordinates with QLearning Agent.
-- [x] **Task 2.2: Implement DistillerAgent**
-  - [x] Create the `DistillerAgent` to summarize and structure data from the Redis cache.
-- [x] **Task 2.3: Implement InjectorAgent and QLearningAgent**
-  - [x] Implement the `InjectorAgent` to persist data to the Neo4j knowledge graph.
-  - [x] Implement the `QLearningAgent` to optimize context retrieval.
-  - [x] Activate the continuous training loop in the `QLearningAgent`.
-  - [x] Improve the reward mechanism and exploration strategy in the `QLearningAgent`.
-  - [x] **ENHANCED**: Process up to 1M tokens with GPU acceleration (PyTorch CUDA).
+## T-012: LLM Configuration and Setup
 
-## Phase 3: Advanced Reasoning Workflows - ENHANCED
+**Objective:** Ensure proper setup and configuration of all supported LLM providers.
 
-- [x] **Task 3.1: Implement Asynchronous Complex Reasoning**
-  - [x] Refactor the `Orchestrator` to handle complex reasoning tasks asynchronously.
-  - [x] Implement a polling mechanism in the client to retrieve the results of complex reasoning tasks.
-  - [x] **ENHANCED**: Ensure all agents read full context cache before responding.
-- [x] **Task 3.2: Implement Exploratory Problem-Solving Loop**
-  - [x] Create the `ExplorerAgent` and `CritiqueAgent`.
-  - [x] Develop the secure `SandboxModule` for code execution.
-  - [x] Implement the iterative, score-based loop logic within the `Orchestrator`.
+-   **T-012.1:** Verify Ollama provider configuration and connectivity.
+-   **T-012.2:** Verify Docker Desktop provider configuration and connectivity.
+-   **T-012.3:** Implement automated setup script for llama.cpp if not already available on the system.
+-   **T-012.4:** Document Windows-specific setup procedures for llama.cpp in the project specifications.
+-   **T-012.5:** Create validation tests to ensure each LLM provider works correctly with the ECE.
 
-## Phase 4: Improve Conversational Flow - ENHANCED
+---
 
-- [x] **Task 4.1: Enhance Final Response Generation**
-  - [x] Modify the `OrchestratorAgent` to use the context from the cache and the synthesized thoughts from the thinkers to generate a final, more conversational response.
-  - [x] **ENHANCED**: Ensure all agents read the full context cache before responding to users.
+## T-002: Performance Optimization with Cython/C++
 
-## Phase 5: Context Cache Solidification - ENHANCED
+**Objective:** Identify and optimize performance-critical bottlenecks by integrating C++ code via Cython.
 
-- [x] **Task 5.1: Solidify Context Cache Functionality**
-  - [x] Ensure robust population of the Context Cache during multi-step conversations.
-  - [x] Verify successful utilization of cached content to inform subsequent responses.
-  - [x] Implement comprehensive unit and integration tests for the Context Cache.
-  - [x] **ENHANCED**: Ensure context is properly appended to the Redis cache before passing to other agents.
+-   **T-002.1:** Profile the ECE application using `cProfile` and `snakeviz` to identify hotspots, particularly within the `QLearningAgent` and `DistillerAgent`.
+-   **T-002.2:** Rewrite the identified bottleneck functions (e.g., Q-table updates, pathfinding algorithms) in C++.
+-   **T-002.3:** Create Cython wrapper files (`.pyx`) to bridge the new C++ code with the existing Python codebase.
+-   **T-002.4:** Implement a `setup.py` file to compile the Cython extensions.
+-   **T-002.5:** Integrate the compiled, high-performance modules back into the Python agents.
 
-## Phase 6: Advanced System Enhancements - IN PROGRESS
+## T-005: Phase 3 - Performance Profiling and Optimization
 
-- [ ] **Task 6.1: Implement "Vault" Agent (Tier 0 Security)**
-  - [ ] Design and implement the `VaultAgent` as the first point of contact for all external inputs.
-  - [ ] Integrate input sanitization and threat detection mechanisms.
-  - [ ] Develop quarantine and alert protocols, including secure logging.
-- [x] **Task 6.2: Refactor for POML Inter-Agent Communication**
-  - [x] Update all agents to format their outputs into the new POML structure.
-  - [x] Modify `ArchivistAgent` and `QLearningAgent` to parse POML blocks and utilize metadata for richer graph creation.
-  - [x] **ENHANCED**: Add context flow metadata to POML blocks.
-- [ ] **Task 6.3: Implement "Janitor" Agent (Memory & Graph Hygiene)**
-  - [ ] Design and implement the `JanitorAgent` for asynchronous graph maintenance.
-  - [ ] Implement organic POML conversion for legacy nodes.
-  - [ ] Develop data integrity checks (e.g., ISO 8601 timestamp standardization).
-  - [ ] Implement de-duplication logic for graph nodes.
-- [ ] **Task 6.4: Implement "Oculus" Agent (Tier 1 Visual Cortex & Motor Control)**
-  - [ ] Integrate a screen capture utility.
-  - [ ] Develop or integrate a Visual Language Model (VLM) for UI understanding.
-  - [ ] Implement an input control library for programmatic mouse and keyboard control.
-  - [ ] Design and implement the See-Think-Act operational loop for visual interaction.
+**Objective:** Execute the full Phase 3 plan for performance profiling and optimization using C++ and Cython.
 
-## Phase 7: Enhanced Context Flow Implementation - COMPLETED
+-   **T-005.1:** Conduct comprehensive profiling of the ECE stack under load using `cProfile` and `snakeviz` to identify bottlenecks across all agents.
+-   **T-005.2:** Focus on the `QLearningAgent` for initial optimization, identifying the most computationally expensive functions (e.g., Q-table updates, pathfinding algorithms).
+-   **T-005.3:** Design and implement C++ equivalents of the most critical bottleneck functions identified in profiling.
+-   **T-005.4:** Create Cython integration layer to bridge C++ implementations with existing Python codebase.
+-   **T-005.5:** Update `setup.py` to include all new Cython extensions and C++ compilation steps.
+-   **T-005.6:** Integrate optimized modules back into the ECE agents and conduct benchmarking tests.
+-   **T-005.7:** Document performance improvements achieved and update development guidelines to include C++/Cython optimization workflow.
 
-- [x] **Task 7.1: Implement Orchestrator-Agent Coordination**
-  - [x] Modify the Orchestrator's `_get_context` method to properly coordinate with Archivist.
-  - [x] Add `_prepare_context_aware_prompt` method for enhanced context-aware prompts.
-  - [x] Update `process_prompt` to use enhanced context flow.
-  - [x] **ENHANCED**: Implement proper coordination between Orchestrator, Archivist, and QLearning Agent.
-- [x] **Task 7.2: Implement Archivist Client Updates**
-  - [x] Add `get_enhanced_context` method for detailed context requests.
-  - [x] Update existing methods with backward compatibility.
-- [x] **Task 7.3: Implement Enhanced Archivist Agent**
-  - [x] Add `/enhanced_context` endpoint that coordinates with QLearning Agent.
-  - [x] Process up to 1M tokens of context as requested.
-  - [x] Store enhanced context in Redis cache for other agents.
-- [x] **Task 7.4: Implement QLearning Agent Token Processing**
-  - [x] Enhance QLearning Agent to process up to 1M tokens of context.
-  - [x] Add GPU acceleration support with PyTorch CUDA.
-  - [x] Implement token-aware summarization within LLM limits.
-- [x] **Task 7.5: Implement Cache Management**
-  - [x] Extend Cache Manager with context-aware storage.
-  - [x] Ensure all agents read full context cache before responding.
-- [x] **Task 7.6: Implement Context Flow Verification**
-  - [x] Create test suite to verify context flow implementation.
-  - [x] Validate that all agents read full context cache.
+---
 
-## Phase 8: Performance Optimization - COMPLETED
+## T-003: Core Logic Hardening
 
-- [x] **Task 8.1: Implement GPU Acceleration**
-  - [x] Configure PyTorch with CUDA support for RTX 4090.
-  - [x] Implement GPU-accelerated embedding generation.
-  - [x] Add batch processing for large contexts.
-- [x] **Task 8.2: Implement Memory Pooling**
-  - [x] Allocate 32GB RAM to cache pool as requested.
-  - [x] Implement token-aware caching strategies.
-  - [x] Add connection pooling for Neo4j and Redis.
-- [x] **Task 8.3: Implement Performance Monitoring**
-  - [x] Add Prometheus metrics collection.
-  - [x] Implement structured logging with correlation IDs.
-  - [x] Add health check endpoints for all services.
+**Objective:** Address the known prompt-sizing issue to improve system stability.
 
-## Phase 9: Production Readiness - COMPLETED
+-   **T-003.1:** Analyze the `OrchestratorAgent` and its interaction with the `llama.cpp` server to identify the root cause of the `context overflow` and `invalid argument` errors.
+-   **T-003.2:** Implement logic within the ECE to intelligently truncate or manage prompts, ensuring they do not exceed the `llama.cpp` server's configured context window (currently stabilized at 32k).
+-   **T-003.3:** Add unit tests to verify that oversized prompts are handled gracefully.
 
-- [x] **Task 9.1: Implement Error Handling**
-  - [x] Add comprehensive exception handling with detailed logging.
-  - [x] Implement graceful degradation for partial failures.
-  - [x] Add circuit breaker patterns for resilience.
-- [x] **Task 9.2: Implement Security Measures**
-  - [x] Add rate limiting (100 requests/minute/IP).
-  - [x] Implement request validation with Pydantic.
-  - [x] Add SQL injection prevention (Cypher parameterization).
-  - [x] Implement WebSocket authentication tokens.
-- [x] **Task 9.3: Implement Testing Framework**
-  - [x] Add 95%+ test coverage for all new components.
-  - [x] Implement integration tests for agent communication.
-  - [x] Add performance benchmarks for token processing.
-- [x] **Task 9.4: Implement Documentation**
-  - [x] Add comprehensive documentation for all components.
-  - [x] Create user guides for context-aware prompts.
-  - [x] Document performance optimization strategies.
+## T-006: Phase 4 - Core Logic and Stability Enhancements
 
-## Phase 10: Tool Integration - NEW
+**Objective:** Execute the full Phase 4 plan to resolve context overflow issues and improve system stability.
 
-- [ ] **Task 10.1: Implement FileSystemAgent**
-  - [ ] Design and implement the `FileSystemAgent` for secure file operations
-  - [ ] Implement read, write, create, and delete operations with security boundaries
-  - [ ] Integrate with the context cache to store file contents
-  - [ ] Implement `execute_command` for general file and system interaction
-- [ ] **Task 10.2: Implement WebSearchAgent**
-  - [ ] Enhance existing `WebSearchAgent` to use Tavily API with current key
-  - [ ] Implement rate limiting and safe search parameters
-  - [ ] Add result storage in context cache for future reference
-  - [ ] Integrate fact-checking and trend analysis capabilities
-- [ ] **Task 10.3: Update Orchestrator Decision Tree**
-  - [ ] Add routing logic for file operations to `FileSystemAgent`
-  - [ ] Add routing logic for web searches to `WebSearchAgent`
-  - [ ] Update `config.yaml` with new agent definitions
-  - [ ] Test tool access flow integration
-- [ ] **Task 10.4: Implement Security Boundaries**
-  - [ ] Define read/write boundaries for `FileSystemAgent`
-  - [ ] Implement rate limiting for `WebSearchAgent`
-  - [ ] Add audit logging for all tool access
-  - [ ] Create security review for tool access patterns
+-   **T-006.1:** Implement robust prompt truncation and management logic within the `OrchestratorAgent` using token counting and intelligent content preservation techniques.
+-   **T-006.2:** Develop a context-aware prompt manager that can dynamically adjust content based on model capabilities and context window limits.
+-   **T-006.3:** Enhance error handling and reporting across all agents with detailed logging for debugging context overflow issues.
+-   **T-006.4:** Create a comprehensive integration test suite specifically targeting prompt management and context overflow scenarios.
+-   **T-006.5:** Implement graceful fallback strategies when context limits are reached, including summarization or chunking approaches.
+-   **T-006.6:** Add detailed metrics and monitoring for prompt sizes and context usage across the system.
+-   **T-006.7:** Update documentation to include best practices for prompt management and context handling.
 
-## Phase 11: CLI Interface Development - NEW
+---
 
-- [ ] **Task 11.1: Design ECE-CLI Architecture**
-  - [ ] Create CLI architecture based on Gemini/Qwen CLI models
-  - [ ] Define session management system with persistent context
-  - [ ] Plan rich output formatting supporting POML emotional lexicon
-  - [ ] Design configuration management for local Ollama models
-- [ ] **Task 11.2: Implement Basic CLI Framework**
-  - [ ] Create CLI entry point using typer/click framework
-  - [ ] Implement basic command structure and help system
-  - [ ] Set up configuration file handling
-  - [ ] Create ECE API client for communication with orchestrator
-- [ ] **Task 11.3: Implement Session Management**
-  - [ ] Create persistent session storage between CLI runs
-  - [ ] Implement conversation history navigation
-  - [ ] Add session naming and switching capabilities
-  - [ ] Create context anchoring functionality
-- [ ] **Task 11.4: Implement Rich Output Formatting**
-  - [ ] Add support for POML emotional lexicon display
-  - [ ] Implement markdown and code block rendering
-  - [ ] Add syntax highlighting for code responses
-  - [ ] Create response metadata display
+## T-004: Application Packaging
 
-## Phase 12: CLI Quality of Life Improvements - NEW
+**Objective:** Package the entire ECE application into a single, distributable executable.
 
-- [ ] **Task 12.1: Implement Text Editing Enhancements**
-  - [ ] Fix arrow key navigation to properly move cursor position instead of creating invisible characters
-  - [ ] Implement proper text editing capabilities with cursor movement
-  - [ ] Add command history access with up/down arrow keys
-  - [ ] Enable text selection and editing within the input field
-- [ ] **Task 12.2: Create Professional Welcome Screen**
-  - [ ] Design attractive startup screen similar to Gemini/Qwen CLIs
-  - [ ] Add branding as "local-cli" to emphasize independence from corporate platforms
-  - [ ] Include usage instructions and helpful tips for new users
-  - [ ] Display system status and connection information
-- [ ] **Task 12.3: Enhance Command Experience**
-  - [ ] Add autocomplete functionality for common commands
-  - [ ] Implement smooth command history with search capability
-  - [ ] Add visual feedback during processing
-  - [ ] Improve error handling and user feedback
-- [ ] **Task 12.4: Performance and Customization**
-  - [ ] Optimize response times and interaction smoothness
-  - [ ] Add user-configurable appearance settings
-  - [ ] Implement theming options for the CLI interface
-  - [ ] Add keyboard shortcuts and advanced navigation options
+-   **T-004.1:** Install and configure **PyInstaller**.
+-   **T-004.2:** Create a main entry point script (`run_all_agents.py`) that initializes and runs all agent FastAPI applications.
+-   **T-004.3:** Develop a build script (`build.bat`) that uses PyInstaller to package the application, ensuring all necessary data files (`config.yaml`, `.env`, and the `ece` directory) are included.
+-   **T-004.4:** Test the generated executable to ensure all agents start and communicate correctly in the packaged environment.
 
-## Phase 12: UTCP Integration - NEW
+## T-007: Phase 5 - Packaging and Distribution
 
-- [ ] **Task 12.1: Implement UTCP Tool Registry Service**
-  - [ ] Design and implement the central UTCP Tool Registry for tool discovery
-  - [ ] Implement API endpoints for tool registration and discovery
-  - [ ] Create tool definition schema validation
-  - [ ] Add health check and monitoring endpoints
-- [ ] **Task 12.2: Implement UTCP Client Library**
-  - [ ] Design and implement the standardized UTCP client interface
-  - [ ] Implement tool discovery functionality
-  - [ ] Implement tool calling functionality with parameter validation
-  - [ ] Add error handling and retry mechanisms
-- [ ] **Task 12.3: Agent Tool Registration**
-  - [ ] Update Orchestrator to register its tools (process_prompt, get_analysis_result) with the UTCP Registry
-  - [ ] Update Archivist to register its tools (get_context, get_enhanced_context, memory_query) with the UTCP Registry
-  - [ ] Update Distiller to register its tools (process_text) with the UTCP Registry
-  - [ ] Update QLearning to register its tools (find_optimal_path, refine_relationships) with the UTCP Registry
-  - [ ] Update Injector to register its tools (data_to_inject, get_or_create_timenode, link_memory_to_timenode) with the UTCP Registry
-- [ ] **Task 12.4: Replace Bespoke HTTP Clients with UTCP Calls**
-  - [ ] Replace Orchestrator's ArchivistClient with UTCP tool calls
-  - [ ] Replace Archivist's clients (DistillerClient, QLearningAgentClient, InjectorClient) with UTCP tool calls
-  - [ ] Maintain backward compatibility during transition
-  - [ ] Remove deprecated HTTP client code after migration
+**Objective:** Execute the full Phase 5 plan to package the ECE into a distributable executable.
 
-## Phase 13: Self-Development Capabilities - NEW
+-   **T-007.1:** Configure PyInstaller with proper hooks and spec file to handle all ECE dependencies including FastAPI, async components, and C++ extensions.
+-   **T-007.2:** Create a comprehensive build script that automates the entire packaging process for different platforms (Windows, Linux, macOS).
+-   **T-007.3:** Implement a bootstrapping mechanism in the packaged application to check for required services (Neo4j, Redis) before starting agents.
+-   **T-007.4:** Add embedded configuration files to the executable to simplify deployment.
+-   **T-007.5:** Create distribution testing procedures to verify the executable works correctly on clean systems without Python dependencies.
+-   **T-007.6:** Document the packaging process and deployment requirements for end users.
+-   **T-007.7:** Implement versioning and update mechanisms for the packaged application.
 
-- [ ] **Task 13.1: Design Self-Development Flow**
-  - [ ] Define requirements for ECE to understand its own codebase
-  - [ ] Create specification for self-analysis patterns
-  - [ ] Plan iterative improvement loops
-- [ ] **Task 13.2: Implement Code Reading Capability**
-  - [ ] Enable ECE to read its own source files via `FileSystemAgent`
-  - [ ] Store code files in context cache with proper parsing
-  - [ ] Create code understanding patterns
-- [ ] **Task 13.3: Implement Code Writing Capability**
-  - [ ] Enable ECE to modify its own files with proper validation
-  - [ ] Implement safeguards against breaking changes
-  - [ ] Create version control integration
-- [ ] **Task 13.4: Implement Self-Verification**
-  - [ ] Create test generation for code changes
-  - [ ] Implement validation against specifications
-  - [ ] Add build/test automation for self-modifications
+---
 
-## Additional Features Implemented
+## Phase 17: Architectural Evolution (Markovian Thinking)
 
-### Cohesion Loop - ENHANCED
-- [x] Periodic analysis every 5 seconds
-- [x] Timeline synthesis
-- [x] Memory querying with resource limits
-- [x] Self-sustaining memory system
-- [x] **ENHANCED**: Context-aware processing with full cache reading
+-   **TASK-17.3: Implement TRM Service Client**
+    -   **Description:** Develop a generic `TRM_Client` class in Python. This class will be responsible for communicating with the specialized TRM Service (the "Markovian Thinker") running on a separate port (e.g., 8081).
+-   **TASK-17.4: Implement Markovian Loop in Orchestrator**
+    -   **Description:** Refactor the `OrchestratorAgent` to implement the full Markovian reasoning loop as described in `specs/reasoning_flow.md`. This involves:
+        1.  Calling the Primary LLM for the initial draft.
+        2.  Iteratively calling the `TRM_Client` for refinement.
+        3.  Managing the "carryover" state between chunks.
+        4.  Sending the final, polished thought process to the Primary LLM for the final answer.
 
-### Model Loading - ENHANCED
-- [x] Full model loading (37/37 layers) for all agents
-- [x] Environment variables configured in docker-compose.yml
-- [x] num_gpu_layers parameter added to all Ollama API calls
-- [x] **ENHANCED**: GPU acceleration with PyTorch CUDA
+## T-008: Phase 17 - Markovian Thinking Implementation
 
-### Documentation - ENHANCED
-- [x] README.md updated with Cohesion Loop details
-- [x] Technical specifications created
-- [x] Implementation examples provided
-- [x] **ENHANCED**: Spec-Kit compliance validation
+**Objective:** Execute the full Phase 17 plan to implement the Markovian Thinking paradigm.
 
-### Tool Integration - PLANNED
-- [ ] File system access for self-modification
-- [ ] Web search capabilities using Tavily API
-- [ ] Self-development and code modification flows
-- [ ] Enhanced agent coordination for autonomous development
+-   **T-008.1:** [COMPLETED] Develop the TRM_Client class for communicating with the specialized TRM Service.
+-   **T-008.2:** [COMPLETED] Create a TRM service mock or implementation that can perform iterative refinement.
+-   **T-008.3:** [COMPLETED] Refactor OrchestratorAgent to implement the Markovian reasoning loop.
+-   **T-008.4:** [COMPLETED] Implement carryover state management between reasoning chunks.
+-   **T-008.5:** [COMPLETED] Add configuration options to enable/disable Markovian thinking for specific queries.
+-   **T-008.6:** [IN PROGRESS] Create integration tests for the Markovian reasoning workflow.
+-   **T-008.7:** [IN PROGRESS] Document the Markovian thinking implementation and usage.
 
-## Current Implementation Status Summary
+## T-014: Phase 19 - Enhanced Markovian Integration
 
-✅ **Fully Implemented Components:**
-- All MVP components (Context Cache, Distiller, Archivist, Injector, QLearning)
-- POML communication protocol
-- Continuous temporal scanning
-- Asynchronous complex reasoning
-- Context cache solidification
-- Core environment stabilization
-- Enhanced context flow implementation
-- 1M token processing with GPU acceleration
-- Full context cache reading by all agents
+**Objective:** Fully integrate Markovian Thinking with the EnhancedOrchestratorAgent and ensure robust operation.
 
-🔄 **In Progress:**
-- Vault Agent (Security Layer)
-- Janitor Agent (Maintenance)
-- Oculus Agent (Visual Cortex)
+-   **T-014.1:** [COMPLETED] Implement the Markovian reasoning analyzer to determine when to use Markovian thinking vs. parallel thinking.
+-   **T-014.2:** [COMPLETED] Integrate the MarkovianThinker class with the EnhancedOrchestratorAgent.
+-   **T-014.3:** [COMPLETED] Implement proper error handling and fallback mechanisms from Markovian to parallel thinking.
+-   **T-014.4:** [COMPLETED] Optimize chunk size and state carryover parameters based on performance testing.
+-   **T-014.5:** [IN PROGRESS] Create comprehensive test suite for Markovian reasoning functionality.
+-   **T-014.6:** [IN PROGRESS] Document performance characteristics and ideal use cases for Markovian reasoning.
 
-⏸️ **Planned for Self-Development:**
-- Tool agents (FileSystemAgent, WebSearchAgent)
-- Self-modification capabilities
-- Autonomous development flows
-- Enhanced decision tree routing
+## T-015: Phase 20 - Multi-Agent Coordination Implementation
 
-The ECE system is currently functioning with all core MVP components operational and integrated. The system demonstrates the complete Core Cohesion Loop with continuous temporal scanning and POML-based inter-agent communication, plus the enhanced context flow that coordinates between Orchestrator, Archivist, and QLearning Agent for up to 1M token processing with GPU acceleration. The next phase focuses on enabling the system to access and modify its own codebase through integrated tool agents.
+**Objective:** Implement enhanced coordination between agents based on research findings from "Emergent Coordination in Multi-Agent Language Models".
 
-## Phase 14: Llama.cpp Integration - NEW
+-   **T-015.1:** [COMPLETED] Assign detailed personas to each thinker agent to create stable identity-linked differentiation.
+-   **T-015.2:** [COMPLETED] Implement Theory of Mind (ToM) instructions for thinkers to consider other agents' likely actions.
+-   **T-015.3:** [COMPLETED] Add coordination analysis metrics (synergy, diversity, complementarity) to measure collective intelligence.
+-   **T-015.4:** [COMPLETED] Update thinker communication to incorporate ToM considerations during parallel thinking.
+-   **T-015.5:** [IN PROGRESS] Validate coordination improvements through performance testing and metrics analysis.
+-   **T-015.6:** [PENDING] Document coordination analysis tools and their interpretation for system optimization.
 
-- [ ] **Task 14.1: Implement Llama.cpp Provider**
-  - [ ] Develop a new provider for Llama.cpp in `llm_providers`.
-  - [ ] Ensure it's compatible with the existing `LLMProvider` interface.
-- [ ] **Task 14.2: Update Configuration**
-  - [ ] Add `llama_cpp` to the `config.yaml` with appropriate settings (e.g., `model_path`, `api_base`).
-  - [ ] Update `llm_configuration.md` to reflect the new provider.
-- [ ] **Task 14.3: Docker Integration**
-  - [ ] Add a new service to `docker-compose.yml` for the Llama.cpp server.
-  - [ ] Ensure the ECE can connect to the Llama.cpp container.
-- [ ] **Task 14.4: Testing and Validation**
-  - [ ] Create unit and integration tests for the Llama.cpp provider.
-  - [ ] Validate that the ECE can generate responses using Llama.cpp.
+## T-013: Phase 18 - Enhanced Orchestrator Implementation
+
+**Objective:** Execute the full Phase 18 plan to implement the EnhancedOrchestratorAgent with improved context management, parallel thinking, and response synthesis.
+
+-   **T-013.1:** Implement the `process_prompt_with_context_management` method with proper context overflow prevention.
+-   **T-013.2:** Develop parallel thinking architecture with multiple specialized thinkers.
+-   **T-013.3:** Create synthesis thinker to combine insights from multiple sources into coherent responses.
+-   **T-013.4:** Integrate ArchivistClient for knowledge retrieval and context management.
+-   **T-013.5:** Implement robust error handling for individual thinker failures.
+-   **T-013.6:** Create integration tests for the EnhancedOrchestratorAgent's processing flow.
+-   **T-013.7:** Ensure backward compatibility with existing endpoints and update documentation.
+
+---
+
+## T-009: Phase 6 - System Validation & GUI Testing
+
+**Objective:** Execute comprehensive end-to-end validation of the ECE system.
+
+-   **T-009.1:** Design comprehensive test scenarios covering all ECE functionality.
+-   **T-009.2:** Perform end-to-end testing of the complete workflow from user input to final output.
+-   **T-009.3:** Validate GUI integration with all ECE components.
+-   **T-009.4:** Test Markovian reasoning loop with complex real-world queries.
+-   **T-009.5:** Conduct performance testing under load with multiple concurrent requests.
+-   **T-009.6:** Identify and document any bugs or integration issues.
+-   **T-009.7:** Create automated test suites for ongoing validation.
+
+---
+
+## T-010: Phase 7 - TRM Fine-Tuning & Specialization
+
+**Objective:** Replace the mock TRM service with a fine-tuned specialized model.
+
+-   **T-010.1:** Create a dataset of critique and refined_plan examples for fine-tuning.
+-   **T-010.2:** Fine-tune the AI21-Jamba-Reasoning-3B model on the custom dataset.
+-   **T-010.3:** Deploy the fine-tuned model locally on port 8081.
+-   **T-010.4:** Validate the fine-tuned TRM service performance against the mock.
+-   **T-010.5:** Optimize the fine-tuned model for latency and accuracy.
+-   **T-010.6:** Document the fine-tuning process and results.
+
+---
+
+## T-011: Phase 8 - Continuous Improvement & Co-Evolution
+
+**Objective:** Implement continuous improvement processes for ongoing system evolution.
+
+-   **T-011.1:** Implement performance monitoring and profiling tools for ongoing optimization.
+-   **T-011.2:** Identify additional tasks suitable for specialized TRM models.
+-   **T-011.3:** Develop processes for continuous knowledge graph curation and expansion.
+-   **T-011.4:** Enhance self-modification capabilities for codebase understanding.
+-   **T-011.5:** Create quality assurance procedures for ongoing validation.
+-   **T-011.6:** Document the continuous improvement processes and protocols.
