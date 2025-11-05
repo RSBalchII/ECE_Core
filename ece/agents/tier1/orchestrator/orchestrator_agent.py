@@ -97,12 +97,12 @@ class EnhancedOrchestratorAgent:
             llm_model = provider_config.get(
                 "model", provider_config.get("model_path", "default-model")
             )
-            api_base = provider_config.get("api_base", "http://localhost:11434/v1")
+            api_base = provider_config.get("api_base", "http://localhost:8080/v1")
             logger.debug(f"LLM model: {llm_model}, API base: {api_base}")
 
             # Get synthesis model from config or environment
-            synthesis_model = self.config_loader.get(
-                "ThinkerAgent.synthesis_model", llm_model
+            synthesis_model = provider_config.get(
+                "synthesis_model", llm_model
             )
             logger.debug(f"Synthesis model: {synthesis_model}")
 
@@ -317,7 +317,7 @@ class EnhancedOrchestratorAgent:
                         "Detected need for filesystem operations in Markovian thinking"
                     )
                     try:
-                        fs_result = await self.handle_filesystem_request()
+                        fs_result = await self.handle_filesystem_request(path=".")
                         tool_results.append({"type": "filesystem", "result": fs_result})
                     except Exception as e:
                         self.logger.error(
@@ -330,7 +330,7 @@ class EnhancedOrchestratorAgent:
                         "Detected need for web search operations in Markovian thinking"
                     )
                     try:
-                        web_result = await self.handle_web_search_request(user_prompt)
+                        web_result = await self.handle_web_search_request(query=user_prompt)
                         tool_results.append(
                             {"type": "web_search", "result": web_result}
                         )

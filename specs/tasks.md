@@ -133,13 +133,13 @@ The issue has been successfully resolved by:
 
 ## T-026: Phase 26 - Building and Packaging Documentation
 
-**Objective:** Consolidate all building and packaging documentation according to the project's documentation policy.
+**Objective:** Consolidate all building and packaging documentation according to the project's strict documentation policy that only allows specific markdown files.
 
 -   **T-026.1:** [COMPLETED] Remove BUILDING.md file from utility_scripts directory as per documentation policy.
 -   **T-026.2:** [COMPLETED] Integrate all building and packaging instructions into specs/spec.md.
 -   **T-026.3:** [COMPLETED] Update README.md to reference the correct documentation location.
--   **T-026.4:** [COMPLETED] Ensure all build instructions are accessible from allowed documentation locations.
--   **T-026.5:** [COMPLETED] Verify compliance with documentation policy that only allows README.md, QWEN.md and specs//** as markdown files.
+-   **T-026.4:** [COMPLETED] Ensure all build instructions are accessible only from the allowed documentation locations: README.md, QWEN.md, specs/plan.md, specs/tasks.md, specs/spec.md, and specs/changelog.md.
+-   **T-026.5:** [COMPLETED] Verify compliance with documentation policy that only allows these specific markdown files: README.md, QWEN.md, specs/plan.md, specs/tasks.md, specs/spec.md, and specs/changelog.md.
 
 ---
 

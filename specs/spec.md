@@ -183,22 +183,35 @@ To use the llama.cpp provider, build the llama.cpp project on Windows:
 
 The system is designed to achieve state-of-the-art reasoning capabilities on local hardware by implementing principles from cutting-edge research.
 
-## 4. Documentation and Changelog Policy
+## 4. Documentation Policy
 
 To maintain organization and consistency, the ECE project follows a strict documentation policy:
+
+### Allowed Markdown Files
+
+Only the following markdown files are permitted to be created or modified in this project:
+
+#### Root Directory Files
+- `README.md` - Project overview and main documentation
+- `QWEN.md` - System documentation and specifications
+
+#### Specific Specs Directory Files
+- `specs/plan.md` - Development plan and roadmap
+- `specs/tasks.md` - Task tracking and progress
+- `specs/spec.md` - Technical specifications (this file)
+- `specs/changelog.md` - System changelog and version history
+
+### Documentation Guidelines
+- No additional markdown files should be created outside of the allowed locations
+- All project documentation must be integrated into either the root documentation files (README.md, QWEN.md) or the four specific spec files listed above
+- Session summaries and development logs belong in the specs directory, incorporated into the allowed files
+- Content from any unauthorized documentation files must be consolidated into the permitted files
 
 ### Changelog Management
 - `specs/changelog.md` - Contains the system changelog with version history and changes
 - All significant changes, features, and fixes must be documented in the changelog
 - The changelog follows the format described in Keep a Changelog specification
 - Entries should include Added, Changed, Deprecated, Removed, Fixed, and Security sections as appropriate
-
-### Documentation Locations
-- All markdown documentation must be placed in allowed locations only:
-  - Root directory: README.md, QWEN.md
-  - Specs directory: All spec/*.md files including changelog.md
-- No markdown files should be created outside of these allowed locations
-- Session summaries and development logs belong in the specs directory
 
 ### 3.1. Cognitive Model: Markovian Thinking
 

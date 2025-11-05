@@ -113,13 +113,13 @@ This document outlines the updated phased development plan for the External Cont
 
 ## T-026: Phase 26 - Building and Packaging Documentation (Completed)
 
-**Goal:** Consolidate all building and packaging documentation according to the project's documentation policy.
+**Goal:** Consolidate all building and packaging documentation according to the project's strict documentation policy that only allows specific markdown files.
 
 1.  **T-026.1:** [COMPLETED] Remove BUILDING.md file from utility_scripts directory as per documentation policy.
 2.  **T-026.2:** [COMPLETED] Integrate all building and packaging instructions into specs/spec.md.
 3.  **T-026.3:** [COMPLETED] Update README.md to reference the correct documentation location.
-4.  **T-026.4:** [COMPLETED] Ensure all build instructions are accessible from allowed documentation locations.
-5.  **T-026.5:** [COMPLETED] Verify compliance with documentation policy that only allows README.md, QWEN.md and specs//** as markdown files.
+4.  **T-026.4:** [COMPLETED] Ensure all build instructions are accessible from allowed documentation locations only (README.md, QWEN.md, specs/plan.md, specs/tasks.md, specs/spec.md, specs/changelog.md).
+5.  **T-026.5:** [COMPLETED] Verify compliance with documentation policy that only allows specific markdown files: README.md, QWEN.md, and only specific files in specs/ directory (plan.md, tasks.md, spec.md, changelog.md).
 
 ---
 

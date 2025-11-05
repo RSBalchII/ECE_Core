@@ -90,7 +90,13 @@ The system will first check for environment variables, then fall back to values 
 The ECE requires several Python packages for full functionality. Install all required dependencies using:
 
 ```bash
-uv pip install -r requirements.txt
+uv pip install -e .
+```
+
+Or sync dependencies using the uv lock file:
+
+```bash
+uv sync
 ```
 
 Key dependencies include:
@@ -98,29 +104,29 @@ Key dependencies include:
 - **Database**: `neo4j` for knowledge graph storage, `redis` for caching
 - **Web Framework**: `fastapi` for agent APIs, `uvicorn` for ASGI server
 - **LLM Integration**: Various packages for different LLM providers (Ollama, llama.cpp, etc.)
+- **UTCP Integration**: `utcp`, `utcp-http`, `utcp-mcp` for Universal Tool Calling Protocol
+- **Model Context Protocol**: `websockets`, `mcp` for standardized tool communication
 
 ## 📝 Documentation Policy
 
 The ECE project follows a strict documentation policy to maintain organization and clarity. Only the following markdown files are permitted to be created or modified in this project:
 
 ### Allowed Root Directory Files
-- `@README.md` - Project overview and main documentation (this file)
-- `@QWEN.md` - System documentation and specifications
+- `README.md` - Project overview and main documentation (this file)
+- `QWEN.md` - System documentation and specifications
 
-### Allowed Specs Directory Files (`@specs//**`)
-All markdown files in the `specs/` directory are allowed, including:
+### Specific Allowed Spec Files
+Only the following specific markdown files in the `specs/` directory are allowed:
 - `specs/plan.md` - Development plan and roadmap
-- `specs/reasoning_flow.md` - Detailed reasoning flow documentation
-- `specs/spec.md` - Technical specifications
 - `specs/tasks.md` - Task tracking and progress
+- `specs/spec.md` - Technical specifications
 - `specs/changelog.md` - System changelog and version history
-- Any other markdown files created in the `specs/` directory for technical documentation
 
 ### Documentation Guidelines
-- No markdown files should be created outside of the allowed locations
-- All project documentation must be integrated into either the root documentation files or the specs directory
-- Any new documentation should follow the existing structure and formatting conventions
-- Session summaries and development logs should be placed in the `specs/` directory
+- No additional markdown files should be created outside of the allowed locations
+- All project documentation must be integrated into either the root documentation files (README.md, QWEN.md) or the specified spec files above
+- All other documentation (including reasoning_flow.md, session_summaries.md, etc.) must be consolidated into the allowed files
+- Session summaries and development logs should be placed in the `specs/` directory, specifically in the allowed files
 
 ## 🎯 Key Features
 
@@ -501,7 +507,7 @@ Recent fixes that improve debug visibility:
 - CUDA-compatible GPU (for GPU acceleration)
 
 ### Setup
-1. Install dependencies: `pip install -r requirements.txt`
+1. Install dependencies: `uv pip install -e .`
 2. Configure environment: Create `.env` file with Neo4j and Redis connection details
 3. Configure LLM provider in `config.yaml`:
    ```yaml
@@ -510,7 +516,7 @@ Recent fixes that improve debug visibility:
      providers:
        llama_cpp:
          model_path: "./models/your-model.gguf"
-         api_base: "http://localhost:8091/v1"
+         api_base: "http://localhost:8080/v1"
    ```
 
 ### Running the System
@@ -691,14 +697,18 @@ This architecture ensures that regardless of which model is selected via the dyn
 
 ### Setting Up Development Environment
 ```bash
-# Create virtual environment
-python -m venv .venv
+# Create virtual environment using uv (recommended)
+uv venv .venv
+
 # Activate the virtual environment
 # On Windows: .venv\Scripts\activate
 # On macOS/Linux: source .venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies in editable mode
+uv pip install -e .
+
+# Or sync using the lock file
+uv sync
 ```
 
 ### Running Tests
@@ -1001,12 +1011,28 @@ Windows PowerShell:
 - Clearer connection between application and model backend
 - All logs properly directed to the `logs/` directory for easy monitoring
 
-### Running with uv
+### Dependency Management with uv (Recommended)
 
-For users who prefer to use the uv package manager, you can run the simplified ecosystem using a Python wrapper script:
+The ECE project now uses uv as the primary package manager for improved performance and reliability. All dependencies are managed through pyproject.toml and uv.lock files.
 
+#### Installation and Setup
 ```bash
-uv run run_simplified_ecosystem.py --model ./models/gemma-3-4b-it-qat-abliterated.q8_0.gguf --port 8080
+# Install dependencies in editable mode
+uv pip install -e .
+
+# Or sync to match the exact versions in uv.lock
+uv sync
+
+# Create virtual environment with uv
+uv venv .venv
 ```
 
-This avoids issues with uv trying to run PowerShell scripts directly, which caused the "WinError 193" error.
+#### Development Workflow
+```bash
+# After making changes to dependencies in pyproject.toml
+uv pip install -e .
+
+# Or to update the lock file after changing dependencies
+uv lock
+uv sync
+```

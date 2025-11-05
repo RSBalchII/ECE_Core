@@ -1,13 +1,31 @@
-# External Context Engine (ECE) - Project Overview
+# External Context Engine (ECE) - System Documentation
 
-## Project Description
+## Documentation Policy
 
-The External Context Engine (ECE) is a sophisticated cognitive architecture designed to provide persistent memory and context management for AI systems. It's an advanced agentic system that enables AI applications to maintain long-term relationships, recall past conversations, and build coherent narratives from fragmented knowledge. The system is designed to operate entirely on local hardware without cloud dependencies.
+The ECE project follows a strict documentation policy to maintain organization and clarity. Only the following markdown files are permitted to be created or modified in this project:
 
-## Architecture Overview
+### Allowed Root Directory Files
+- `README.md` - Project overview and main documentation 
+- `QWEN.md` - System documentation and specifications (this file)
 
-The ECE implements a multi-tiered agent architecture:
+### Specific Allowed Spec Files
+Only the following specific markdown files in the `specs/` directory are allowed:
+- `specs/plan.md` - Development plan and roadmap
+- `specs/tasks.md` - Task tracking and progress
+- `specs/spec.md` - Technical specifications
+- `specs/changelog.md` - System changelog and version history
 
+### Documentation Guidelines
+- No additional markdown files should be created outside of the allowed locations
+- All project documentation must be integrated into either the root documentation files or the specified spec files above
+- All other documentation must be consolidated into the allowed files
+- Session summaries and development logs should be placed in the `specs/` directory, specifically in the allowed files
+
+## System Specifications Summary
+
+The External Context Engine (ECE) is a sophisticated cognitive architecture designed to provide persistent memory and context management for AI systems. The system implements a multi-tier agent architecture with the following key features:
+
+### Architecture Overview
 - **Tier 1**: Orchestrator Agent - Central coordinator that routes prompts to appropriate agents
 - **Tier 2**: Tool Agents - Specialized agents like WebSearchAgent and FileSystemAgent
 - **Tier 3**: Memory Cortex - Core memory management agents including:
@@ -23,194 +41,67 @@ The ECE implements a multi-tiered agent architecture:
 - **Framework**: FastAPI for web services
 - **Communication**: UTCP (Universal Tool Calling Protocol) for tool discovery and execution
 
-## Key Features
+### Key Features
+- Intelligent memory management with Q-Learning powered context retrieval
+- Enhanced context retrieval with keyword-based querying and semantic search
+- Local-first execution running entirely on local hardware without cloud dependencies
+- Script-based management for launching and managing agents
+- Memory optimization with configurable memory limiter for Windows systems
+- GPU acceleration support for accelerated embedding generation
+- On-demand model execution with ModelManager for automatic start/stop of models
+- Model lifecycle management to save resources when not in use
+- UTCP integration with decentralized manual-based discovery
 
-### Intelligent Memory Management
-- **Archivist Agent**: Central coordinator for knowledge graph operations
-- **QLearning Agent**: Reinforcement learning for optimal path finding
-- **Context Cache**: Redis-based caching.
-- **Token-Aware Summarization**: Processes large amounts of context.
+### UTCP Multi-Protocol Implementation
+ECE implements a multi-protocol approach for Universal Tool Calling Protocol (UTCP) with the following capabilities:
 
-### Enhanced Context Retrieval
-- **Keyword-Based Querying**: Extracts keywords for targeted memory retrieval
-- **Semantic Search**: Vector similarity search using Sentence Transformers
-- **Path Finding**: Q-Learning optimized traversal of knowledge graph
-- **Context Summarization**: Token-aware summarization within LLM limits
-- **Local Web Search**: DuckDuckGo-based search with local scraping, no external API required
+#### Supported Communication Protocols
+1. **HTTP/HTTPS**: Primary synchronous communication with REST API calls and JSON payloads
+2. **Server-Sent Events (SSE)**: Streaming communication for long-running operations with progress updates
+3. **WebSocket**: Bidirectional real-time communication for interactive operations
+4. **Model Context Protocol (MCP)**: AI agent context-aware communication with structured exchanges
+5. **Command-Line Interface (CLI)**: System-level tool access through command-line integration
 
-### Local-First and Performant
-- **Local Execution**: Runs entirely on local hardware without cloud dependencies.
-- **Script-based**: Uses simple scripts for launching and managing agents.
-- **Memory Management**: Includes a configurable memory limiter for Windows to prevent crashes.
-- **GPU Acceleration**: Supports CUDA for accelerated embedding generation.
+#### Protocol Selection and Fallback
+- Automatic protocol selection based on tool requirements, operation type, and network conditions
+- Hierarchical fallback mechanism with HTTP/HTTPS as primary, followed by SSE, WebSocket, MCP, and CLI
+- Protocol-specific configuration parameters for different communication needs
 
-## Markovian Thinking Architecture
+### Markovian Thinking Architecture
+ECE implements a sophisticated reasoning system called "Markovian Thinking":
 
-The ECE implements a sophisticated reasoning system called "Markovian Thinking":
 - **Chunked Reasoning**: Processes information in fixed-size context windows
 - **Dual-LLM PEVG Model**: Uses a Primary LLM (Generator) and TRM Service (Executor/Verifier)
 - **Iterative Refinement**: Implements "propose -> critique -> refine" loops via specialized TRM service
 - **Textual Carryover**: Maintains context between chunks with concise summaries
 
-## Model Management System
+### Context Loading and Reasoning Sequence
+The ECE implements a sophisticated multi-tiered context management system with the following primary loading sequence:
 
-The ECE features a unified model proxy system that routes between the External Context Engine and standalone llama.cpp models, allowing a unified interface to both systems. The ModelManager class handles on-demand model execution including starting, stopping, and switching between different models, with automatic port assignment for model servers.
+1. **Persona Loading (POML/JSON) - Always First**: POML/JSON persona files are loaded FIRST before ANY response processing begins, establishing foundational identity, protocols, values, and operational context.
 
-## Externalized Memory & Context Management
+2. **Redis Context Loading & Archivist Processing**: Redis context is loaded containing conversation history, and the Archivist receives the prompt to send keywords to the QLearning agent for relevant context retrieval.
 
-The ECE implements a sophisticated multi-tiered context management system that preserves identity and memory external to any model:
-- **POML/JSON Persona Loading**: POML/JSON persona files (e.g., orchestrator.json) are loaded FIRST before ANY response processing begins, establishing foundational identity, protocols, values, and operational context
-- **Redis Context Loading & Archivist Processing**: Redis context is loaded and the Archivist receives the prompt to send keywords to the QLearning agent for relevant context retrieval
-- **QLearning & Archivist Context Enhancement**: QLearning returns potentially large amounts of context which the Archivist uses a system LLM to summarize and identify important contextual information, then appends it to the Redis cache
-- **Temporal Memory**: Continuous temporal scanning protocol with the Archivist Agent maintains chronological records in Neo4j knowledge graph
-- **Orchestrator Processing**: The Orchestrator reads the enhanced Redis cache (always including POML persona first) and processes the complete context
-- **Tool Integration**: Tool outputs (web search, file read/write, etc.) become part of the accessible context
+3. **QLearning & Archivist Context Enhancement**: QLearning returns potentially large amounts of context which the Archivist uses a system LLM to summarize and identify important contextual information, then appends it to the Redis cache.
 
-## UTCP Implementation
+4. **Orchestrator Processing**: The Orchestrator reads the enhanced Redis cache (always including POML persona first) and processes the complete context.
 
-The ECE now fully implements the Universal Tool Calling Protocol (UTCP) 1.0+ specification using a decentralized architecture:
+5. **Response Generation**: Either direct model response for simpler prompts or Markovian thinking for complex reasoning based on complexity analysis, with all processing maintaining the established persona context.
 
-- Each service serves its own UTCP Manual at the standard `/utcp` endpoint
-- The orchestrator connects directly to individual service endpoints rather than a centralized registry
-- Services include: Distiller (port 8001), QLearning (port 8002), Archivist (port 8003), Injector (port 8004), FileSystem (port 8006), and WebSearch (port 8007)
+### Simplified Logging and Output Management
+ECE has adopted a simplified logging and output management system that consolidates all output to a single log file (`logs/ece-llamacpp.txt`) while maintaining real-time console visibility:
 
-This decentralized approach provides better reliability, scalability, and eliminates single points of failure.
+- Eliminates complex logging layers that caused confusion and system instability
+- Centralizes all system output to a single, predictable location
+- Maintains real-time visibility in the terminal for immediate feedback during development
+- Fixes encoding issues that were causing crashes with Unicode output
+- Maintains file-based logging for record keeping while adding console output for development
 
-## Infrastructure
+### Model Management
+ECE includes a sophisticated model management system with the following capabilities:
 
-### Docker Configuration
-The ECE uses Docker containers for infrastructure services:
-- Neo4j: Version 5, running on ports 7474 (HTTP) and 7687 (Bolt)
-- Redis: RedisSearch image, running on port 6379
-
-### Configuration Management
-The ECE supports configuration through both environment variables and a config.yaml file. Environment variables take precedence over config file values when both are present. The configuration system supports multiple LLM providers (llama_cpp, ollama, docker_desktop) and includes settings for memory limits, ports, and other system parameters.
-
-## Building and Running
-
-### Prerequisites
-- Python 3.11+
-- Neo4j database
-- Redis server
-- CUDA-compatible GPU (for GPU acceleration)
-
-### Setup
-1. Install dependencies: `pip install -r requirements.txt`
-2. Configure environment: Create `.env` file with Neo4j and Redis connection details
-3. Configure LLM provider in `config.yaml`
-
-### Running the System
-The ECE offers multiple startup options:
-1. Simplified ecosystem startup using `python start_simplified_ecosystem.py`
-2. Individual agent startup for development purposes
-3. Docker-based deployment for production environments
-
-## Core Capabilities
-
-- **Intelligent Memory Management**: Q-Learning powered context retrieval
-- **Enhanced Context Retrieval**: Semantic search and path finding in knowledge graph
-- **Local-First Execution**: Runs entirely on local hardware without cloud dependencies
-- **Script-Based Management**: Simple scripts for launching and managing agents
-- **Memory Optimization**: Configurable memory limiter for Windows systems
-- **GPU Acceleration**: CUDA support for accelerated embedding generation
-- **On-Demand Model Execution**: ModelManager starts models only when needed
-- **Model Lifecycle Management**: Automatic start/stop of models to save resources
-- **UTCP Integration**: Universal Tool Calling Protocol for tool discovery and execution
-- **Markovian Thinking**: Chunked reasoning with textual carryover for deep local reasoning
-
-## Development Guidelines
-
-The ECE project follows a strict documentation policy to maintain organization and clarity. Only specific markdown files are permitted:
-- `README.md` and `QWEN.md` in the root directory
-- All markdown files in the `specs/` directory
-
-## Troubleshooting
-
-Common issues include:
-- Port conflicts (especially with file system agent at port 8006)
-- Docker service availability for Neo4j and Redis
-- Model server startup issues
-- UTCP endpoint connectivity problems
-
-The system includes comprehensive logging to the `logs/` directory for debugging purposes, with separate log files for ecosystem, model inference, and orchestrator operations.
-
-## Project Structure
-
-```
-C:\Users\rsbiiw\Projects\External-Context-Engine-ECE\
-├───.dockerignore
-├───.env.example
-├───.gitignore
-├───.project_root
-├───.python-version
-├───bootstrap.py
-├───config.yaml
-├───debug_log
-├───docker-compose.yml
-├───Dockerfile
-├───main.py
-├───pyproject.toml
-├───read_all.py
-├───README.md
-├───requirements.txt
-├───run_simplified_ecosystem.py
-├───start_simplified_ecosystem.py
-├───start_with_instructions.py
-├───uv.lock
-├───__pycache__\...
-├───dist
-├───docs
-├───ece
-│   ├───__pycache__
-│   ├───agents
-│   │   ├───__pycache__
-│   │   ├───common
-│   │   ├───tier1
-│   │   │   └───orchestrator
-│   │   ├───tier2
-│   │   └───tier3
-│   ├───common
-│   ├───components
-│   ├───tools
-│   └───unified_model_proxy.py
-├───external_context_engine_ece.egg-info
-├───llama.cpp
-├───logs
-├───models
-├───poml
-├───specs
-├───tests
-└───utility_scripts
-```
-
-## Core Components
-
-- **Orchestrator**: The central nervous system. Classifies intent and delegates tasks to other agents.
-- **DistillerAgent**: Analyzes raw text to extract entities and relationships.
-- **ArchivistAgent**: Perserts structured data to the Neo4j knowledge graph.
-- **QLearningAgent**: Intelligently traverses the knowledge graph to find optimal context paths.
-- **InjectorAgent**: Optimizes the knowledge graph through reinforcement learning.
-- **FileSystemAgent**: Provides tools for reading, writing, and listing files.
-- **WebSearchAgent**: Provides tools for internet-based searches using local DuckDuckGo scraping.
-- **GitAgent**: Provides Git operations for repository management.
-
-## Configuration
-
-The system supports multiple configuration approaches:
-
-1. **Environment Variables**: Highest precedence, can be set in `.env` file
-2. **config.yaml**: Default configuration file
-3. **Command-line Arguments**: For scripts with specific options
-
-Key configuration values include:
-- LLM provider settings (model_path, api_base, etc.)
-- Database connection details for Neo4j and Redis
-- Port assignments for various services
-- Memory limits and performance parameters
-
-## Development Process
-
-For development, the primary entry points are:
-- `start_simplified_ecosystem.py` for running the complete system
-- Individual agent files in the `ece/agents` directory for component-specific development
-- The `unified_model_proxy.py` for model management functionality
+- **On-Demand Execution**: Models start and stop automatically based on demand, saving resources
+- **Dynamic Switching**: Ability to switch between different models as needed
+- **Automatic Port Assignment**: Automatic assignment of ports to avoid conflicts
+- **Configuration Management**: Centralized configuration with environment variable support
+- **Resource Optimization**: Efficient resource usage by running only one model at a time

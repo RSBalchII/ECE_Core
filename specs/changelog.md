@@ -28,6 +28,8 @@
 - Intermediate logging layers that added unnecessary complexity
 - Separate log files for individual components in favor of centralized logging
 - Dependency on complex logger configuration systems
+- Unauthorized markdown documentation files that violated the documentation policy
+- References to documentation files outside of the allowed locations
 
 ## [v4.3.0] - 2025-10-31
 
