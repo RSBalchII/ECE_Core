@@ -14,6 +14,7 @@ from dataclasses import dataclass
 @dataclass
 class PromptConfig:
     """Configuration for prompt management"""
+
     max_tokens: int = 32768  # Default to 32k context window
     reserved_tokens: int = 1000  # Tokens to reserve for response
     model_name: str = "gpt-4"  # Default model for token counting
@@ -42,13 +43,17 @@ class PromptManager:
         """
         return len(self.encoder.encode(text))
 
-    def truncate_intelligently(self, text: str, max_tokens: Optional[int] = None) -> str:
+    def truncate_intelligently(
+        self, text: str, max_tokens: Optional[int] = None
+    ) -> str:
         """
         Truncate text intelligently, trying to preserve semantic meaning.
         """
-        max_tokens = max_tokens or (self.config.max_tokens - self.config.reserved_tokens)
+        max_tokens = max_tokens or (
+            self.config.max_tokens - self.config.reserved_tokens
+        )
         tokens = self.encoder.encode(text)
-        
+
         if len(tokens) <= max_tokens:
             return text
 
@@ -57,7 +62,7 @@ class PromptManager:
         # more intelligent truncation (e.g., preserving important sections)
         truncated_tokens = tokens[:max_tokens]
         truncated_text = self.encoder.decode(truncated_tokens)
-        
+
         self.logger.warning(
             f"Intelligently truncated prompt from {len(tokens)} to {len(truncated_tokens)} tokens"
         )
@@ -69,13 +74,15 @@ class PromptManager:
         """
         tokens = self.encoder.encode(text)
         chunks = []
-        
+
         for i in range(0, len(tokens), chunk_size):
-            chunk_tokens = tokens[i:i + chunk_size]
+            chunk_tokens = tokens[i : i + chunk_size]
             chunk_text = self.encoder.decode(chunk_tokens)
             chunks.append(chunk_text)
-        
-        self.logger.info(f"Split text into {len(chunks)} chunks of ~{chunk_size} tokens each")
+
+        self.logger.info(
+            f"Split text into {len(chunks)} chunks of ~{chunk_size} tokens each"
+        )
         return chunks
 
     def summarize_text(self, text: str, target_ratio: float = 0.5) -> str:
@@ -86,14 +93,14 @@ class PromptManager:
         """
         tokens = self.encoder.encode(text)
         target_tokens = int(len(tokens) * target_ratio)
-        
+
         if len(tokens) <= target_tokens:
             return text
 
         # Simple truncation as a placeholder for actual summarization
         summary_tokens = tokens[:target_tokens]
         summary_text = self.encoder.decode(summary_tokens)
-        
+
         self.logger.info(
             f"Summarized text from {len(tokens)} to {len(summary_tokens)} tokens "
             f"(target ratio: {target_ratio})"
@@ -106,13 +113,15 @@ class PromptManager:
         """
         # Combine prompt and context if provided
         full_text = f"{context}\n\n{prompt}" if context else prompt
-        
+
         # Check token count
         token_count = self.count_tokens(full_text)
         available_tokens = self.config.max_tokens - self.config.reserved_tokens
-        
+
         if token_count <= available_tokens:
-            self.logger.info(f"Prompt fits within context: {token_count}/{available_tokens} tokens")
+            self.logger.info(
+                f"Prompt fits within context: {token_count}/{available_tokens} tokens"
+            )
             return full_text
 
         self.logger.warning(
@@ -125,7 +134,7 @@ class PromptManager:
             return self.truncate_intelligently(full_text, available_tokens)
         elif self.config.strategy == "chunk":
             chunks = self.chunk_text(full_text, available_tokens)
-            # For now, return the first chunk - in a real implementation, 
+            # For now, return the first chunk - in a real implementation,
             # you might handle multiple chunks differently
             return chunks[0] if chunks else full_text
         elif self.config.strategy == "summarize":
@@ -139,12 +148,14 @@ class PromptManager:
         """
         token_count = self.count_tokens(text)
         available_tokens = self.config.max_tokens - self.config.reserved_tokens
-        
+
         return {
             "token_count": token_count,
             "max_tokens": self.config.max_tokens,
             "reserved_tokens": self.config.reserved_tokens,
             "available_tokens": available_tokens,
-            "usage_percentage": (token_count / available_tokens) * 100 if available_tokens > 0 else 0,
-            "over_limit": token_count > available_tokens
+            "usage_percentage": (token_count / available_tokens) * 100
+            if available_tokens > 0
+            else 0,
+            "over_limit": token_count > available_tokens,
         }

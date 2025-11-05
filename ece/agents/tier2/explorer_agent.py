@@ -14,9 +14,9 @@ import uuid
 class ExplorerAgent:
     """
     The ExplorerAgent proposes solutions to problems using creative exploration techniques.
-    
+
     This agent is part of the advanced reasoning workflows in ECE v2.0, specifically
-    responsible for generating initial solution proposals in the Exploratory 
+    responsible for generating initial solution proposals in the Exploratory
     Problem-Solving Loop.
     """
 
@@ -26,26 +26,34 @@ class ExplorerAgent:
         self.api_base = api_base
         self.system_prompt = "You are an expert problem solver and code generator. Your task is to propose solutions, often in the form of Python code, to given problems. Think step by step and provide the code within ```python\n...\n``` blocks."
 
-    async def explore(self, prompt: str, current_solution: str = "", iteration_history: list = None) -> str:
+    async def explore(
+        self, prompt: str, current_solution: str = "", iteration_history: list = None
+    ) -> str:
         if iteration_history is None:
             iteration_history = []
 
         messages = [
             {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": prompt},
         ]
 
         if current_solution:
-            messages.append({"role": "assistant", "content": f"Current solution: {current_solution}"})
-        
-        for entry in iteration_history:
-            messages.append({"role": "assistant", "content": f"Previous attempt (Iteration {entry['iteration']}):\nSolution: {entry['explorer_response']}\nCritique: {entry['critique_response']}\nExecution Result: {entry['execution_result']}"})
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": f"Current solution: {current_solution}",
+                }
+            )
 
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "stream": False
-        }
+        for entry in iteration_history:
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": f"Previous attempt (Iteration {entry['iteration']}):\nSolution: {entry['explorer_response']}\nCritique: {entry['critique_response']}\nExecution Result: {entry['execution_result']}",
+                }
+            )
+
+        payload = {"model": self.model, "messages": messages, "stream": False}
 
         if "ollama" in self.api_base:
             url = f"{self.api_base}/api/chat"
@@ -57,7 +65,7 @@ class ExplorerAgent:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
                 data = response.json()
-                content = data.get('message', {}).get('content', '')
+                content = data.get("message", {}).get("content", "")
                 return content
         except httpx.RequestError as e:
             error_message = f"HTTP request failed: {e.__class__.__name__} - {e}"

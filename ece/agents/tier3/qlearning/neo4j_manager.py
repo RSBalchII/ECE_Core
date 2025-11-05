@@ -13,7 +13,8 @@ from neo4j import GraphDatabase
 # Import and set up ECE logging system
 try:
     from ece.common.logging_config import get_logger
-    logger = get_logger('neo4j_manager')
+
+    logger = get_logger("neo4j_manager")
 except ImportError:
     # Fallback if logging config not available
     logging.basicConfig(level=logging.INFO)
@@ -24,7 +25,7 @@ except ImportError:
 class Neo4jManager:
     """
     Manager for interacting with the Neo4j database for QLearningAgent operations.
-    
+
     This class provides methods to:
     - Connect to the Neo4j database
     - Query graph structure (nodes and relationships)
@@ -34,22 +35,26 @@ class Neo4jManager:
     def __init__(self, uri: str = None, user: str = None, password: str = None):
         """
         Initialize the Neo4jManager with connection parameters.
-        
+
         Args:
             uri: The Neo4j database URI (defaults to environment variables)
             user: The Neo4j username (defaults to environment variables)
             password: The Neo4j password (defaults to environment variables)
         """
         # Get connection details from environment variables with defaults
-        self.uri = uri or os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
-        self.user = user or os.environ.get('NEO4J_USER', 'neo4j')
-        self.password = password or os.environ.get('NEO4J_PASSWORD', 'ECE_secure_password_2025')
+        self.uri = uri or os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+        self.user = user or os.environ.get("NEO4J_USER", "neo4j")
+        self.password = password or os.environ.get(
+            "NEO4J_PASSWORD", "ECE_secure_password_2025"
+        )
         self._driver = None
 
     def connect(self) -> None:
         """Establish connection to the Neo4j database."""
         try:
-            self._driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
+            self._driver = GraphDatabase.driver(
+                self.uri, auth=(self.user, self.password)
+            )
             logger.info("Successfully connected to Neo4j database")
         except Exception as e:
             logger.error(f"Failed to connect to Neo4j database: {e}")
@@ -64,83 +69,84 @@ class Neo4jManager:
     def get_node_by_id(self, node_id: str) -> Optional[Dict[str, Any]]:
         """
         Retrieve a node by its ID from the Neo4j database.
-        
+
         Args:
             node_id: The ID of the node to retrieve
-            
+
         Returns:
             Dictionary representation of the node or None if not found
         """
         if not self._driver:
             raise Exception("Database not connected")
-            
+
         with self._driver.session() as session:
-            result = session.run(
-                "MATCH (n {id: $node_id}) RETURN n",
-                node_id=node_id
-            )
+            result = session.run("MATCH (n {id: $node_id}) RETURN n", node_id=node_id)
             record = result.single()
             if record:
                 node = record["n"]
                 return {
                     "id": node["id"],
                     "labels": list(node.labels),
-                    "properties": dict(node)
+                    "properties": dict(node),
                 }
             return None
 
     def get_neighbors(self, node_id: str) -> List[Dict[str, Any]]:
         """
         Get all neighboring nodes and relationships for a given node.
-        
+
         Args:
             node_id: The ID of the node to get neighbors for
-            
+
         Returns:
             List of dictionaries representing neighboring nodes and relationships
         """
         if not self._driver:
             raise Exception("Database not connected")
-            
+
         with self._driver.session() as session:
             result = session.run(
                 """
                 MATCH (n {id: $node_id})-[r]->(m)
                 RETURN n, r, m
                 """,
-                node_id=node_id
+                node_id=node_id,
             )
-            
+
             neighbors = []
             for record in result:
                 relationship = record["r"]
                 neighbor_node = record["m"]
-                
-                neighbors.append({
-                    "from_node": node_id,
-                    "to_node": neighbor_node["id"],
-                    "relationship_type": relationship.type,
-                    "relationship_properties": dict(relationship),
-                    "neighbor_properties": dict(neighbor_node)
-                })
-                
+
+                neighbors.append(
+                    {
+                        "from_node": node_id,
+                        "to_node": neighbor_node["id"],
+                        "relationship_type": relationship.type,
+                        "relationship_properties": dict(relationship),
+                        "neighbor_properties": dict(neighbor_node),
+                    }
+                )
+
             return neighbors
 
-    def get_q_value(self, from_node_id: str, to_node_id: str, relationship_type: str) -> float:
+    def get_q_value(
+        self, from_node_id: str, to_node_id: str, relationship_type: str
+    ) -> float:
         """
         Retrieve the Q-value for a specific relationship.
-        
+
         Args:
             from_node_id: The ID of the starting node
             to_node_id: The ID of the ending node
             relationship_type: The type of relationship
-            
+
         Returns:
             The Q-value for the relationship, or 0.0 if not found
         """
         if not self._driver:
             raise Exception("Database not connected")
-            
+
         with self._driver.session() as session:
             result = session.run(
                 """
@@ -149,17 +155,19 @@ class Neo4jManager:
                 """,
                 from_node_id=from_node_id,
                 to_node_id=to_node_id,
-                rel_type=relationship_type
+                rel_type=relationship_type,
             )
             record = result.single()
             if record and record["q_value"] is not None:
                 return float(record["q_value"])
             return 0.0
 
-    def update_q_value(self, from_node_id: str, to_node_id: str, relationship_type: str, q_value: float) -> None:
+    def update_q_value(
+        self, from_node_id: str, to_node_id: str, relationship_type: str, q_value: float
+    ) -> None:
         """
         Update the Q-value for a specific relationship using MERGE to ensure relationship exists.
-        
+
         Args:
             from_node_id: The ID of the starting node
             to_node_id: The ID of the ending node
@@ -168,7 +176,7 @@ class Neo4jManager:
         """
         if not self._driver:
             raise Exception("Database not connected")
-            
+
         with self._driver.session() as session:
             # Use MERGE to ensure the relationship exists, then set the Q-value
             session.run(
@@ -181,20 +189,22 @@ class Neo4jManager:
                 from_node_id=from_node_id,
                 to_node_id=to_node_id,
                 rel_type=relationship_type,
-                q_value=q_value
+                q_value=q_value,
             )
-            logger.info(f"Updated Q-value for relationship {from_node_id}->{to_node_id}: {q_value}")
+            logger.info(
+                f"Updated Q-value for relationship {from_node_id}->{to_node_id}: {q_value}"
+            )
 
     def sync_q_values_to_graph(self, q_table: Dict[str, Dict[str, float]]) -> None:
         """
         Synchronize all Q-values from the in-memory Q-table to the Neo4j graph.
-        
+
         Args:
             q_table: Dictionary mapping state-action pairs to Q-values
         """
         if not self._driver:
             raise Exception("Database not connected")
-            
+
         with self._driver.session() as session:
             for state, actions in q_table.items():
                 for action, q_value in actions.items():
@@ -214,7 +224,7 @@ class Neo4jManager:
                             from_node_id=from_node_id,
                             to_node_id=to_node_id,
                             rel_type=relationship_type,
-                            q_value=q_value
+                            q_value=q_value,
                         )
             logger.info("Synchronized Q-values to Neo4j graph")
 
@@ -239,13 +249,15 @@ class Neo4jManager:
             RETURN n
             """
             result = session.run(query, keywords=keywords)
-            
+
             nodes = []
             for record in result:
                 node = record["n"]
-                nodes.append({
-                    "id": node["id"],
-                    "labels": list(node.labels),
-                    "properties": dict(node)
-                })
+                nodes.append(
+                    {
+                        "id": node["id"],
+                        "labels": list(node.labels),
+                        "properties": dict(node),
+                    }
+                )
             return nodes

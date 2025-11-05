@@ -12,21 +12,32 @@ print(f"Python executable: {sys.executable}")
 
 # Check for UTCP-related directories in site-packages
 if venv_site_packages.exists():
-    utcp_dirs = [d for d in venv_site_packages.iterdir() if d.is_dir() and 'utcp' in d.name.lower()]
+    utcp_dirs = [
+        d
+        for d in venv_site_packages.iterdir()
+        if d.is_dir() and "utcp" in d.name.lower()
+    ]
     print(f"UTCP-related packages found in site-packages: {utcp_dirs}")
-    
+
     # Check in general packages too
-    all_dirs = [d for d in venv_site_packages.iterdir() if d.is_dir() and 'utcp' in d.name.lower()]
+    all_dirs = [
+        d
+        for d in venv_site_packages.iterdir()
+        if d.is_dir() and "utcp" in d.name.lower()
+    ]
     print(f"All UTCP-related packages: {all_dirs}")
 
 # Try importing
 import importlib.util
+
 try:
     # Check if utcp module exists
     spec = importlib.util.find_spec("utcp")
     if spec is not None:
         print("UTCP module is available for import")
-        print(f"UTCP module location: {spec.origin if hasattr(spec, 'origin') else spec.origin}")
+        print(
+            f"UTCP module location: {spec.origin if hasattr(spec, 'origin') else spec.origin}"
+        )
     else:
         print("UTCP module is NOT available for import")
 except Exception as e:
@@ -36,6 +47,7 @@ except Exception as e:
 try:
     print("Attempting to import UTCP client...")
     from utcp.utcp_client import UtcpClient
+
     print("✓ UTCP client imported successfully")
 except ImportError as e:
     print(f"✗ Failed to import UTCP client: {e}")

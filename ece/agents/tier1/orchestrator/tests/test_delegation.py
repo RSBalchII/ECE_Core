@@ -8,7 +8,7 @@ import sys
 import os
 
 # Add the parent directory to the path so we can import the orchestrator module
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from orchestrator_agent import OrchestratorAgent
 
@@ -49,7 +49,7 @@ class TestOrchestratorDelegation(unittest.TestCase):
     #     """Test retrieving a Thinker agent's endpoint."""
     #     # Register a Thinker agent
     #     self.orchestrator.register_thinker("math", "http://localhost:5001/math")
-        
+
     #     # Get the endpoint
     #     endpoint = self.orchestrator.get_thinker_endpoint("math")
     #     self.assertEqual(endpoint, "http://localhost:5001/math")
@@ -70,13 +70,13 @@ class TestOrchestratorDelegation(unittest.TestCase):
     #     }
     #     mock_response.raise_for_status.return_value = None
     #     mock_post.return_value = mock_response
-        
+
     #     # Register a Thinker agent
     #     self.orchestrator.register_thinker("math", "http://localhost:5001/math")
-        
+
     #     # Call the Thinker agent
     #     result = self.orchestrator.call_thinker("math", "What is the square root of 144?")
-        
+
     #     # Verify the result
     #     self.assertIsNotNone(result)
     #     self.assertEqual(result["answer"], "The square root of 144 is 12.")
@@ -87,11 +87,11 @@ class TestOrchestratorDelegation(unittest.TestCase):
     #     """Test calling an unregistered Thinker agent."""
     #     # Try to call an unregistered Thinker agent
     #     result = self.orchestrator.call_thinker("nonexistent", "Some prompt")
-        
+
     #     # Verify that no HTTP request was made
     #     mock_post.assert_not_called()
     #     self.assertIsNone(result)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

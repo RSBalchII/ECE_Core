@@ -24,7 +24,8 @@ import logging
 # Import and set up ECE logging system
 try:
     from ece.common.logging_config import get_logger
-    logger = get_logger('orchestrator')
+
+    logger = get_logger("orchestrator")
 except ImportError:
     # Fallback if logging config not available
     logging.basicConfig(level=logging.INFO)
@@ -81,13 +82,17 @@ async def startup_event():
         print("Orchestrator initialized and ready to receive requests.")
     except Exception as e:
         import traceback
-        error_details = f"Error during startup: {str(e)}\nTraceback:\n{traceback.format_exc()}"
+
+        error_details = (
+            f"Error during startup: {str(e)}\nTraceback:\n{traceback.format_exc()}"
+        )
         print(error_details)
         # Log error using appropriate logger
         try:
             logger.error(f"Error during startup: {e}")
         except:
             import logging
+
             logging.basicConfig(level=logging.INFO)
             default_logger = logging.getLogger(__name__)
             default_logger.error(f"Error during startup: {e}")
@@ -140,6 +145,7 @@ async def process_prompt_endpoint(request: Request):
         raise HTTPException(status_code=400, detail=f"Bad Request: {str(e)}")
     except Exception as e:
         import traceback
+
         error_details = f"An unexpected error occurred: {str(e)}\nTraceback:\n{traceback.format_exc()}"
         logger.error(error_details)
         raise HTTPException(status_code=500, detail="Internal Server Error")
@@ -151,7 +157,7 @@ async def get_ollama_models():
     Returns a list of models available from the configured LLM provider.
     """
     from ece.common.config_loader import get_config
-    
+
     # Load active provider from config loader to determine if we should expect Ollama to be available
     config = get_config()
     active_provider = config.get_active_provider()
@@ -167,38 +173,49 @@ async def get_ollama_models():
                 {"id": model["model"], "object": "model"}
                 for model in models_data.get("models", [])
             ]
-            return JSONResponse(content={
-                "success": True,
-                "data": models, 
-                "object": "list",
-                "provider": active_provider
-            })
+            return JSONResponse(
+                content={
+                    "success": True,
+                    "data": models,
+                    "object": "list",
+                    "provider": active_provider,
+                }
+            )
     except httpx.RequestError as e:
         # Only log error if the active provider is actually Ollama or Docker Desktop (not llama.cpp)
         if active_provider in ["ollama", "docker_desktop"]:
             logger.error(f"Error connecting to Ollama at {ollama_base_url}: {e}")
-            return JSONResponse(content={
-                "success": False,
-                "error": f"Error connecting to Ollama at {ollama_base_url}: {e}",
-                "provider": active_provider
-            }, status_code=503)
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": f"Error connecting to Ollama at {ollama_base_url}: {e}",
+                    "provider": active_provider,
+                },
+                status_code=503,
+            )
         else:
             # For llama_cpp provider, this is expected behavior, so only log as debug
             logger.debug(
                 f"Connection to Ollama at {ollama_base_url} failed (this is expected if using {active_provider}): {e}"
             )
-            return JSONResponse(content={
-                "success": False,
-                "error": f"Connection to Ollama at {ollama_base_url} failed (this is expected if using {active_provider}): {e}",
-                "provider": active_provider
-            }, status_code=503)
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": f"Connection to Ollama at {ollama_base_url} failed (this is expected if using {active_provider}): {e}",
+                    "provider": active_provider,
+                },
+                status_code=503,
+            )
     except Exception as e:
         logger.error(f"An unexpected error occurred while fetching LLM models: {e}")
-        return JSONResponse(content={
-            "success": False,
-            "error": f"Internal server error: {e}",
-            "provider": active_provider
-        }, status_code=500)
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": f"Internal server error: {e}",
+                "provider": active_provider,
+            },
+            status_code=500,
+        )
 
 
 # Global model manager instance for the orchestrator - initialize as None, will be set in startup
@@ -211,26 +228,34 @@ async def get_available_models():
     global model_manager
     try:
         if model_manager is None:
-            return JSONResponse(content={
-                "success": False,
-                "error": "Model manager not initialized yet",
-                "available_models": [],
-                "count": 0
-            }, status_code=503)
-        
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": "Model manager not initialized yet",
+                    "available_models": [],
+                    "count": 0,
+                },
+                status_code=503,
+            )
+
         available_models = model_manager.get_available_models()
-        return JSONResponse(content={
-            "success": True,
-            "available_models": available_models,
-            "count": len(available_models)
-        })
+        return JSONResponse(
+            content={
+                "success": True,
+                "available_models": available_models,
+                "count": len(available_models),
+            }
+        )
     except Exception as e:
-        return JSONResponse(content={
-            "success": False,
-            "error": f"Error retrieving available models: {str(e)}",
-            "available_models": [],
-            "count": 0
-        }, status_code=500)
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": f"Error retrieving available models: {str(e)}",
+                "available_models": [],
+                "count": 0,
+            },
+            status_code=500,
+        )
 
 
 @app.get("/models/current")
@@ -239,26 +264,34 @@ async def get_current_model():
     global model_manager
     try:
         if model_manager is None:
-            return JSONResponse(content={
-                "success": False,
-                "error": "Model manager not initialized yet",
-                "current_model": None,
-                "is_running": False
-            }, status_code=503)
-        
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": "Model manager not initialized yet",
+                    "current_model": None,
+                    "is_running": False,
+                },
+                status_code=503,
+            )
+
         current_model = model_manager.get_current_model()
-        return JSONResponse(content={
-            "success": True,
-            "current_model": current_model,
-            "is_running": current_model != "No model currently running"
-        })
+        return JSONResponse(
+            content={
+                "success": True,
+                "current_model": current_model,
+                "is_running": current_model != "No model currently running",
+            }
+        )
     except Exception as e:
-        return JSONResponse(content={
-            "success": False,
-            "error": f"Error retrieving current model: {str(e)}",
-            "current_model": None,
-            "is_running": False
-        }, status_code=500)
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": f"Error retrieving current model: {str(e)}",
+                "current_model": None,
+                "is_running": False,
+            },
+            status_code=500,
+        )
 
 
 @app.post("/models/select")
@@ -267,44 +300,55 @@ async def select_model(request: Request):
     global model_manager
     try:
         if model_manager is None:
-            return JSONResponse(content={
-                "success": False,
-                "error": "Model manager not initialized yet",
-                "selected_model": None
-            }, status_code=503)
-        
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": "Model manager not initialized yet",
+                    "selected_model": None,
+                },
+                status_code=503,
+            )
+
         data = await request.json()
         model_name = data.get("model_name")
-        
+
         if not model_name:
             raise HTTPException(status_code=400, detail="Model name is required")
-        
+
         # Select and start the specified model using the new select_model method
         success = model_manager.select_model(model_name)
-        
+
         if success:
-            return JSONResponse(content={
-                "success": True,
-                "message": f"Model {model_name} selected and started successfully",
-                "selected_model": model_name,
-                "details": {
-                    "model_name": model_name,
-                    "port": model_manager.model_server_port,
-                    "api_base": model_manager.api_base
+            return JSONResponse(
+                content={
+                    "success": True,
+                    "message": f"Model {model_name} selected and started successfully",
+                    "selected_model": model_name,
+                    "details": {
+                        "model_name": model_name,
+                        "port": model_manager.model_server_port,
+                        "api_base": model_manager.api_base,
+                    },
                 }
-            })
+            )
         else:
-            return JSONResponse(content={
-                "success": False,
-                "error": f"Failed to select and start model: {model_name}",
-                "selected_model": model_name
-            }, status_code=500)
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": f"Failed to select and start model: {model_name}",
+                    "selected_model": model_name,
+                },
+                status_code=500,
+            )
     except Exception as e:
-        return JSONResponse(content={
-            "success": False,
-            "error": f"Error selecting model: {str(e)}",
-            "selected_model": model_name if 'model_name' in locals() else None
-        }, status_code=500)
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": f"Error selecting model: {str(e)}",
+                "selected_model": model_name if "model_name" in locals() else None,
+            },
+            status_code=500,
+        )
 
 
 @app.post("/models/start")
@@ -313,44 +357,55 @@ async def start_model_endpoint(request: Request):
     global model_manager
     try:
         if model_manager is None:
-            return JSONResponse(content={
-                "success": False,
-                "error": "Model manager not initialized yet",
-                "model": None
-            }, status_code=503)
-        
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": "Model manager not initialized yet",
+                    "model": None,
+                },
+                status_code=503,
+            )
+
         data = await request.json()
         model_name = data.get("model_name")
         port = data.get("port")  # Optional port parameter
-        
+
         if not model_name:
             raise HTTPException(status_code=400, detail="Model name is required")
-        
+
         success = model_manager.start_model(model_name, port)
-        
+
         if success:
-            return JSONResponse(content={
-                "success": True,
-                "message": f"Model {model_name} started successfully",
-                "model": model_name,
-                "details": {
-                    "model_name": model_name,
-                    "port": model_manager.model_server_port,
-                    "api_base": model_manager.api_base
+            return JSONResponse(
+                content={
+                    "success": True,
+                    "message": f"Model {model_name} started successfully",
+                    "model": model_name,
+                    "details": {
+                        "model_name": model_name,
+                        "port": model_manager.model_server_port,
+                        "api_base": model_manager.api_base,
+                    },
                 }
-            })
+            )
         else:
-            return JSONResponse(content={
-                "success": False,
-                "error": f"Failed to start model: {model_name}",
-                "model": model_name
-            }, status_code=500)
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": f"Failed to start model: {model_name}",
+                    "model": model_name,
+                },
+                status_code=500,
+            )
     except Exception as e:
-        return JSONResponse(content={
-            "success": False,
-            "error": f"Error starting model: {str(e)}",
-            "model": model_name if 'model_name' in locals() else None
-        }, status_code=500)
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": f"Error starting model: {str(e)}",
+                "model": model_name if "model_name" in locals() else None,
+            },
+            status_code=500,
+        )
 
 
 @app.post("/models/stop")
@@ -359,28 +414,33 @@ async def stop_model_endpoint():
     global model_manager
     try:
         if model_manager is None:
-            return JSONResponse(content={
-                "success": False,
-                "error": "Model manager not initialized yet"
-            }, status_code=503)
-        
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": "Model manager not initialized yet",
+                },
+                status_code=503,
+            )
+
         success = model_manager.stop_model()
-        
+
         if success:
-            return JSONResponse(content={
-                "success": True,
-                "message": "Model server stopped successfully"
-            })
+            return JSONResponse(
+                content={
+                    "success": True,
+                    "message": "Model server stopped successfully",
+                }
+            )
         else:
-            return JSONResponse(content={
-                "success": False,
-                "error": "Failed to stop model server"
-            }, status_code=500)
+            return JSONResponse(
+                content={"success": False, "error": "Failed to stop model server"},
+                status_code=500,
+            )
     except Exception as e:
-        return JSONResponse(content={
-            "success": False,
-            "error": f"Error stopping model: {str(e)}"
-        }, status_code=500)
+        return JSONResponse(
+            content={"success": False, "error": f"Error stopping model: {str(e)}"},
+            status_code=500,
+        )
 
 
 @app.get("/models/status")
@@ -389,23 +449,26 @@ async def get_model_status():
     global model_manager
     try:
         if model_manager is None:
-            return JSONResponse(content={
-                "success": False,
-                "error": "Model manager not initialized yet",
-                "status": {}
-            }, status_code=503)
-        
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "error": "Model manager not initialized yet",
+                    "status": {},
+                },
+                status_code=503,
+            )
+
         status = model_manager.get_model_status()
-        return JSONResponse(content={
-            "success": True,
-            "status": status
-        })
+        return JSONResponse(content={"success": True, "status": status})
     except Exception as e:
-        return JSONResponse(content={
-            "success": False,
-            "error": f"Error getting model status: {str(e)}",
-            "status": {}
-        }, status_code=500)
+        return JSONResponse(
+            content={
+                "success": False,
+                "error": f"Error getting model status: {str(e)}",
+                "status": {},
+            },
+            status_code=500,
+        )
 
 
 @app.get("/health")
@@ -417,28 +480,37 @@ async def health_check():
     try:
         # Check if model_manager is initialized
         if model_manager is None:
-            return JSONResponse(content={
-                "status": "starting_up",
-                "model_healthy": False,
-                "message": "Orchestrator is still starting up"
-            })
-        
+            return JSONResponse(
+                content={
+                    "status": "starting_up",
+                    "model_healthy": False,
+                    "message": "Orchestrator is still starting up",
+                }
+            )
+
         # Check model health - await the async method
-        model_healthy = await model_manager.check_model_health() if model_manager else False
+        model_healthy = (
+            await model_manager.check_model_health() if model_manager else False
+        )
         model_status = model_manager.get_model_status() if model_manager else {}
-        
-        return JSONResponse(content={
-            "status": "ok",
-            "model_healthy": model_healthy,
-            "model_status": model_status,
-            "message": "Orchestrator is running and healthy"
-        })
+
+        return JSONResponse(
+            content={
+                "status": "ok",
+                "model_healthy": model_healthy,
+                "model_status": model_status,
+                "message": "Orchestrator is running and healthy",
+            }
+        )
     except Exception as e:
         import traceback
+
         error_details = f"Health check error: {str(e)}\n{traceback.format_exc()}"
         logger.error(error_details)
-        return JSONResponse(content={
-            "status": "error",
-            "model_healthy": False,
-            "message": f"Health check error: {str(e)}"
-        })
+        return JSONResponse(
+            content={
+                "status": "error",
+                "model_healthy": False,
+                "message": f"Health check error: {str(e)}",
+            }
+        )
