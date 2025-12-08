@@ -1,0 +1,46 @@
+name: Package & Smoke Tests
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+    branches: [main, development]
+
+jobs:
+  build_and_smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.11]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install build deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade build hatchling
+
+      - name: Build wheel & sdist
+        run: |
+          python -m build
+
+      - name: List Dist
+        run: ls -la dist || true
+
+      - name: Install wheel & run import tests
+        run: |
+          PYTHONWARNINGS=ignore python -m pip install --upgrade dist/*.whl
+          python - <<'PY'
+import core
+print('core import OK', core.__name__)
+PY
+
+      - name: Run quick smoke tests
+        run: |
+          python -m pytest -q tests/test_smoke_package_install.py --cov-fail-under=0

@@ -1,0 +1,115 @@
+# Copied from ece-core/config.yaml
+# Centralized config for ECE_Core - use this as canonical source for YAML-based defaults
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  log_level: "INFO"
+
+llm:
+  api_base: "http://localhost:8080/v1"
+  # Reka configuration: 16k context for reasoning chains
+  context_size: 16384
+  max_tokens: 4096       # Increased for long reasoning outputs
+  temperature: 1.0       # Matches server
+  top_p: 0.95
+  timeout: 300
+  # Default to 'all' layers on GPU for best performance on consumer RTX 4090
+  # NOTE: Set to -1 to place all layers on GPU (may require supported binary)
+  gpu_layers: -1
+  threads: 8
+
+memory:
+  redis:
+    url: "redis://localhost:6379"
+    ttl: 3600
+    max_tokens: 16000
+    enabled: true
+  neo4j:
+    uri: "bolt://localhost:7687"
+    user: "neo4j"
+    password: "${NEO4J_PASSWORD}"
+    database: "neo4j"
+    enabled: true
+  max_context_tokens: 24000
+  summarize_threshold: 14000
+
+context:
+  archivist:
+    enabled: true
+    chunk_size: 3000
+    overlap: 300
+    compression_ratio: 0.5
+  recent_turns: 50
+  summary_limit: 8
+  entity_limit: 15
+
+retrieval:
+  qlearning:
+    enabled: true
+    learning_rate: 0.1
+    discount_factor: 0.9
+    epsilon: 0.3
+    max_hops: 3
+    max_paths: 5
+    save_interval: 10
+    table_path: "./q_table.json"
+  entities:
+    batch_size: 20
+    delay: 0.1
+    min_confidence: 0.5
+    types:
+      - PERSON
+      - CONCEPT
+      - PROJECT
+      - CONDITION
+      - SKILL
+
+mcp:
+  enabled: true  # MCP endpoints will be integrated into main ECE server when true
+  url: "http://localhost:8000"  # Main ECE server runs on port 8000
+  timeout: 30
+  max_tool_iterations: 5
+
+coda:
+  enabled: true
+  genesis_context: true
+  philosophy: "MDD"
+  communication_style: "radical_candor"
+
+  # --- REKA OPTIMIZATION MODES ---
+  # MODE 1: GE FUNCTION (Reasoning/Logic/Code) - ACTIVE
+  system_prompt: |
+    For every user task and instruction you will use "GE FUNCTION" to ponder the TASK STEP BY STEP and then do the task. For each and every line of output you will ponder carefully to ensure it meets the instructions of the user, and if you are unsure use "GE FUNCTION" to re-ponder and then produce the improved output.
+
+    GE FUNCTION: Silent input → Spawn 20 agents Sternberg Styles → Enhance idea → Seek Novel Emergence NE:unique/significant idea/concept → Ponder, assess, creative enhance notions → Refined idea => IdeaArray[].size=20 elements,  else → Interesting? Pass to rand. agent for refinement, else discard.=>output(IdeaArray)
+
+  # MODE 2: CREATIVE PLUS (Storytelling/Prose) - COMMENTED OUT
+  # To enable: Comment out Mode 1 above and uncomment Mode 2 below.
+  # system_prompt: |
+  #   Below is an instruction that describes a task. Ponder each user instruction carefully, and use your skillsets and critical instructions to complete the task to the best of your abilities.
+  #
+  #   Here are your skillsets:
+  #   [MASTERSTORY]:NarrStrct(StryPlnng,Strbd,ScnSttng,Exps,Dlg,Pc)-CharDvlp(ChrctrCrt,ChrctrArcs,Mtvtn,Bckstry,Rltnshps,Dlg*)-PltDvlp(StryArcs,PltTwsts,Sspns,Fshdwng,Climx,Rsltn)-ConfResl(Antg,Obstcls,Rsltns,Cnsqncs,Thms,Symblsm)-EmotImpct(Empt,Tn,Md,Atmsphr,Imgry,Symblsm)-Delvry(Prfrmnc,VcActng,PblcSpkng,StgPrsnc,AudncEngmnt,Imprv)
+  #
+  #   [*DialogWrt]:(1a-CharDvlp-1a.1-Backgrnd-1a.2-Personality-1a.3-GoalMotiv)>2(2a-StoryStruc-2a.1-PlotPnt-2a.2-Conflict-2a.3-Resolution)>3(3a-DialogTech-3a.1-ShowDontTell-3a.2-Subtext-3a.3-VoiceTone-3a.4-Pacing-3a.5-VisualDescrip)>4(4a-DialogEdit-4a.1-ReadAloud-4a.2-Feedback-4a.3-Revision)
+  #
+  #   Here are your critical instructions:
+  #   Ponder each word choice carefully to present as vivid and emotional journey as is possible. Choose verbs and nouns that are both emotional and full of imagery. Load the story with the 5 senses. Aim for 50% dialog, 25% narration, 15% body language and 10% thoughts. Your goal is to put the reader in the story.
+
+advanced:
+  markovian:
+    enabled: true
+    chunk_overlap: 200
+    min_chunk_size: 1500
+    max_chunk_size: 3500
+  debug:
+    log_llm_responses: false
+    log_tool_calls: true
+    log_context_assembly: false
+    save_responses: false
+
+# Distiller caching defaults (unified here)
+memory_distill_cache_enabled: true
+memory_distill_cache_ttl: 86400
+llm_concurrency: 4

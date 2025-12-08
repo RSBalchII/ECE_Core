@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "local-ece": {
+      "label": "Local ECE - MCP",
+      "url": "http://localhost:8000",
+      "apiKey": "secret-token",
+      "enabled": true,
+      "default": true,
+      "health": "/health",
+      "tools": "/mcp/tools",
+      "call": "/mcp/call",
+      "sse": "/mcp/sse",
+      "aliases": {
+        "read_memory": "search_memories",
+        "write_memory": "add_memory",
+        "get_memory_summaries": "get_summaries"
+      },
+      "stdio": {
+        "command": "python",
+        "args": ["/absolute/path/to/Context-Engine/src/mcp_server.py"],
+        "enabled": false
+      }
+    }
+  }
+}

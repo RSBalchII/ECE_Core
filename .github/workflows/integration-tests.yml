@@ -1,0 +1,84 @@
+name: ECE Core Integration Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository (with submodules)
+        uses: actions/checkout@v5
+        with:
+          # Ensure any submodules (e.g., anchor) are checked out recursively
+          submodules: recursive
+          # Fetch full history for submodules and main repo to allow subtree actions and tags
+          fetch-depth: 0
+
+      - name: Set up Docker Compose
+        run: |
+          docker compose version || true
+
+      - name: Debug workspace layout
+        run: |
+          echo "Workspace: $GITHUB_WORKSPACE"
+          echo "Root listing:"
+          ls -la
+          echo "ECE_Core listing:"
+          ls -la ECE_Core || true
+
+      - name: Start integration services
+        env:
+          COMPOSE_HTTP_TIMEOUT: 120
+        working-directory: ECE_Core
+        run: |
+          if [ ! -f docker-compose.test.yml ]; then
+            echo "ERROR: docker-compose.test.yml not found in $(pwd)"
+            echo "List files:"; ls -la
+            exit 1
+          fi
+          # Bring services up
+          docker compose -f docker-compose.test.yml up -d
+
+      - name: Wait for services
+        run: |
+          # Wait for Redis
+          for i in {1..30}; do
+            docker run --rm --network host redis:7.0 redis-cli -h host.docker.internal ping && break || sleep 2
+          done
+          # Wait for Neo4j HTTP
+          for i in {1..60}; do
+            if curl -fsS http://localhost:7474 >/dev/null 2>&1; then break; fi; sleep 2
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+        # Ensure commands execute relative to ECE_Core where appropriate
+        working-directory: ECE_Core
+
+      - name: Install dependencies
+        working-directory: ECE_Core
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run tests (integration)
+        env:
+          ECE_USE_DOCKER: '1'
+          PYTHONPATH: ${{ github.workspace }}/ECE_Core
+        working-directory: ECE_Core
+        run: |
+          pytest -q --maxfail=1
+
+      - name: Tear down compose
+        if: always()
+        working-directory: ECE_Core
+        run: |
+          if [ ! -f docker-compose.test.yml ]; then
+            echo "WARNING: docker-compose.test.yml not found in $(pwd) during teardown"
+            exit 0
+          fi
+          docker compose -f docker-compose.test.yml down

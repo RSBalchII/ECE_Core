@@ -1,0 +1,53 @@
+{
+    // Cline Configuration for ECE Integration
+    // Add these settings to your VS Code settings.json file
+    
+    // Primary Cline configuration - point to your LLM server for inference
+    "cline.defaultProvider": "customOpenAI",
+    "cline.customOpenAISettings": {
+        "endpoint": "http://localhost:8080/v1",
+        "apiKey": "",  // Leave empty if llama-server doesn't require auth
+        "model": "local-model"  // Replace with the actual model id from GET /v1/models
+    },
+    
+    // If Cline supports MCP protocol for tools, configure memory endpoints
+    // (This depends on Cline's MCP support capabilities)
+    "cline.memoryEndpoint": "http://localhost:8000/mcp",  // ECE MCP endpoint
+    "cline.tools": {
+        "enabled": true,
+        "memory": {
+            "endpoint": "http://localhost:8000/mcp",
+            "enabled": true
+        }
+    },
+    
+    // Or if Cline supports custom tool endpoints
+    "cline.customTools": [
+        {
+            "name": "search_memories",
+            "endpoint": "http://localhost:8000/mcp/call",
+            "method": "POST",
+            "description": "Search memories in ECE knowledge graph"
+        },
+        {
+            "name": "add_memory", 
+            "endpoint": "http://localhost:8000/mcp/call",
+            "method": "POST", 
+            "description": "Add information to ECE memory system"
+        }
+    ],
+    
+    // General Cline settings for better integration
+    "cline.enableContextExtraction": true,
+    "cline.contextWindowSize": 16384,  // Match your model's context
+    "cline.timeout": 30000,
+    "cline.enableFileSearch": true,
+    
+    // Optional: MCP-specific settings if supported
+    "cline.mcp": {
+        "enabled": true,
+        "serverUrl": "http://localhost:8000",
+        "toolsPath": "/mcp/tools",
+        "callPath": "/mcp/call"
+    }
+}

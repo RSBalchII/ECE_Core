@@ -1,0 +1,34 @@
+[project]
+name = "context-engine"
+version = "0.1.0"
+description = "Monorepo for Context Engine - Executive Cognitive Enhancement tools"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# This is a monorepo - no packages to build at root level
+# Install individual packages separately:
+# - cd ece-core && pip install -e .
+# - cd anchor && pip install -e .
+packages = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "uvicorn",
+    "fastapi",
+    "pydantic",
+    "pydantic-settings",
+    "httpx",
+    "redis",
+    "sse-starlette",
+    "neo4j",
+    "tiktoken",
+    "PyYAML",
+    "python-dotenv"
+]
