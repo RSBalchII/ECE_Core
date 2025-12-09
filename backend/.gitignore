@@ -1,0 +1,22 @@
+# Ignore large & build artifacts
+.db/
+.db/
+# Neo4j local data
+/db/neo4j-community-2025.10.1/
+ece_memory.db
+# Build/dist
+/dist/
+/build/
+# Node and python caches
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+# Large known jars in db
+db/*.jar
+# Models directory
+models/
+# dotenv
+.env
+

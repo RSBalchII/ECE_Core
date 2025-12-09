@@ -1,0 +1,35 @@
+# code
+Built ECE_Core memory system using Redis for hot cache and SQLite for warm storage. Implemented automatic summarization when context exceeds 6000 tokens. Key files: memory.py, context_manager.py, main.py.
+
+# code
+Fixed CORS issue in FastAPI by adding middleware: app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+# event
+2025-01-09: Had major breakthrough understanding that context IS the intelligence, not the model weights. The LLM is just a stateless computation engine. This changes everything.
+
+# event
+2025-01-09: Simplified massive 18,220-file codebase down to 6 clean Python files. Reduced complexity by 99.97%. Finally have something that actually works instead of aspirational architecture.
+
+# idea
+Memory systems should be optimized for ADHD/Autism: timestamps for time-blindness, categories for pattern recognition, importance ratings for retrieval priority, flexible tags for multiple access paths.
+
+# idea
+Small models (27M params like HRM) can achieve deep reasoning with proper memory architecture. The intelligence is in the memory structure, not the parameter count.
+
+# task
+Current focus: Building import system for existing memories. Need to design category schema that works for retrieval. Should include: code, events, ideas, tasks, people.
+
+# task
+Next: Add API endpoints for memory search. Want to query "show me all code memories" or "what was I working on last week?". Need timeline view.
+
+# person
+Discussed ECE architecture with Claude. Key insight: I'm not building a chatbot, I'm building assistive technology. This is a cognitive prosthetic for executive function deficits.
+
+# general
+Music major background (Bachelor of Arts in Contemporary Music and Audio Design). Never used professionally due to economy. Pivoted to software development - 4 years experience but currently working DoorDash due to ADHD/Autism employment struggles.
+
+# general
+Diagnosed with ADHD + Autism at 28, now 33. IQ tested at 110 but neurologist (who wrote DSM-5 rules) estimates 130+. The gap between potential and current function is the problem ECE is meant to solve.
+
+# event
+2025-01-09: Started using llama.cpp with local model (DeepSeek-R1-Distill-Qwen-14B). Running at 8080, ECE at 8000. Three-terminal setup: Redis, llama-server, ECE_Core.

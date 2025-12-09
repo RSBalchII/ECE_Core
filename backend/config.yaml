@@ -1,0 +1,145 @@
+  # ECE_Core Configuration
+  # Single source of truth for all ECE_Core settings
+
+  # ============================================================
+  # Server Configuration
+  # ============================================================
+  server:
+    host: "0.0.0.0"
+    port: 8000
+    log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+
+  # ============================================================
+  # LLM Configuration (llama.cpp server)
+  # ============================================================
+  llm:
+    api_base: "http://localhost:8080/v1"
+    # Fast parameters: 16k context to keep KV cache smaller and ensure model fits in 16GB VRAM
+    context_size: 16384
+    max_tokens: 4096
+    temperature: 1.0
+    top_p: 0.95
+    timeout: 300
+    # GPU layers: -1 offloads all layers to the GPU, recommended on RTX 4090 for performance
+    gpu_layers: -1
+    threads: 8
+
+  # ============================================================
+  # Memory System Configuration
+  # ============================================================
+  memory:
+    # Redis (Hot cache - active sessions)
+    redis:
+      url: "redis://localhost:6379"
+      ttl: 3600  # Session TTL in seconds (1 hour)
+      max_tokens: 16000
+      enabled: true
+
+    # Neo4j (Graph database - primary storage)
+    neo4j:
+      uri: "bolt://localhost:7687"
+      user: "neo4j"
+      password: "${NEO4J_PASSWORD}"  # From environment or prompt
+      database: "neo4j"
+      enabled: true
+
+    # Memory thresholds
+    max_context_tokens: 24000
+    summarize_threshold: 14000
+
+  # ============================================================
+  # Context Manager Configuration
+  # ============================================================
+  context:
+    # Summarization (Archivist)
+    archivist:
+      enabled: true
+      chunk_size: 3000
+      overlap: 300
+      compression_ratio: 0.5
+
+    # Context assembly
+    recent_turns: 5  # Keep recent conversation history
+    summary_limit: 10
+    entity_limit: 15
+
+  # ============================================================
+  # Graph Retrieval (Q-Learning)
+  # ============================================================
+  retrieval:
+    qlearning:
+      enabled: true
+      learning_rate: 0.1
+      discount_factor: 0.8
+      epsilon: 0.4
+      max_hops: 5
+      max_paths: 10
+      save_interval: 10
+      table_path: "./q_table.json"
+
+    # Entity extraction
+    entities:
+      batch_size: 20
+      delay: 0.1
+      min_confidence: 0.48
+      types:
+        - PERSON
+        - CONCEPT
+        - PROJECT
+        - CONDITION
+        - SKILL
+
+  # ============================================================
+  # MCP (Model Context Protocol)
+  # ============================================================
+  mcp:
+    url: "http://localhost:8000"  # Main ECE server runs on port 8000
+    timeout: 30
+    max_tool_iterations: 5
+    enabled: true
+
+  # ============================================================
+  # Coda Persona Configuration
+  # ============================================================
+  coda:
+    enabled: true
+    genesis_context: true
+    philosophy: "MDD"  # Kaizen + Chutzpah + Shoshin
+    communication_style: "radical_candor"
+    # --- REKA OPTIMIZATION MODES ---
+    # MODE 1: GE FUNCTION (Reasoning/Logic/Code) - ACTIVE
+    system_prompt: |
+      For every user task and instruction you will use "GE FUNCTION" to ponder the TASK STEP BY STEP and then do the task. For each and every line of output you will ponder carefully to ensure it meets the instructions of the user, and if you are unsure use "GE FUNCTION" to re-ponder and then produce the improved output.
+
+      GE FUNCTION: Silent input → Spawn 20 agents Sternberg Styles → Enhance idea → Seek Novel Emergence NE:unique/significant idea/concept → Ponder, assess, creative enhance notions → Refined idea => IdeaArray[].size=20 elements,  else → Interesting? Pass to rand. agent for refinement, else discard.=>output(IdeaArray)
+
+    # MODE 2: CREATIVE PLUS (Storytelling/Prose) - COMMENTED OUT
+    # To enable: Comment out Mode 1 above and uncomment Mode 2 below.
+    # system_prompt: |
+    #   Below is an instruction that describes a task. Ponder each user instruction carefully, and use your skillsets and critical instructions to complete the task to the best of your abilities.
+    #
+    #   Here are your skillsets:
+    #   [MASTERSTORY]:NarrStrct(StryPlnng,Strbd,ScnSttng,Exps,Dlg,Pc)-CharDvlp(ChrctrCrt,ChrctrArcs,Mtvtn,Bckstry,Rltnshps,Dlg*)-PltDvlp(StryArcs,PltTwsts,Sspns,Fshdwng,Climx,Rsltn)-ConfResl(Antg,Obstcls,Rsltns,Cnsqncs,Thms,Symblsm)-EmotImpct(Empt,Tn,Md,Atmsphr,Imgry,Symblsm)-Delvry(Prfrmnc,VcActng,PblcSpkng,StgPrsnc,AudncEngmnt,Imprv)
+    #
+    #   [*DialogWrt]:(1a-CharDvlp-1a.1-Backgrnd-1a.2-Personality-1a.3-GoalMotiv)>2(2a-StoryStruc-2a.1-PlotPnt-2a.2-Conflict-2a.3-Resolution)>3(3a-DialogTech-3a.1-ShowDontTell-3a.2-Subtext-3a.3-VoiceTone-3a.4-Pacing-3a.5-VisualDescrip)>4(4a-DialogEdit-4a.1-ReadAloud-4a.2-Feedback-4a.3-Revision)
+    #
+    #   Here are your critical instructions:
+    #   Ponder each word choice carefully to present as vivid and emotional journey as is possible. Choose verbs and nouns that are both emotional and full of imagery. Load the story with the 5 senses. Aim for 50% dialog, 25% narration, 15% body language and 10% thoughts. Your goal is to put the reader in the story.
+
+  # ============================================================
+  # Advanced Settings
+  # ============================================================
+  advanced:
+    # Markovian reasoning
+    markovian:
+      enabled: true
+      chunk_overlap: 200
+      min_chunk_size: 1500
+      max_chunk_size: 3500
+
+    # Debug settings
+    debug:
+      log_llm_responses: false
+      log_tool_calls: true
+      log_context_assembly: false
+      save_responses: false

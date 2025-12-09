@@ -1,0 +1,3 @@
+  File "C:\Users\rsbiiw\Projects\ECE_Core\scripts\post_import_distill.py", line 132
+    parser.add_argument('--force-retry', action='store_true', help='Force retry of nodes previously marked as skipped due to LLM errors')
+IndentationError: unexpected indent

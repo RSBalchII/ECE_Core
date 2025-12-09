@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ECE Browser Bridge</title>
+  <style>
+    body {
+      width: 350px;
+      padding: 10px;
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .section {
+      background: white;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    textarea {
+      width: 100%;
+      min-height: 80px;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      resize: vertical;
+    }
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .btn-save {
+      background-color: #4CAF50;
+      color: white;
+    }
+    .btn-context {
+      background-color: #2196F3;
+      color: white;
+    }
+    .btn-scrape {
+      background-color: #FF9800;
+      color: white;
+    }
+    .btn-save:hover { background-color: #45a049; }
+    .btn-context:hover { background-color: #1976D2; }
+    .btn-scrape:hover { background-color: #F57C00; }
+    .status {
+      padding: 5px;
+      border-radius: 4px;
+      margin-top: 5px;
+      text-align: center;
+      display: none;
+    }
+    .status.success { background-color: #d4edda; color: #155724; display: block; }
+    .status.error { background-color: #f8d7da; color: #721c24; display: block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h3>🧠 ECE Browser Bridge</h3>
+    
+    <div class="section">
+      <h4>Context Retrieval</h4>
+      <textarea id="draftPrompt" placeholder="Enter your draft prompt to get relevant context..."></textarea>
+      <button id="getContextBtn" class="btn-context">Get Context</button>
+      <div id="contextResult" style="margin-top: 10px; padding: 8px; background: #f0f8ff; border-radius: 4px; display: none;"></div>
+    </div>
+    
+    <div class="section">
+      <h4>Chat Management</h4>
+      <button id="scrapeCurrentBtn" class="btn-scrape">Scrape Current Page</button>
+      <button id="saveChatBtn" class="btn-save">Save Current Chat</button>
+      <div id="statusMessage" class="status"></div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

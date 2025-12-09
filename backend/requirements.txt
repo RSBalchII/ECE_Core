@@ -1,0 +1,27 @@
+# ECE_Core - Minimal Dependencies
+fastapi==0.115.0
+uvicorn==0.32.0
+redis==5.2.0
+httpx==0.28.1
+openai==1.54.0
+python-dotenv==1.1.1
+pydantic==2.10.2
+pydantic-settings==2.6.1
+tiktoken==0.8.0
+PyYAML>=6.0
+sse-starlette>=0.8.1
+
+# Neo4j (optional - for semantic memory)
+neo4j==5.14.0
+ddgs>=0.1
+
+# Build tools (for creating executable)
+pyinstaller==6.3.0
+
+# Testing dependencies
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-timeout==2.2.0
+requests>=2.31.0
+ray[default]>=2.9.0

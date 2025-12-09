@@ -1,0 +1,4 @@
+id,system,query,expected,found,rank,latency_ms,latency_ms
+t1,ECE_Core,Where does Alice work?,TechCorp,False,-1,8.514599991030991,8.514599991030991
+t2,ECE_Core,What UI mode do I prefer?,Dark mode,False,-1,7.138800006941892,7.138800006941892
+t3,ECE_Core,What stack does Project Phoenix use?,Python and React,False,-1,7.0973999972920865,7.0973999972920865

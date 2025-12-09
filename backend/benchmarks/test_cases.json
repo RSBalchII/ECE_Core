@@ -1,0 +1,26 @@
+[
+  {
+    "id": "t1",
+    "fact": "Alice works at TechCorp as a senior engineer.",
+    "tags": ["employment", "alice"],
+    "category": "fact",
+    "query": "Where does Alice work?",
+    "expected": "TechCorp"
+  },
+  {
+    "id": "t2",
+    "fact": "I prefer Dark mode and a 14-inch laptop.",
+    "tags": ["preferences", "ui"],
+    "category": "note",
+    "query": "What UI mode do I prefer?",
+    "expected": "Dark mode"
+  },
+  {
+    "id": "t3",
+    "fact": "Project Phoenix uses Python and React.",
+    "tags": ["project", "tech"],
+    "category": "project",
+    "query": "What stack does Project Phoenix use?",
+    "expected": "Python and React"
+  }
+]

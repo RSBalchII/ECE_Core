@@ -1,0 +1,47 @@
+{
+  "models": [
+    {
+      "name": "models\\embeddinggemma-300m.Q8_0.gguf",
+      "model": "models\\embeddinggemma-300m.Q8_0.gguf",
+      "modified_at": "",
+      "size": "",
+      "digest": "",
+      "type": "model",
+      "description": "",
+      "tags": [
+        ""
+      ],
+      "capabilities": [
+        "completion"
+      ],
+      "parameters": "",
+      "details": {
+        "parent_model": "",
+        "format": "gguf",
+        "family": "",
+        "families": [
+          ""
+        ],
+        "parameter_size": "",
+        "quantization_level": ""
+      }
+    }
+  ],
+  "object": "list",
+  "data": [
+    {
+      "id": "models\\embeddinggemma-300m.Q8_0.gguf",
+      "object": "model",
+      "created": 1764190827,
+      "owned_by": "llamacpp",
+      "meta": {
+        "vocab_type": 1,
+        "n_vocab": 262144,
+        "n_ctx_train": 2048,
+        "n_embd": 768,
+        "n_params": 302863104,
+        "size": 322046976
+      }
+    }
+  ]
+}

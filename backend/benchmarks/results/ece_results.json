@@ -1,0 +1,32 @@
+[
+  {
+    "id": "t1",
+    "system": "ECE_Core",
+    "query": "Where does Alice work?",
+    "expected": "TechCorp",
+    "found": false,
+    "rank": -1,
+    "latency_ms": 8.514599991030991,
+    "raw_memories": []
+  },
+  {
+    "id": "t2",
+    "system": "ECE_Core",
+    "query": "What UI mode do I prefer?",
+    "expected": "Dark mode",
+    "found": false,
+    "rank": -1,
+    "latency_ms": 7.138800006941892,
+    "raw_memories": []
+  },
+  {
+    "id": "t3",
+    "system": "ECE_Core",
+    "query": "What stack does Project Phoenix use?",
+    "expected": "Python and React",
+    "found": false,
+    "rank": -1,
+    "latency_ms": 7.0973999972920865,
+    "raw_memories": []
+  }
+]
