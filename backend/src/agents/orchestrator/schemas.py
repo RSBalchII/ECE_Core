@@ -6,6 +6,7 @@ class NextAction(str, Enum):
     CALL_TOOL = "CALL_TOOL"
     FINALIZE_RESPONSE = "FINALIZE_RESPONSE"
     ASK_USER = "ASK_USER"
+    CHIT_CHAT = "CHIT_CHAT"
 
 class IntentType(str, Enum):
     QUERY = "QUERY"

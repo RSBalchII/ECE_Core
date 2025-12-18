@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <title>Glass Box Debugger</title>
+    <title>Sovereign System Debugger</title>
     <style>
         body {
             background-color: #000;
@@ -14,6 +15,7 @@
             height: 100vh;
             overflow: hidden;
         }
+
         #toolbar {
             background-color: #111;
             padding: 10px;
@@ -22,13 +24,7 @@
             gap: 10px;
             align-items: center;
         }
-        input {
-            background: #222;
-            border: 1px solid #444;
-            color: #fff;
-            padding: 5px 10px;
-            font-family: inherit;
-        }
+
         button {
             background: #333;
             color: #fff;
@@ -36,15 +32,17 @@
             cursor: pointer;
             padding: 5px 10px;
         }
-        button:hover { background: #444; }
-        button.active { background: #005500; border-color: #00aa00; }
-        
+
+        button:hover {
+            background: #444;
+        }
+
         #main-container {
             display: flex;
             flex: 1;
             overflow: hidden;
         }
-        
+
         .panel {
             flex: 1;
             display: flex;
@@ -52,8 +50,11 @@
             border-right: 1px solid #333;
             min-width: 0;
         }
-        .panel:last-child { border-right: none; }
-        
+
+        .panel:last-child {
+            border-right: none;
+        }
+
         .panel-header {
             background: #1a1a1a;
             padding: 5px 10px;
@@ -62,7 +63,7 @@
             display: flex;
             justify-content: space-between;
         }
-        
+
         .log-container {
             flex: 1;
             overflow-y: auto;
@@ -70,190 +71,276 @@
             white-space: pre-wrap;
             font-size: 12px;
         }
-        
+
         .log-line {
             padding: 2px 0;
             border-bottom: 1px solid #111;
             word-break: break-all;
         }
-        .log-line:hover { background-color: #111; }
-        
-        .info { color: #88ccff; }
-        .warning { color: #ffcc00; }
-        .error { color: #ff4444; font-weight: bold; }
-        .debug { color: #888; }
-        .success { color: #00ff00; }
-        
+
+        .log-line:hover {
+            background-color: #111;
+        }
+
+        .info {
+            color: #88ccff;
+        }
+
+        .warning {
+            color: #ffcc00;
+        }
+
+        .error {
+            color: #ff4444;
+            font-weight: bold;
+        }
+
+        .debug {
+            color: #888;
+        }
+
+        .success {
+            color: #00ff00;
+        }
+
         /* Context specific styles */
         .context-block {
             border: 1px solid #333;
             margin-bottom: 10px;
             padding: 5px;
             background: #050505;
+            font-size: 11px;
         }
+
         .context-header {
             color: #aaa;
             border-bottom: 1px solid #333;
             margin-bottom: 5px;
+            font-weight: bold;
         }
     </style>
 </head>
+
 <body>
     <div id="toolbar">
-        <span>Backend:</span>
-        <input type="text" id="backend-url" value="http://localhost:8000" style="width: 150px;">
-        <span>Bridge:</span>
-        <input type="text" id="bridge-url" value="http://localhost:8080" style="width: 150px;">
-        <span>Session:</span>
-        <input type="text" id="session-id" placeholder="Session ID" value="default">
-        <button id="toggle-poll" class="active">Polling: ON</button>
+        <span style="color: #88ccff; font-weight: bold;">Sovereign Broadcast Receiver</span>
+        <span id="connection-status" style="color: #888; margin-left: 10px;">● Listening...</span>
+        <div style="flex: 1;"></div>
+        <button id="copy-all-btn" title="Copy all logs to clipboard">📋 Copy All</button>
+        <button id="retry-logs-btn" title="Retry fetching backend logs">Retry Backend Logs</button>
         <button id="clear-btn">Clear All</button>
     </div>
-    
+
     <div id="main-container">
-        <!-- Panel 1: Bridge Logs (LLM Inference) -->
+        <!-- Panel 1: System Logs -->
         <div class="panel">
             <div class="panel-header">
-                <span>WebGPU Bridge (LLM/Chat)</span>
-                <span id="bridge-status" style="color: #888;">●</span>
+                <span>System Logs</span>
             </div>
-            <div id="bridge-logs" class="log-container"></div>
+            <div id="system-logs" class="log-container"></div>
         </div>
-        
-        <!-- Panel 2: Backend Logs (Memory/Embeddings) -->
+
+        <!-- Panel 2: Chat Stream -->
         <div class="panel">
             <div class="panel-header">
-                <span>ECE Backend (Memory/Embed)</span>
-                <span id="backend-status" style="color: #888;">●</span>
+                <span>Chat Stream</span>
             </div>
-            <div id="backend-logs" class="log-container"></div>
+            <div id="chat-logs" class="log-container"></div>
         </div>
-        
+
         <!-- Panel 3: Context Inspector -->
         <div class="panel">
             <div class="panel-header">
-                <span>Redis Context Window</span>
-                <button id="refresh-context" style="padding: 0 5px; font-size: 10px;">Refresh</button>
+                <span>Context / Memory</span>
             </div>
             <div id="context-view" class="log-container"></div>
         </div>
     </div>
 
     <script>
-        const bridgeContainer = document.getElementById('bridge-logs');
-        const backendContainer = document.getElementById('backend-logs');
+        const systemContainer = document.getElementById('system-logs');
+        const chatContainer = document.getElementById('chat-logs');
         const contextContainer = document.getElementById('context-view');
-        
-        const backendUrlInput = document.getElementById('backend-url');
-        const bridgeUrlInput = document.getElementById('bridge-url');
-        const sessionIdInput = document.getElementById('session-id');
-        
-        const toggleBtn = document.getElementById('toggle-poll');
         const clearBtn = document.getElementById('clear-btn');
-        const refreshContextBtn = document.getElementById('refresh-context');
+        const copyBtn = document.getElementById('copy-all-btn');
+        const statusIndicator = document.getElementById('connection-status');
 
-        let isPolling = true;
-        let lastBridgeLogCount = 0;
-        let lastBackendLogCount = 0;
+        copyBtn.onclick = () => {
+            const allText = [
+                "--- SYSTEM LOGS ---", systemContainer.innerText,
+                "\n--- CHAT LOGS ---", chatContainer.innerText,
+                "\n--- CONTEXT LOGS ---", contextContainer.innerText
+            ].join("\n");
 
-        function colorize(line) {
-            if (line.includes('ERROR') || line.includes('❌')) return `<span class="error">${line}</span>`;
-            if (line.includes('WARNING')) return `<span class="warning">${line}</span>`;
-            if (line.includes('INFO') || line.includes('✅')) return `<span class="info">${line}</span>`;
-            if (line.includes('DEBUG')) return `<span class="debug">${line}</span>`;
+            navigator.clipboard.writeText(allText).then(() => {
+                const original = copyBtn.innerHTML;
+                copyBtn.innerHTML = "✅ Copied!";
+                setTimeout(() => copyBtn.innerHTML = original, 2000);
+            }).catch(e => alert("Copy failed: " + e));
+        };
+
+        const logChannel = new BroadcastChannel('sovereign-logs');
+        const codaChannel = new BroadcastChannel('coda_logs');
+        // Simple de-duplication for server polling
+        const serverLogSet = new Set();
+
+        function markActive() {
+            statusIndicator.style.color = '#0f0';
+            statusIndicator.innerText = '● Active';
+            setTimeout(() => {
+                statusIndicator.style.color = '#888';
+                statusIndicator.innerText = '● Listening...';
+            }, 2000);
+        }
+
+        logChannel.onmessage = (event) => {
+            markActive();
+            const data = event.data;
+
+            if (data.source === 'system') {
+                appendLog(systemContainer, `[${data.time}] [${data.type}] ${data.msg}`, data.type);
+            } else if (data.source === 'chat') {
+                appendLog(chatContainer, `[${data.time}] ${data.role}: ${data.text}`, 'info');
+                if (data.context) {
+                    appendContext(data.context);
+                }
+            }
+        };
+
+        // Mission Control channel (coda_logs) - short JSON messages
+        codaChannel.onmessage = (event) => {
+            markActive();
+            const data = event.data;
+            try {
+                // Known sources: 'Sovereign-Console' | 'Sovereign-Chat' | 'Sovereign-DB' | 'Sovereign-Embed'
+                if (data.source === 'Sovereign-Console') {
+                    appendLog(systemContainer, `[${new Date().toLocaleTimeString()}] [SOVEREIGN] ${data.message}`, data.type || 'info');
+                } else if (data.source === 'Sovereign-Chat') {
+                    appendLog(chatContainer, `[${new Date().toLocaleTimeString()}] ${data.role || 'assistant'}: ${data.message}`, 'info');
+                    if (data.context) appendContext(data.context);
+                } else if (data.source === 'Sovereign-DB') {
+                    appendLog(systemContainer, `[${new Date().toLocaleTimeString()}] [DB] ${data.message}`, data.type || 'info');
+                } else if (data.source === 'Sovereign-Embed' || data.source === 'WebGPU-Embed') {
+                    appendLog(systemContainer, `[${new Date().toLocaleTimeString()}] [EMBED] ${data.message}`, 'debug');
+                } else if (data.source === 'WebGPU-Chat') {
+                    appendLog(chatContainer, `[${new Date().toLocaleTimeString()}] ${data.role || 'assistant'}: ${data.message}`, 'info');
+                } else {
+                    appendLog(systemContainer, `[${new Date().toLocaleTimeString()}] ${JSON.stringify(data)}`, 'debug');
+                }
+            } catch (e) {
+                appendLog(systemContainer, `[coda_logs parsing error] ${e.message}`, 'error');
+            }
+        };
+
+        // Poll backend server logs every 2s with graceful 404 handling and retry
+        let pollIntervalId = null;
+        let serverLogsErrorShown = false;
+
+        async function pollServerLogs() {
+            try {
+                // Use relative path so it targets same origin when proxied; fall back to explicit host if needed
+                const resp = await fetch('/audit/server-logs?limit=50');
+
+                if (resp.status === 404) {
+                    if (!serverLogsErrorShown) {
+                        appendLog(systemContainer, `[ECE-Core] Backend logs endpoint returned 404. Is the backend running?`, 'warning');
+                        statusIndicator.style.color = '#ffcc00';
+                        statusIndicator.innerText = '● Backend logs unavailable';
+                        serverLogsErrorShown = true;
+                    }
+                    // Stop polling to avoid tight 404 loops
+                    if (pollIntervalId) {
+                        clearInterval(pollIntervalId);
+                        pollIntervalId = null;
+                    }
+                    return;
+                }
+
+                if (!resp.ok) {
+                    appendLog(systemContainer, `[ECE-Core] Poll error: HTTP ${resp.status}`, 'error');
+                    return;
+                }
+
+                const payload = await resp.json();
+                if (payload && Array.isArray(payload.logs)) {
+                    for (const line of payload.logs) {
+                        if (!serverLogSet.has(line)) {
+                            serverLogSet.add(line);
+                            appendLog(systemContainer, `[ECE-Core] ${line}`, 'success');
+                        }
+                    }
+                    // Prevent unbounded growth
+                    if (serverLogSet.size > 500) {
+                        serverLogSet.clear();
+                    }
+                }
+            } catch (e) {
+                if (!serverLogsErrorShown) {
+                    appendLog(systemContainer, `[ECE-Core] Poll error: ${e.message}`, 'error');
+                    statusIndicator.style.color = '#ff4444';
+                    statusIndicator.innerText = '● Poll error';
+                    serverLogsErrorShown = true;
+                }
+            }
+        }
+
+        function startPolling() {
+            if (pollIntervalId) return;
+            serverLogsErrorShown = false;
+            statusIndicator.style.color = '#0f0';
+            statusIndicator.innerText = '● Active';
+            pollIntervalId = setInterval(pollServerLogs, 2000);
+            pollServerLogs();
+        }
+
+        function stopPolling() {
+            if (pollIntervalId) {
+                clearInterval(pollIntervalId);
+                pollIntervalId = null;
+            }
+        }
+
+        // Start polling initially
+        startPolling();
+
+        // Retry button
+        document.getElementById('retry-logs-btn').addEventListener('click', () => {
+            appendLog(systemContainer, '[ECE-Core] Manual retry requested', 'info');
+            statusIndicator.style.color = '#88ccff';
+            statusIndicator.innerText = '● Retrying...';
+            startPolling();
+        });
+
+        function appendLog(container, text, type) {
+            const div = document.createElement('div');
+            div.className = 'log-line';
+            div.innerHTML = colorize(text, type);
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function appendContext(contextData) {
+            const div = document.createElement('div');
+            div.className = 'context-block';
+            div.innerHTML = `<div class="context-header">Context Update</div><pre>${JSON.stringify(contextData, null, 2)}</pre>`;
+            contextContainer.appendChild(div);
+            contextContainer.scrollTop = contextContainer.scrollHeight;
+        }
+
+        function colorize(line, type) {
+            if (type === 'error' || line.includes('ERROR') || line.includes('❌')) return `<span class="error">${line}</span>`;
+            if (type === 'warn' || line.includes('WARNING')) return `<span class="warning">${line}</span>`;
+            if (type === 'success' || line.includes('SUCCESS') || line.includes('✅')) return `<span class="success">${line}</span>`;
+            if (type === 'info' || line.includes('INFO')) return `<span class="info">${line}</span>`;
             return `<span class="debug">${line}</span>`;
         }
 
-        async function fetchBridgeLogs() {
-            const baseUrl = bridgeUrlInput.value.replace(/\/$/, "");
-            try {
-                const res = await fetch(`${baseUrl}/logs?limit=50`);
-                if (!res.ok) throw new Error("Bridge Error");
-                const data = await res.json();
-                
-                // Simple render
-                bridgeContainer.innerHTML = '';
-                data.logs.forEach(line => {
-                    const div = document.createElement('div');
-                    div.className = 'log-line';
-                    div.innerHTML = colorize(line);
-                    bridgeContainer.appendChild(div);
-                });
-                document.getElementById('bridge-status').style.color = '#0f0';
-            } catch (e) {
-                document.getElementById('bridge-status').style.color = '#f00';
-            }
-        }
-
-        async function fetchBackendLogs() {
-            const baseUrl = backendUrlInput.value.replace(/\/$/, "");
-            try {
-                const res = await fetch(`${baseUrl}/audit/server-logs?limit=50`);
-                if (!res.ok) throw new Error("Backend Error");
-                const data = await res.json();
-                
-                backendContainer.innerHTML = '';
-                data.logs.forEach(line => {
-                    const div = document.createElement('div');
-                    div.className = 'log-line';
-                    div.innerHTML = colorize(line);
-                    backendContainer.appendChild(div);
-                });
-                document.getElementById('backend-status').style.color = '#0f0';
-            } catch (e) {
-                document.getElementById('backend-status').style.color = '#f00';
-            }
-        }
-
-        async function fetchContext() {
-            const baseUrl = backendUrlInput.value.replace(/\/$/, "");
-            const sessionId = sessionIdInput.value;
-            try {
-                const res = await fetch(`${baseUrl}/audit/context/${sessionId}`);
-                if (!res.ok) throw new Error("Context Error");
-                const data = await res.json();
-                
-                contextContainer.innerHTML = '';
-                
-                if (data.context) {
-                    const div = document.createElement('div');
-                    div.className = 'context-block';
-                    div.innerText = data.context;
-                    contextContainer.appendChild(div);
-                } else {
-                    contextContainer.innerHTML = '<span class="debug">No active context found for this session.</span>';
-                }
-            } catch (e) {
-                contextContainer.innerHTML = `<span class="error">Failed to fetch context: ${e.message}</span>`;
-            }
-        }
-
-        async function poll() {
-            if (!isPolling) return;
-            await Promise.all([fetchBridgeLogs(), fetchBackendLogs()]);
-            // Context is polled less frequently or manually, but let's poll it every 2nd cycle or just keep it separate
-            // For now, let's poll context too so it updates live
-            await fetchContext();
-        }
-
-        setInterval(poll, 2000);
-
-        toggleBtn.onclick = () => {
-            isPolling = !isPolling;
-            toggleBtn.textContent = isPolling ? "Polling: ON" : "Polling: PAUSED";
-            toggleBtn.className = isPolling ? "active" : "";
-        };
-
         clearBtn.onclick = () => {
-            bridgeContainer.innerHTML = '';
-            backendContainer.innerHTML = '';
+            systemContainer.innerHTML = '';
+            chatContainer.innerHTML = '';
             contextContainer.innerHTML = '';
         };
-        
-        refreshContextBtn.onclick = fetchContext;
-        
-        // Initial load
-        poll();
     </script>
 </body>
+
 </html>

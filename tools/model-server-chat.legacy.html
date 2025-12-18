@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Server Chat (Full WASM)</title>
+    <script type="module">
+        // --- IMPORTS ---
+        import initCozo, { CozoDb } from './cozo_lib_wasm.js';
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0';
+        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+
+        env.allowLocalModels = false; // Force CDN for transformers
+
+        // --- STATE ---
+        let db;
+        let embedder;
+        let engine;
+        let chatHistory = [];
+        
+        // Configuration
+        // const MODEL_ID = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC"; // Removed hardcoded model
+        
+        // --- BROADCAST CHANNEL ---
+        const logChannel = new BroadcastChannel('sovereign-logs');
+
+        // --- UI REFS ---
+        const ui = {
+            log: (msg, type='info') => {
+                const el = document.getElementById('status-log');
+                if (el) el.innerHTML = `<span class="${type}">[${new Date().toLocaleTimeString()}] ${msg}</span><br>` + el.innerHTML;
+                console.log(`[${type}] ${msg}`);
+                logChannel.postMessage({ source: 'system', msg, type, time: new Date().toLocaleTimeString() });
+            },
+            appendChat: (role, text, context = null) => {
+                logChannel.postMessage({ source: 'chat', role, text, context, time: new Date().toLocaleTimeString() });
+                const chatBox = document.getElementById('chat-box');
+                const div = document.createElement('div');
+                div.className = `msg ${role}`;
+                
+                let html = `<div class="content">${marked.parse(text)}</div>`;
+                if (context) {
+                    html += `<details class="context-details"><summary>🧠 Recalled ${context.length} Memories</summary><pre>${JSON.stringify(context, null, 2)}</pre></details>`;
+                }
+                div.innerHTML = html;
+                chatBox.appendChild(div);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        };
+
+        // --- 1. CORE INITIALIZATION ---
+        async function init() {
+            try {
+                ui.log("Booting System...", "warn");
+                
+                // Init CozoDB (Memory)
+                await initCozo('./cozo_lib_wasm_bg.wasm');
+                // Check if OPFS is supported/working
+                try {
+                    // Fallback to IndexedDB as new_from_path is not available in this WASM build
+                    // This ensures compatibility with the builder
+                    db = await CozoDb.new_from_indexed_db('coda_memory', 'cozo_store', () => {});
+                    ui.log("✅ Memory Core (CozoDB) Attached via IndexedDB");
+                } catch (e) {
+                    ui.log(`Memory Init Warning: ${e.message}. Using Session Memory.`, "warn");
+                    db = await CozoDb.new(); // Fallback
+                }
+
+                // Init Embedder (Perception)
+                ui.log("Loading Perception Module (Embeddings)...");
+                embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+                ui.log("✅ Perception Module Ready");
+
+                // Init LLM Engine (Empty)
+                engine = new webllm.MLCEngine();
+                engine.setInitProgressCallback((report) => {
+                    const bar = document.getElementById('llm-progress');
+                    const status = document.getElementById('llm-status');
+                    if (bar) bar.style.width = (report.progress * 100) + "%";
+                    if (status) status.innerText = report.text;
+                });
+                
+                ui.log("⚠️ Waiting for Model Selection...", "warn");
+                document.getElementById('init-btn').disabled = false;
+                
+                ui.log("ℹ️ Drop 'combined_text.txt' to ingest manual context if needed.", "info");
+
+            } catch (e) {
+                ui.log(`CRITICAL FAILURE: ${e.message}`, "error");
+                console.error(e);
+            }
+        }
+
+        async function loadModel() {
+            const select = document.getElementById('model-select');
+            const customInput = document.getElementById('custom-model-input');
+            let selectedModel = select.value === 'custom' ? customInput.value : select.value;
+            
+            if (!selectedModel) return alert("Please select a model.");
+
+            // Extract the simple model name (everything after the last slash)
+            // This ensures we have a clean ID for the config, regardless of the owner prefix
+            const simpleId = selectedModel.split('/').pop();
+            
+            document.getElementById('init-btn').disabled = true;
+            ui.log(`Loading Reasoning Engine (${simpleId})...`);
+
+            // Handle Custom Models & New Dropdown Models
+            let modelLib = null;
+            const lowerId = simpleId.toLowerCase();
+            const libBase = "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/";
+            
+            let qTag = "q4f16_1";
+            if (lowerId.includes("q4f32_1")) qTag = "q4f32_1";
+            else if (lowerId.includes("q4f16_0")) qTag = "q4f16_0";
+            else if (lowerId.includes("q8f16_0")) qTag = "q8f16_0";
+            else if (lowerId.includes("q0f32")) qTag = "q0f32";
+            else if (lowerId.includes("q0f16")) qTag = "q0f16";
+
+            if (lowerId.includes('llama-3.2-3b')) {
+                modelLib = libBase + `Llama-3.2-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('llama-3.2-1b')) {
+                modelLib = libBase + `Llama-3.2-1B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('llama-3.1-8b')) {
+                modelLib = libBase + `Llama-3_1-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('llama-3-8b')) {
+                modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('hermes-3-llama-3.1')) {
+                modelLib = libBase + `Llama-3_1-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('hermes-3-llama-3.2-3b')) {
+                modelLib = libBase + `Llama-3.2-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('hermes-2-pro-llama-3')) {
+                modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('hermes-2-pro-mistral')) {
+                modelLib = libBase + `Mistral-7B-Instruct-v0.3-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('phi-3.5-mini')) {
+                modelLib = libBase + `Phi-3.5-mini-instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('phi-3.5-vision')) {
+                modelLib = libBase + `Phi-3.5-vision-instruct-${qTag}-ctx4k_cs2k-webgpu.wasm`;
+            } else if (lowerId.includes('qwen2.5-7b')) {
+                modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`; 
+            } else if (lowerId.includes('qwen2.5-3b')) {
+                modelLib = libBase + `Qwen2.5-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('qwen2.5-coder-1.5b') || lowerId.includes('qwen2.5-1.5b')) {
+                modelLib = libBase + `Qwen2-1.5B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('gemma-2-9b')) {
+                modelLib = libBase + `gemma-2-9b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('gemma-2-2b')) {
+                modelLib = libBase + `gemma-2-2b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('gemma-3')) {
+                modelLib = libBase + `gemma-3-1b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('deepseek-r1')) {
+                modelLib = libBase + `DeepSeek-R1-Distill-Qwen-7B-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            }
+
+            const appConfig = {
+                model_list: [
+                    {
+                        "model": selectedModel.startsWith('huggingkot/') ? "https://huggingface.co/" + selectedModel : "https://huggingface.co/mlc-ai/" + simpleId,
+                        "model_id": selectedModel, // Use full selectedModel as model_id for registry lookup
+                        "model_lib": modelLib,
+                        "vram_required_MB": 1024,
+                        "low_resource_required": true,
+                    }
+                ]
+            };
+            
+            console.log("Reloading with config:", appConfig);
+            
+            try {
+                // Re-initialize engine to ensure config is applied
+                engine = new webllm.MLCEngine();
+                engine.setInitProgressCallback((report) => {
+                    const bar = document.getElementById('llm-progress');
+                    const status = document.getElementById('llm-status');
+                    if (bar) bar.style.width = (report.progress * 100) + "%";
+                    if (status) status.textContent = report.text;
+                });
+
+                // Try loading with full selectedModel first, fall back to simpleId
+                try {
+                    await engine.reload(selectedModel, { appConfig });
+                } catch (fallbackErr) {
+                    ui.log(`Trying fallback model ID...`, "warn");
+                    // Fallback: try with just the simple ID
+                    await engine.reload(simpleId, { appConfig });
+                }
+                
+                ui.log("✅ Reasoning Engine Online. System Ready.", "success");
+                document.getElementById('input-area').style.opacity = 1;
+                document.getElementById('input-field').disabled = false;
+            } catch (e) {
+                ui.log(`Model Load Failed: ${e.message}`, "error");
+                document.getElementById('init-btn').disabled = false;
+            }
+        }
+
+        // --- 2. MEMORY RETRIEVAL (Graph-R1) ---
+        async function recall(query) {
+            ui.log("Searching Memory...", "info");
+            
+            // 1. Vectorize Query
+            const vec = await embedder(query, { pooling: 'mean', normalize: true });
+            const queryVec = Array.from(vec.data);
+
+            // 2. Datalog Rule: Hybrid Search (Vector + Recency)
+            const queryScript = `
+                ?[id, content, score, date] := 
+                    *memory{id, content, embedding, timestamp},
+                    vec_score = dot_product(embedding, $query_vec),
+                    score = vec_score, 
+                    score > 0.3,       
+                    date = strftime(timestamp / 1000, '%Y-%m-%d')
+                :order -score
+                :limit 5
+            `;
+
+            try {
+                const result = await db.run(queryScript, JSON.stringify({ query_vec: queryVec }));
+                return result.rows.map(row => ({
+                    id: row[0],
+                    content: row[1],
+                    score: row[2],
+                    date: row[3]
+                }));
+            } catch (e) {
+                ui.log(`Recall Error: ${e.message}`, "error");
+                return [];
+            }
+        }
+
+        // --- 3. MEMORY FORMATION ---
+        async function memorize(role, content) {
+            const vec = await embedder(content, { pooling: 'mean', normalize: true });
+            const embedding = Array.from(vec.data);
+            const id = `${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+            
+            // Truncate content to prevent WASM OOM (keep first 20KB)
+            const storedContent = content.length > 20000 ? content.substring(0, 20000) + "...[TRUNCATED]" : content;
+
+            const query = `
+                :put memory { id, timestamp => role, content, source, embedding }
+            `;
+            
+            try {
+                await db.run(query, JSON.stringify({
+                    id: [id],
+                    timestamp: [Date.now()],
+                    role: [role],
+                    content: [storedContent],
+                    source: ['model-server-chat'],
+                    embedding: [embedding]
+                }));
+                ui.log(`💾 Memory Encoded: ${id}`);
+            } catch (e) {
+                // If table doesn't exist, create it
+                if (e.message.includes("does not exist") || e.message.includes("memory")) {
+                     try {
+                        await createSchema();
+                        // Retry once
+                        await db.run(query, JSON.stringify({
+                            id: [id],
+                            timestamp: [Date.now()],
+                            role: [role],
+                            content: [storedContent],
+                            source: ['model-server-chat'],
+                            embedding: [embedding]
+                        }));
+                     } catch (retryErr) {
+                        ui.log(`Memorize Retry Failed: ${retryErr.message}`, "error");
+                     }
+                } else {
+                    ui.log(`Memorize Error: ${e.message}`, "error");
+                }
+            }
+        }
+
+        async function createSchema() {
+            const schemaQuery = `
+                :create memory {
+                    id: String,
+                    timestamp: Int    
+                    =>
+                    role: String,     
+                    content: String,
+                    source: String,
+                    embedding: <F32; 384> 
+                } IF NOT EXISTS;
+            `;
+            await db.run(schemaQuery, {});
+        }
+
+        // --- 4. INTERACTION LOOP ---
+        async function handleSend() {
+            const inputEl = document.getElementById('input-field');
+            const text = inputEl.value.trim();
+            if (!text) return;
+
+            inputEl.value = "";
+            ui.appendChat('user', text);
+            await memorize('user', text); // Save to DB
+
+            // 1. Recall
+            const memories = await recall(text);
+            const contextBlock = memories.map(m => `[${m.date}] ${m.content}`).join("\n---\n");
+
+            // 2. Construct Prompt
+            const systemPrompt = `You are an AI assistant with local memory capabilities.
+            
+RELEVANT MEMORIES (Ground Truth):
+${contextBlock}
+
+INSTRUCTIONS:
+Answer the user based on the memories above. If the memories don't help, rely on your knowledge but admit uncertainty. Be concise and helpful.`;
+
+            const messages = [
+                { role: "system", content: systemPrompt },
+                ...chatHistory.slice(-5), // Keep short history
+                { role: "user", content: text }
+            ];
+
+            // 3. Generate
+            ui.log("Generating response...", "info");
+            const chunks = await engine.chat.completions.create({
+                messages,
+                stream: true
+            });
+
+            let fullResponse = "";
+            const responseDiv = document.createElement('div');
+            responseDiv.className = "msg assistant";
+            // Add context dropdown
+            responseDiv.innerHTML = `<details class="context-details"><summary>🧠 Context Used</summary><pre>${JSON.stringify(memories, null, 2)}</pre></details><div class="content"></div>`;
+            document.getElementById('chat-box').appendChild(responseDiv);
+            const contentDiv = responseDiv.querySelector('.content');
+
+            for await (const chunk of chunks) {
+                const delta = chunk.choices[0]?.delta?.content || "";
+                fullResponse += delta;
+                contentDiv.innerHTML = marked.parse(fullResponse);
+                document.getElementById('chat-box').scrollTop = document.getElementById('chat-box').scrollHeight;
+            }
+
+            chatHistory.push({ role: "user", content: text });
+            chatHistory.push({ role: "assistant", content: fullResponse });
+            
+            // 4. Save Response to Memory
+            await memorize('assistant', fullResponse);
+        }
+
+        // --- EVENT LISTENERS ---
+        document.getElementById('init-btn').addEventListener('click', loadModel);
+        document.getElementById('send-btn').addEventListener('click', handleSend);
+        document.getElementById('input-field').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+
+        // File Import Logic
+        const fileInput = document.getElementById('file-input');
+        document.getElementById('import-btn').addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+        // Drag & Drop for Context Injection
+        document.body.addEventListener('dragover', (e) => { e.preventDefault(); });
+        document.body.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            handleFiles(e.dataTransfer.files);
+        });
+
+        async function handleFiles(files) {
+            if (!files || files.length === 0) return;
+            
+            for (const file of files) {
+                ui.log(`Reading ${file.name}...`, "info");
+                const text = await file.text();
+                
+                if (file.name.endsWith('.json')) {
+                    // JSON Log Ingestion (Sovereign Builder Logic)
+                    try {
+                        const json = JSON.parse(text);
+                        const records = Array.isArray(json) ? json : (json.conversations || []);
+                        ui.log(`Processing ${records.length} turns from ${file.name}...`, "warn");
+                        
+                        let count = 0;
+                        for (const record of records) {
+                            // Extract content
+                            let content = record.content || record.response_content || record.message || "";
+                            let role = record.role || record.type || "unknown";
+                            
+                            // Extract timestamp (Time Travel)
+                            let ts = Date.now();
+                            if (record.timestamp) ts = new Date(record.timestamp).getTime();
+                            else if (record.created_at) ts = new Date(record.created_at).getTime();
+
+                            if (!content) continue;
+
+                            // We use memorize() but need to override timestamp
+                            // Since memorize() uses Date.now(), we'll manually insert here to preserve history
+                            const vec = await embedder(content, { pooling: 'mean', normalize: true });
+                            const embedding = Array.from(vec.data);
+                            const id = `${ts}-${Math.random().toString(36).substr(2, 5)}`;
+                            
+                            const query = `
+                                :put memory { id, timestamp => role, content, source, embedding }
+                            `;
+                            await db.run(query, {
+                                id: [id],
+                                timestamp: [ts],
+                                role: [role],
+                                content: [content],
+                                source: [file.name],
+                                embedding: [embedding]
+                            });
+                            count++;
+                        }
+                        ui.log(`✅ Imported ${count} memories from ${file.name}`, "success");
+                    } catch (e) {
+                        ui.log(`JSON Parse Error: ${e.message}`, "error");
+                    }
+                } else {
+                    // Text/Markdown Chunking
+                    const chunks = text.split(/\n\s*\n/).filter(c => c.trim().length > 0);
+                    ui.log(`Ingesting ${chunks.length} chunks from ${file.name}...`, "warn");
+                    
+                    for (const chunk of chunks) {
+                        await memorize('system', chunk);
+                    }
+                    ui.log(`✅ Ingestion Complete: ${file.name}`, "success");
+                }
+            }
+        }
+
+        // Start
+        window.onload = init;
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body { background: #111; color: #ddd; font-family: system-ui, sans-serif; display: flex; height: 100vh; margin: 0; overflow: hidden; }
+        #sidebar { width: 300px; background: #1a1a1a; padding: 20px; border-right: 1px solid #333; display: flex; flex-direction: column; }
+        #main { flex: 1; display: flex; flex-direction: column; padding: 20px; }
+        
+        #status-log { flex: 1; overflow-y: auto; font-family: monospace; font-size: 0.8rem; opacity: 0.7; }
+        .success { color: #4caf50; } .error { color: #f44336; } .warn { color: #ff9800; } .info { color: #2196f3; }
+        
+        #chat-box { flex: 1; overflow-y: auto; margin-bottom: 20px; padding-right: 10px; }
+        .msg { margin-bottom: 15px; padding: 10px; border-radius: 8px; max-width: 80%; }
+        .user { background: #005a9e; align-self: flex-end; margin-left: auto; color: white; }
+        .assistant { background: #2d2d2d; align-self: flex-start; border: 1px solid #444; }
+        
+        #input-area { display: flex; gap: 10px; opacity: 0.5; transition: opacity 0.3s; }
+        textarea { flex: 1; background: #222; border: 1px solid #444; color: white; padding: 10px; border-radius: 4px; resize: none; height: 50px; }
+        button { background: #0078d4; color: white; border: none; padding: 0 20px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        
+        .context-details { font-size: 0.75rem; color: #888; margin-bottom: 5px; cursor: pointer; }
+        pre { white-space: pre-wrap; word-wrap: break-word; }
+        
+        #llm-progress-bar { height: 4px; background: #333; margin: 10px 0; border-radius: 2px; overflow: hidden; }
+        #llm-progress { height: 100%; background: #0078d4; width: 0%; transition: width 0.2s; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <h2>💬 Model Server Chat</h2>
+    
+    <div style="margin-bottom: 15px;">
+        <select id="model-select" style="width: 100%; padding: 5px; background: #333; color: white; border: 1px solid #444; margin-bottom: 5px;" onchange="document.getElementById('custom-model-input').style.display = this.value === 'custom' ? 'block' : 'none'">
+            <option value="mlc-ai/Llama-3.2-1B-Instruct-q4f32_1-MLC">Llama 3.2 1B Instruct (Fastest)</option>
+            <option value="mlc-ai/Llama-3.1-8B-Instruct-q4f32_1-MLC">Llama 3.1 8B Instruct (Balanced)</option>
+            <option value="mlc-ai/Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B Instruct (Fast & Smart)</option>
+            <option value="mlc-ai/Hermes-3-Llama-3.2-3B-q4f16_1-MLC">Hermes 3 Llama 3.2 3B (Fast Uncensored)</option>
+            <option value="mlc-ai/Hermes-2-Pro-Llama-3-8B-q4f16_1-MLC">Hermes 2 Pro Llama 3 8B (Agentic)</option>
+            <option value="mlc-ai/Hermes-2-Pro-Mistral-7B-q4f16_1-MLC">Hermes 2 Pro Mistral 7B (Agentic)</option>
+            <option value="mlc-ai/Phi-3.5-mini-instruct-q4f16_1-MLC">Phi 3.5 Mini Instruct (Compact)</option>
+            <option value="mlc-ai/Phi-3.5-vision-instruct-q4f16_1-MLC">Phi 3.5 Vision Instruct (Multimodal)</option>
+            <option value="mlc-ai/Qwen2.5-7B-Instruct-q4f16_1-MLC">Qwen 2.5 7B Instruct (Strong Reasoning)</option>
+            <option value="mlc-ai/Qwen2.5-3B-Instruct-q4f16_1-MLC">Qwen 2.5 3B Instruct (Fast Reasoning)</option>
+            <option value="mlc-ai/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC">Qwen 2.5 Coder 1.5B (Coding)</option>
+            <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC">DeepSeek R1 Distill Qwen 7B (Reasoning ✓)</option>
+            <option value="mlc-ai/gemma-2-2b-it-q4f16_1-MLC">Gemma 2 2B Instruct (Efficient)</option>
+            <option value="mlc-ai/gemma-2-9b-it-q4f16_1-MLC">Gemma 2 9B Instruct (High Quality)</option>
+            <option value="custom">Custom (Enter ID below)</option>
+        </select>
+        <input type="text" id="custom-model-input" placeholder="HuggingFace ID" style="display: none; width: 100%; padding: 5px; background: #222; color: white; border: 1px solid #444; margin-bottom: 5px;">
+        <button id="init-btn" style="width: 100%; background: #28a745;" disabled>Load Model</button>
+    </div>
+
+    <div style="margin-bottom: 15px; border-top: 1px solid #333; padding-top: 10px;">
+        <button id="import-btn" style="width: 100%; background: #444; font-size: 0.9rem;">📂 Import Logs / Text</button>
+        <input type="file" id="file-input" multiple accept=".json,.txt,.md" style="display:none">
+    </div>
+
+    <div style="font-size: 0.8rem; color: #aaa; margin-bottom: 10px;">
+        State: <span id="llm-status">Initializing...</span>
+        <div id="llm-progress-bar"><div id="llm-progress"></div></div>
+    </div>
+    <div id="status-log"></div>
+</div>
+
+<div id="main">
+    <div id="chat-box"></div>
+    <div id="input-area">
+        <textarea id="input-field" placeholder="Accessing Memory Core..." disabled></textarea>
+        <button id="send-btn">Send</button>
+    </div>
+</div>
+
+</body>
+</html>

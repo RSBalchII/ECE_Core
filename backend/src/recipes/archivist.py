@@ -69,14 +69,22 @@ async def ingest_content(
         session_id = f"archivist-{int(time.time())}"
         
         # Use memory.add_memory to trigger the full pipeline (Distillation -> Neo4j -> Vector)
+        tags = ["#ingested", f"#{source_type.value.lower()}"]
         memory_id = await memory.add_memory(
             session_id=session_id,
             content=plaintext_memory.content,
             category="knowledge",
-            tags=["#ingested", f"#{source_type.value.lower()}"],
+            tags=tags,
             importance=3,
             metadata=plaintext_memory.metadata
         )
+
+        # Zero-Latency Context Priming
+        # If the ContextManager is available, prime it with the tags we just ingested
+        context_mgr = components.get("context_mgr")
+        if context_mgr:
+            # Fire and forget (awaiting it is fine as it should be fast)
+            await context_mgr.prime_context(tags)
 
         response_data = IngestResponse(
             status="success",

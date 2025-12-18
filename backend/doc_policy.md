@@ -10,6 +10,10 @@
 - `CONFIGURATION.md`: Environment variables and configuration.
 - `CHANGELOG.md`: Version history.
 - `CITATIONS.md`: References for the "Empirical Distrust" protocol.
+- `PROJECT_STATUS_REPORT.md`: Current architectural status and issue tracking (Root Directory).
+- `specs/spec.md`: Canonical project specification (design intent; code remains authoritative).
+- `specs/plan.md`: Implementation plan and roadmap (design intent; code remains authoritative).
+- `specs/tasks.md`: Implementation task queue (planning artifact; code remains authoritative).
 
 ## 3. Deprecated Documentation
 - All legacy documentation in `backend/docs/` has been moved to `backend/archive/docs_removed/`.

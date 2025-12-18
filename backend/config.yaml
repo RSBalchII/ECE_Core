@@ -38,9 +38,9 @@ llm:
   threads: 8
   
   # Embeddings settings
-  embeddings_api_base: "http://127.0.0.1:8081/v1"
+  embeddings_api_base: "http://localhost:8080/v1"
   embeddings_local_fallback_enabled: false
-  embeddings_model_name: ""
+  embeddings_model_name: "snowflake-arctic-embed-m-q0f32-MLC-b32"
   embeddings_chunk_size_default: 2048
   embeddings_default_batch_size: 2
   embeddings_adaptive_backoff_enabled: true
@@ -51,18 +51,24 @@ llm:
 # ============================================================
 # Redis (Hot cache)
 redis:
-  url: "redis://localhost:9999"
+  url: "redis://localhost:6379"
   ttl: 3600
   max_tokens: 16000
   enabled: true
 
 # Neo4j (Graph database)
 neo4j:
-  uri: "bolt://localhost:7688"
+  uri: "bolt://localhost:7687"
   user: "neo4j"
   password: "password"
   database: "neo4j"
   enabled: true
+
+# Vector DB (Semantic Search)
+vector:
+  enabled: true
+  adapter_name: "redis"
+  auto_embed: true
 
 # Memory thresholds
 max_context_tokens: 24000

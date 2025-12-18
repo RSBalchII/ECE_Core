@@ -1,5 +1,56 @@
 # Context-Engine Changelog
 
+## [Unreleased]
+
+### Added
+- **CozoDB Corruption Recovery**: Enhanced error handling for IndexedDB corruption with automatic fallback to in-memory database, manual recovery button, and timeout protection against hanging WASM calls.
+- **Bulk CozoDB Import Tool**: Added `tools/prepare_cozo_import.py` to transform `combined_memory.json` into the canonical `relations` payload (`cozo_import_memory.json`) for atomic bulk imports into CozoDB.
+- **Import Safety & Verification**: Added recommended import procedure and a post-import verification + backup step to avoid Schema Detachment.
+
+### Changed
+- **Ingestion Defaults**: Recommended batch size increased to 100 to prevent long-running slow writes that can desync CozoDB's in-memory metadata.
+
+---
+
+## [1.2.2] - 2025-12-18 "Hermes & CozoDB Fixes"
+
+### Fixed
+- **Hermes Model Support**: Fixed 404 errors for OpenHermes and NeuralHermes by mapping them to the verified `Mistral-v0.3` WASM library.
+- **CozoDB Date Formatting**: Removed `strftime` dependency from WASM queries (causing `no_implementation` errors) and moved date formatting to client-side JavaScript.
+- **Drag-and-Drop Import**: Fixed handling of CozoDB `relations` export format in drag-and-drop ingestion.
+- **Documentation**: Established `specs/mlc-urls.md` as a registry for verified WASM binaries.
+
+---
+
+## [1.2.1] - 2025-12-15 "DeepSeek & CozoDB Stabilization"
+
+### Fixed
+- **CozoDB Initialization**: Resolved `CozoDb.new_from_path is not a function` error by switching to `CozoDb.new_from_indexed_db` for persistent browser storage (IndexedDB backend).
+- **WASM Memory Access**: Fixed "memory access out of bounds" error in `sovereign-db-builder.html` and `unified-coda.html` by correctly stringifying JSON parameters passed to `db.run()`.
+- **DeepSeek Configuration**: Fixed "Cannot find model record" error in `unified-coda.html` by decoupling the internal model ID from the HuggingFace URL.
+
+### Added
+- **Sovereign Hub**: Created `tools/index.html` as a central dashboard for the Console, Builder, and Log Viewer.
+- **Log Viewer Upgrade**: Refactored `tools/log-viewer.html` to use `BroadcastChannel` for real-time, polling-free log updates from the console.
+- **Expanded File Support**: Updated `sovereign-db-builder.html` to support ingestion of a wider range of code and config files (ts, rs, go, sql, ini, xml, etc.).
+
+## [1.2.0] - 2025-12-15 "Sovereign Architecture"
+
+### Added
+- **Sovereign Console**: Created `tools/unified-coda.html`, a standalone WASM-based chat console with local CozoDB (OPFS) and Transformers.js.
+- **Sovereign DB Builder**: Created `tools/sovereign-db-builder.html` for ingesting JSON logs into the browser-based database.
+- **Model Support**: Expanded `unified-coda.html` to support the full range of MLC-compatible models (Llama 3.2, Qwen 2.5, Gemma 2, etc.).
+
+### Changed
+- **Log Management**: Updated backend logging to truncate files at 500KB to prevent disk bloat.
+
+## [1.1.0] - 2025-12-14 "Browser Stability & Bridge Fixes"
+
+### Fixed
+- **WebGPU Bridge**: Patched `tools/webgpu_bridge.py` to accept any model name, resolving 503 errors during embedding requests.
+- **LLM Client**: Updated `backend/src/llm.py` to correctly identify and use the configured embedding model (`nomic-embed-text-v1.5`).
+- **Coda Chat**: Modified `backend/src/recipes/coda_chat.py` to sanitize and truncate `retrieve_memory` outputs. Large JSON payloads were causing `Maximum call stack size exceeded` errors in the browser-based LLM worker.
+
 ## [1.0.0] - 2025-12-08 "Infinite Context Pipeline"
 
 ### Added

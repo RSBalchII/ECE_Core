@@ -1,8 +1,23 @@
 # Context-Engine Implementation Tasks
 
-## Current Work Queue (Phase 7: Optimization)
+## Current Work Queue (Phase 8: Browser-Native)
 
-### Active Development - Vector Adapter & C2C Replication
+### Completed - HTML Pivot ✅
+- [x] Browser-native sovereign tools (tools/)
+  - [x] WebLLM integration for local inference
+  - [x] CozoDB WASM for persistent memory
+  - [x] Transformers.js for embeddings
+  - [x] Zero-dependency HTML architecture
+  - [x] Hermes/Mistral Model Verification (v0.3 WASM)
+
+### Active Development - Context Injection Debugging
+- [ ] Fix context injection in model-server-chat.html
+  - [ ] Debug Graph-R1 reasoning loop coordination
+  - [ ] Resolve memory retrieval integration
+  - [ ] Test reasoning trace display
+
+### Deferred - Backend Optimization (Post-Pivot)
+- [ ] Vector Adapter & C2C Replication (backend archived)
 - [ ] Implement VectorAdapter interface for semantic search (EC-V-101)
   - [ ] Define abstract base class with required methods
   - [ ] Implement Redis VectorAdapter with HNSW indexing

@@ -5,6 +5,35 @@
 
 ---
 
+## 2025-12-15 - Sovereign Architecture & Log Rotation
+
+### Type: FEATURE + MAINTENANCE
+
+**What Changed**:
+- **Log Rotation**: Configured `RotatingFileHandler` in `launcher.py` and `src/main.py` (500KB limit).
+- **Sovereign Tools**: Added `tools/unified-coda.html` and `tools/sovereign-db-builder.html` to the workspace (client-side tools).
+
+**Why**:
+- To prevent disk space exhaustion from large log files.
+- To enable the transition to a browser-based "Sovereign" architecture (WASM).
+
+**Status**: ✅ Implemented.
+
+## 2025-12-14 - Browser Stability & Bridge Connectivity
+
+### Type: BUGFIX
+
+**What Changed**:
+- **WebGPU Bridge**: Patched `tools/webgpu_bridge.py` to accept any model name, resolving 503 errors during embedding requests.
+- **LLM Client**: Updated `src/llm.py` to correctly identify and use the configured embedding model (`nomic-embed-text-v1.5`).
+- **Coda Chat**: Modified `src/recipes/coda_chat.py` to sanitize and truncate `retrieve_memory` outputs. Large JSON payloads were causing `Maximum call stack size exceeded` errors in the browser-based LLM worker.
+
+**Why**:
+- To enable stable memory retrieval and RAG operations without crashing the client-side interface.
+- To resolve HTTP 500 errors on the `/chat/` endpoint caused by bridge connectivity issues.
+
+**Status**: ✅ Implemented and Verified.
+
 ## CURRENT DEVELOPMENT CYCLE (2025-12-10)
 
 ## 2025-12-10 - Chat Endpoint Stability & SGR Orchestrator Fixes

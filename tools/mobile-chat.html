@@ -172,13 +172,15 @@
             <label>API Key (Optional)</label>
             <input type="password" id="api-key-input" placeholder="Secret Key">
             <button id="save-settings">Save</button>
+            <button id="reset-settings" style="background-color: #444; margin-top: 10px;">Reset to Default (Port 8000)</button>
         </div>
     </div>
 
     <script>
         // State
+        const DEFAULT_URL = 'http://localhost:8000';
         let config = {
-            baseUrl: localStorage.getItem('ece_api_url') || 'http://localhost:8000',
+            baseUrl: localStorage.getItem('ece_api_url') || DEFAULT_URL,
             apiKey: localStorage.getItem('ece_api_key') || ''
         };
         const sessionId = 'mobile-' + Date.now();
@@ -190,6 +192,7 @@
         const settingsBtn = document.getElementById('settings-btn');
         const modal = document.getElementById('settings-modal');
         const saveSettingsBtn = document.getElementById('save-settings');
+        const resetSettingsBtn = document.getElementById('reset-settings');
         const apiUrlInput = document.getElementById('api-url-input');
         const apiKeyInput = document.getElementById('api-key-input');
 
@@ -215,12 +218,24 @@
         
         saveSettingsBtn.onclick = () => {
             let url = apiUrlInput.value.replace(/\/$/, ""); // Remove trailing slash
+            if (!url) url = DEFAULT_URL;
             config.baseUrl = url;
             config.apiKey = apiKeyInput.value;
             localStorage.setItem('ece_api_url', config.baseUrl);
             localStorage.setItem('ece_api_key', config.apiKey);
             modal.style.display = 'none';
             appendMessage('ai', `Configuration updated. Pointing to ${config.baseUrl}`);
+        };
+
+        resetSettingsBtn.onclick = () => {
+            config.baseUrl = DEFAULT_URL;
+            config.apiKey = '';
+            localStorage.removeItem('ece_api_url');
+            localStorage.removeItem('ece_api_key');
+            apiUrlInput.value = config.baseUrl;
+            apiKeyInput.value = '';
+            modal.style.display = 'none';
+            appendMessage('ai', `Configuration reset to default: ${config.baseUrl}`);
         };
 
         modal.onclick = (e) => {

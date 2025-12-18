@@ -385,15 +385,35 @@ def start_llm_server(model_path, port=8080):
     print(f"\n[DEBUG] Command: {' '.join(cmd)}")
     print("\n[INFO] Starting server... (this may take a moment to load the model)")
 
+    # Setup logging
+    log_dir = Path("backend/logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file_path = log_dir / "llm_server.log"
+    print(f"[INFO] Logging output to: {log_file_path.resolve()}")
+
+    log_file = None
     try:
-        # Start the server process
-        process = subprocess.Popen(cmd)
+        # Open log file for appending
+        log_file = open(log_file_path, "a", encoding="utf-8")
+        
+        # Write header to log
+        import datetime
+        log_file.write(f"\n\n{'='*80}\n")
+        log_file.write(f"Starting LLM Server at {datetime.datetime.now().isoformat()}\n")
+        log_file.write(f"Model: {model_path}\n")
+        log_file.write(f"Command: {' '.join(cmd)}\n")
+        log_file.write(f"{'='*80}\n\n")
+        log_file.flush()
+
+        # Start the server process, redirecting stdout/stderr to log file
+        process = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)
 
         # Wait for user to stop the server
         print(f"\n[SUCCESS] Server started successfully!")
         print(f"   - API available at: http://localhost:{port}")
         print(f"   - Health check: curl http://localhost:{port}/v1/models")
         print(f"   - Optimized for: {model_char['base_model']} model ({model_char['size_gb']}GB)")
+        print(f"   - Logs: {log_file_path}")
         print("\n[INFO] Press Ctrl+C to stop the server")
 
         # Wait for process to complete (or be interrupted)
@@ -401,12 +421,16 @@ def start_llm_server(model_path, port=8080):
 
     except KeyboardInterrupt:
         print(f"\n[INFO] Shutting down LLM server...")
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
+        if process:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
         print("[SUCCESS] Server stopped")
+    finally:
+        if log_file:
+            log_file.close()
 
     return True
 

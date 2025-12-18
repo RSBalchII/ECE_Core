@@ -16,7 +16,32 @@ class ContextManager:
         self.llm = llm
         self.distiller = Distiller(llm)  # Context quality gate & extractor
         self.chunker = IntelligentChunker(llm)  # Large input processor
-    
+        self.primed_context = [] # Store primed memories (Zero-Latency)
+
+    async def prime_context(self, tags: list[str]):
+        """
+        Anticipatory Context Priming.
+        Pre-loads memories based on tags detected during ingestion.
+        """
+        logger.info(f"Priming context for tags: {tags}")
+        try:
+            # Simple retrieval based on tags
+            # In a real implementation, this would query Neo4j for nodes with these tags
+            # For now, we'll simulate it or use a basic search if memory supports it
+            # Assuming memory.search_by_tags exists or we use vector search with the tag as query
+            
+            primed = []
+            for tag in tags:
+                # Use the tag as a query for vector search (heuristic)
+                results = await self.memory.search_memories(tag, limit=3)
+                if results:
+                    primed.extend(results)
+            
+            self.primed_context = primed
+            logger.info(f"Context primed with {len(self.primed_context)} memories")
+        except Exception as e:
+            logger.error(f"Failed to prime context: {e}")
+
     async def build_context(self, session_id: str, user_input: str) -> str:
         """
         Build context from memory tiers with Archivist filtering.
@@ -81,6 +106,14 @@ class ContextManager:
         current_dt = datetime.now(timezone.utc)
         formatted_dt = current_dt.strftime("%B %d, %Y at %H:%M:%S UTC")
         parts.append(f"**Current Date & Time:** {formatted_dt}\n<current_datetime>{current_dt.isoformat()}</current_datetime>")
+
+        # A.1 Primed Context (Zero-Latency)
+        if self.primed_context:
+            logger.info(f"Injecting {len(self.primed_context)} primed memories into context")
+            primed_str = "\n".join([f"- {m}" for m in self.primed_context])
+            parts.append(f"# Anticipated Context (Primed):\n{primed_str}")
+            # Clear after use (one-shot)
+            self.primed_context = []
 
         # B. Recent conversation (This Session)
         # Keeping this early provides continuity

@@ -1,33 +1,30 @@
 # Context-Engine: Infinite Context Pipeline
 
-> **Executive Cognitive Enhancement (ECE)** - An infinite context system and cognitive augmentation toolkit that solves the traditional LLM context window limitation.
+> **Executive Cognitive Enhancement (ECE)** - A browser-native infinite context system that runs entirely in your browser with zero backend dependencies.
 
 **Philosophy**: Your mind, augmented. Your data, sovereign. Your tools, open. **Infinite context, unlimited conversations.**
 
 ---
 
-## Architecture: Three Components, One System
+## Architecture: Browser-Native Sovereignty
 
-Context-Engine consists of three primary components working in harmony:
+Context-Engine now runs entirely in your browser with WebGPU-accelerated inference:
 
-### 🧠 **The Core** - The Brain
-**Role**: Memory system, reasoning engine, and cognitive orchestration
-**Location**: `backend/`
+### ⚡ **Sovereign Tools** - Browser-Native
+**Role**: Zero-dependency HTML tools with WebGPU inference and WASM memory
+**Location**: `tools/`
 
-- **Memory Architecture**: Neo4j (primary graph storage) + Redis (hot cache)
-- **Cognitive Agents**: Verifier (truth-checking), Archivist (maintenance), Distiller (summarization)
-- **Retrieval**: Graph-R1 + Markovian reasoning for context-aware memory recall
-- **Tool Integration**: Plugin-based architecture via UTCP (Simple Tool Mode)
-- **API**: FastAPI server on port 8000
+- **Memory Architecture**: CozoDB WASM (graph storage) + IndexedDB (persistent)
+- **Inference**: WebLLM with DeepSeek-R1 7B, Qwen 2.5, Gemma 2
+- **Embeddings**: Transformers.js (all-MiniLM-L6-v2)
+- **Interface**: Pure HTML - no servers, no installation
 
 **Key Features**:
-- ✅ Graph-based memory with relationship traversal
-- ✅ Empirical Distrust verification (primary source supremacy)
-- ✅ Automatic memory distillation and summarization
-- ✅ Traceability & rollback for automated repairs
-- ✅ Circuit breakers and graceful degradation
-- ✅ **Comprehensive Logging**: Server logs redirected to `logs/server_stdout.log` for persistent debugging.
-- ✅ **Automated Testing**: Integration tests available in `backend/scripts/tests/`.
+- ✅ Double-click HTML → instant AI with memory
+- ✅ Local inference with WebGPU acceleration
+- ✅ Graph-based memory with vector search
+- ✅ Zero data transmission (completely private)
+- ✅ Corruption recovery with automatic fallback
 
 ### 🤖 **Anchor** - The Body
 **Role**: Terminal interface and interaction layer
@@ -60,9 +57,22 @@ Context-Engine consists of three primary components working in harmony:
 **Role**: Portable, browser-native inference and diagnostics
 **Location**: `tools/`
 
-- **WebGPU Bridge**: Replaces local Python LLM servers with browser-based inference (Llama 3, Qwen 2.5).
-- **Sovereign UI**: Lightweight, single-file HTML interfaces (`mobile-chat.html`, `log-viewer.html`).
-- **Philosophy**: Zero-dependency, offline-capable, "run anywhere" tools.
+**Phase A: Graph-R1 Reasoning Console** (Current)
+- **`model-server-chat.html`** (Canonical) — Full Graph-R1 iterative reasoning with local memory retrieval. This is the primary entry point for Phase A.
+  - Iterative Think→Query→Refine loops (up to 3 iterations)
+  - CozoDB WASM memory engine with 211 ingested memories
+  - DeepSeek-R1 7B reasoning via WebLLM
+  - Reasoning trace audit trail
+  - Pattern-matched response parsing
+- **`sovereign-db-builder.html`** — Data ingestion pipeline for memories and research papers
+- **`model-server-chat.legacy.html`** — Previous simple retrieval+synthesis (archived reference)
+
+**Architecture**: Zero-dependency, offline-capable, "run anywhere" tools. Designed for sovereignty: all data stays local, no backend required.
+
+**Future Phases**:
+- **Phase B**: Test Graph-R1 quality with research papers; measure iteration improvements
+- **Phase C**: Extension Bridge for Gemini injection (3-second pause trigger, context append)
+- **Phase D**: Scale testing and adversarial retrieval (contradiction finding)
 
 ---
 
@@ -122,7 +132,24 @@ Response → Anchor → User
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
+
+### Zero Dependencies (Recommended)
+```bash
+# Just open HTML files in Chrome/Edge
+cd tools && start index.html
+```
+
+### Legacy Backend (Optional)
+```bash
+# Only if you need the old Python backend
+pip install -r requirements.txt
+python backend/launcher.py
+```
+
+---
+
+## Full Stack Setup (Production)
 
 ### Prerequisites
 - Python 3.11+

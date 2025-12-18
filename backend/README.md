@@ -1,14 +1,14 @@
-# ECE_Core Backend
+# ECE_Core Backend (ARCHIVED)
 
-> **Executive Cognitive Enhancement (ECE)** - Backend component for the Context-Engine
+> **Executive Cognitive Enhancement (ECE)** - Legacy backend component (superseded by browser-native HTML tools)
 
-**Philosophy**: Your mind, augmented. Your data, sovereign. Your tools, open.
+**Status**: Archived in favor of `tools/` HTML suite. Maintained for legacy compatibility only.
 
 ---
 
-## Architecture: The Brain
+## Architecture: Legacy Brain (Neo4j/Redis)
 
-The ECE_Core backend is the cognitive engine of the Context-Engine system. It manages the memory system, reasoning engine, and cognitive orchestration.
+The ECE_Core backend was the original cognitive engine. Now superseded by browser-native CozoDB WASM.
 
 ### Memory Architecture
 - **Neo4j** (port 7687) - PRIMARY STORAGE
@@ -30,6 +30,13 @@ The ECE_Core backend is the cognitive engine of the Context-Engine system. It ma
 - **Graph-R1 Reasoning Pattern**: "Think → Query → Retrieve → Rethink" iteration
 - **Markovian Reasoner**: Infinite-length task handling with state preservation
 - **Hybrid Retrieval**: Vector + Graph + Full-text search with ContextGist integration
+
+### Sovereign OS Architecture (WebGPU Bridge)
+The system now operates on a "Sovereign OS" model where inference is offloaded to the browser:
+- **WebGPU Bridge** (Port 8080): Proxies requests between the Python Backend and Browser Workers.
+- **WebGPU Embeddings**: `tools/webgpu-server-embed.html` provides text embeddings via the Bridge.
+- **WebGPU Chat**: `tools/model-server-chat.html` provides LLM inference via the Bridge.
+- **Chrome Extension**: Acts as a **Headless Ingestion Agent**. It pushes content to the Archivist (`POST /archivist/ingest`) to prime the context but does not handle chat directly.
 
 ---
 

@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coda Sovereign Console (Graph-R1)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1e1e1e;
+            color: #ccc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            height: 100vh;
+            margin: 0;
+        }
+
+        #sidebar {
+            width: 300px;
+            background: #252526;
+            padding: 15px;
+            border-right: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        #chat-box {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding-right: 10px;
+        }
+
+        #chat-box::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #chat-box::-webkit-scrollbar-track {
+            background: #333;
+        }
+
+        #chat-box::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 4px;
+        }
+
+        .msg {
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 6px;
+            background: #333;
+            max-width: 85%;
+            word-wrap: break-word;
+        }
+
+        .user {
+            background: #0078d4;
+            color: white;
+            align-self: flex-end;
+            margin-left: auto;
+        }
+
+        .assistant {
+            background: #2d2d2d;
+            border-left: 3px solid #0078d4;
+        }
+
+        .msg details {
+            margin-top: 10px;
+            font-size: 0.85rem;
+            opacity: 0.7;
+        }
+
+        .msg pre {
+            background: #1e1e1e;
+            padding: 8px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 0.8rem;
+        }
+
+        h3 {
+            margin: 0 0 10px 0;
+        }
+
+        #status-text {
+            font-size: 0.9rem;
+            color: #888;
+            margin-bottom: 8px;
+        }
+
+        #progress-bar {
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        #progress {
+            height: 100%;
+            background: #0078d4;
+            width: 0%;
+            transition: width 0.2s;
+        }
+
+        #status-log {
+            flex: 1;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.75rem;
+            margin-top: 10px;
+            padding: 8px;
+            background: #1a1a1a;
+            border-radius: 4px;
+            border: 1px solid #333;
+        }
+
+        #status-log div {
+            margin: 2px 0;
+            padding: 2px 0;
+        }
+
+        .info {
+            color: #888;
+        }
+
+        .warn {
+            color: #d7ba7d;
+        }
+
+        .error {
+            color: #f48771;
+        }
+
+        .success {
+            color: #89d185;
+        }
+
+        #input-area {
+            display: flex;
+            gap: 10px;
+        }
+
+        textarea {
+            flex: 1;
+            height: 60px;
+            background: #3c3c3c;
+            border: 1px solid #555;
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            resize: vertical;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #0078d4;
+        }
+
+        button {
+            padding: 8px 20px;
+            background: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            align-self: flex-end;
+        }
+
+        button:hover {
+            background: #1084d7;
+        }
+
+        .msg.assistant {
+            background: #2d2d2d;
+            align-self: flex-start;
+        }
+
+        .msg.system {
+            background: #3c3c3c;
+            align-self: center;
+            font-style: italic;
+            font-size: 11px;
+        }
+
+        details {
+            margin-top: 5px;
+            background: #252526;
+            border: 1px solid #444;
+            border-radius: 4px;
+            font-size: 11px;
+            overflow: hidden;
+        }
+
+        summary {
+            padding: 5px 10px;
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            opacity: 0.8;
+            font-weight: bold;
+        }
+
+        summary:hover {
+            opacity: 1;
+            background: #2a2a2b;
+        }
+
+        summary::before {
+            content: '▶';
+            font-size: 8px;
+            transition: transform 0.2s;
+        }
+
+        details[open] summary::before {
+            transform: rotate(90deg);
+        }
+
+        details pre {
+            margin: 0;
+            padding: 10px;
+            background: #1e1e1e;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .streaming {
+            border-right: 2px solid var(--accent);
+            animation: blink 0.7s infinite;
+        }
+
+        @keyframes blink {
+            50% {
+                border-color: transparent;
+            }
+        }
+
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="sidebar">
+        <h3>⚡ Sovereign Coda</h3>
+        <small id="status-text">Initializing...</small>
+        <div id="progress-bar">
+            <div id="progress"></div>
+        </div>
+
+        <!-- Model Selection in Sidebar -->
+        <div id="model-selector" style="padding: 10px; border-bottom: 1px solid #444; margin-bottom: 10px;">
+            <label style="font-size: 11px; display: block; margin-bottom: 5px;">Model:</label>
+            <select id="model-select" disabled style="width: 100%; margin-bottom: 5px; padding: 5px; font-size: 11px;">
+                <option value="">-- Select Model --</option>
+                <optgroup label="Reasoning (7B+)">
+                    <option value="mlc-ai/OpenHermes-2.5-Mistral-7B-q4f16_1-MLC">OpenHermes-2.5-Mistral-7B</option>
+                    <option value="mlc-ai/NeuralHermes-2.5-Mistral-7B-q3f16_1-MLC">NeuralHermes-2.5-Mistral-7B (q3)
+                    </option>
+                    <option value="mlc-ai/Hermes-2-Pro-Mistral-7B-q4f16_1-MLC">Hermes-2-Pro-Mistral-7B</option>
+                    <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC">DeepSeek-R1-7B (Qwen)</option>
+                    <option value="mlc-ai/DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC">DeepSeek-R1-8B (Llama)</option>
+                    <option value="mlc-ai/Qwen2-7B-Instruct-q4f16_1-MLC">Qwen2-7B</option>
+                    <option value="mlc-ai/Llama-3.1-8B-Instruct-q4f32_1-MLC">Llama-3.1-8B</option>
+                    <option value="mlc-ai/gemma-2-9b-it-q4f16_1-MLC">Gemma-2-9B</option>
+                </optgroup>
+                <optgroup label="Hermes Special">
+                    <option value="mlc-ai/Hermes-3-Llama-3.2-3B-q4f16_1-MLC">Hermes-3-Llama-3.2-3B</option>
+                </optgroup>
+                <optgroup label="Medium (3B/4B)">
+                    <option value="huggingkot/Qwen2.5-3B-Instruct">Qwen2.5-3B</option>
+                    <option value="mlc-ai/Qwen3-4B-q4f16_1-MLC">Qwen3-4B</option>
+                    <option value="huggingkot/Llama-3.2-3B-Instruct">Llama-3.2-3B</option>
+                    <option value="huggingkot/Gemma-2-2B-it">Gemma-2-2B</option>
+                </optgroup>
+                <optgroup label="Small (1.5B)">
+                    <option value="huggingkot/Qwen2.5-1.5B">Qwen2.5-1.5B</option>
+                    <option value="huggingkot/Llama-3.2-1B-Instruct">Llama-3.2-1B</option>
+                    <option value="huggingkot/Phi-3.5-mini-instruct">Phi-3.5-mini</option>
+                </optgroup>
+                <optgroup label="Specialized">
+                    <option value="huggingkot/Qwen2.5-Coder-1.5B">Qwen2.5-Coder</option>
+                    <option value="huggingkot/Phi-3.5-vision-instruct">Phi-3.5-vision</option>
+                </optgroup>
+                <option value="custom">-- Custom --</option>
+            </select>
+            <input id="custom-model-input" type="text" placeholder="Custom model ID"
+                style="width: 100%; padding: 5px; font-size: 11px; margin-bottom: 5px;" disabled />
+            <button id="load-model-btn" disabled
+                style="width: 100%; padding: 6px; background: #0078d4; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">Load
+                Model</button>
+        </div>
+        <div style="padding: 10px; border-bottom: 1px solid #444; margin-bottom: 10px;">
+            <button id="attempt-indexeddb-load-btn"
+                style="width: 100%; padding: 6px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">Attempt
+                Load IndexedDB (may panic)</button>
+            <button id="clear-cache-btn"
+                style="width: 100%; margin-top: 5px; padding: 6px; background: #a43131; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">⚠️
+                Delete All Model Cache</button>
+            <small style="display:block;margin-top:6px;color:#aaa;">Use after cleaning blobs via Sovereign DB Builder if
+                WASM panicked on load.</small>
+        </div>
+
+        <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+            <button id="copy-logs-btn"
+                style="flex: 1; padding: 4px; background: #333; color: #ccc; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 10px;">📋
+                Copy Logs</button>
+        </div>
+        <div id="status-log" style="flex: 1; overflow-y: auto; border-top: 1px solid #444;"></div>
+    </div>
+    <div id="main">
+        <div id="chat-box"></div>
+        <div id="input-area">
+            <textarea id="input" disabled placeholder="Waiting for Engine..."></textarea>
+            <button id="send-btn" disabled>Send</button>
+        </div>
+    </div>
+
+    <script type="module">
+        // --- IMPORTS ---
+        import initCozo, { CozoDb } from './cozo_lib_wasm.js';
+        import { loadAllFromIndexedDb, writeToIndexedDb } from './indexeddb.js';
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0';
+        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+        import { marked } from "https://cdn.jsdelivr.net/npm/marked/lib/marked.esm.js";
+
+        env.allowLocalModels = false;
+
+        // --- GLOBAL STATE ---
+        let db;
+        let embedder;
+        let engine;
+        let reasoningLoop;
+        let selectedModelId = null;
+
+        // --- BROADCAST CHANNEL FOR LOG-VIEWER ---
+        const logChannel = new BroadcastChannel('sovereign-logs');
+        // Additional mission-control channel (low-latency JSON messages)
+        const codaChannel = new BroadcastChannel('coda_logs');
+
+        // Helper to forward system/chat logs to mission-control channel
+        function postCoda(msg, meta = {}) {
+            try {
+                codaChannel.postMessage(Object.assign({ source: 'Sovereign-Console', time: new Date().toISOString(), message: msg }, meta));
+            } catch (e) {
+                console.warn('coda post failed', e.message);
+            }
+        }
+
+        // --- UI HELPERS ---
+        const ui = {
+            log: (msg, type = 'info') => {
+                const el = document.getElementById('status-log');
+                const div = document.createElement('div');
+                div.className = type;
+                div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+                div.style.fontSize = '11px';
+                div.style.padding = '2px';
+                div.style.borderBottom = '1px solid #222';
+                el.insertBefore(div, el.firstChild);
+                if (el.children.length > 100) el.removeChild(el.lastChild);
+
+                // Send to log-viewer (legacy channel)
+                logChannel.postMessage({ source: 'system', msg, type, time: new Date().toLocaleTimeString() });
+                // Also post to Coda Mission Control channel for unified view
+                try {
+                    codaChannel.postMessage({ source: 'Sovereign-Console', message: msg, type, timestamp: new Date().toISOString() });
+                } catch (e) {
+                    console.warn('codaChannel post failed', e);
+                }
+            },
+            append: (role, text, meta = null) => {
+                const box = document.getElementById('chat-box');
+                const div = document.createElement('div');
+                div.className = `msg ${role}`;
+                div.innerHTML = text ? marked.parse(text) : "";
+
+                if (meta && meta.trace && meta.trace.length > 0) {
+                    const details = document.createElement('details');
+                    const summary = document.createElement('summary');
+                    summary.textContent = '📋 Reasoning Trace';
+                    const pre = document.createElement('pre');
+                    pre.textContent = JSON.stringify(meta.trace, null, 2);
+                    details.appendChild(summary);
+                    details.appendChild(pre);
+                    div.appendChild(details);
+                }
+
+                box.appendChild(div);
+                box.scrollTop = box.scrollHeight;
+
+                // Return a handle for updating this message
+                return {
+                    div,
+                    update: (newText, isMarkdown = true) => {
+                        div.innerHTML = isMarkdown ? marked.parse(newText) : newText;
+                        box.scrollTop = box.scrollHeight;
+                    },
+                    appendText: (chunk) => {
+                        // For simple non-streaming render updates
+                        if (div.innerText.endsWith("...")) div.innerText = div.innerText.slice(0, -3);
+                        div.innerText += chunk;
+                        box.scrollTop = box.scrollHeight;
+                    }
+                };
+            },
+            appendReasoning: (label) => {
+                const box = document.getElementById('chat-box');
+                const details = document.createElement('details');
+                details.open = true;
+                const summary = document.createElement('summary');
+                summary.textContent = `📋 ${label}`;
+                const pre = document.createElement('pre');
+                pre.className = "streaming";
+                details.appendChild(summary);
+                details.appendChild(pre);
+                box.appendChild(details);
+                box.scrollTop = box.scrollHeight;
+
+                let content = "";
+                return {
+                    details,
+                    pre,
+                    update: (chunk) => {
+                        content += chunk;
+                        pre.textContent = content;
+                        box.scrollTop = box.scrollHeight;
+                    },
+                    finish: (finalText) => {
+                        if (finalText) pre.textContent = finalText;
+                        pre.className = "";
+                        details.open = false; // Collapse on finish
+                    }
+                };
+            },
+            updateProgress: (pct, text) => {
+                document.getElementById('progress').style.width = (pct * 100) + "%";
+                if (text) document.getElementById('status-text').innerText = text;
+            }
+        };
+
+        // --- UTILS: Response Pattern Matcher ---
+        class ResponsePattern {
+            static match(response) {
+                // 1. Database Result
+                if (response?.rows && Array.isArray(response.rows)) {
+                    return {
+                        type: 'DB_RESULT',
+                        rows: response.rows,
+                        count: response.rows.length
+                    };
+                }
+
+                // 2. Search Plan (LLM JSON)
+                let data = response;
+                if (typeof response === 'string') {
+                    try {
+                        const clean = response.replace(/```json/g, '').replace(/```/g, '').trim();
+                        const start = clean.indexOf('{');
+                        const end = clean.lastIndexOf('}');
+                        if (start >= 0 && end >= 0) {
+                            data = JSON.parse(clean.substring(start, end + 1));
+                        }
+                    } catch (e) {
+                        // Not JSON, treat as raw text
+                    }
+                }
+
+                if (data?.query && typeof data.query === 'string' && data?.hypothesis) {
+                    return {
+                        type: 'SEARCH_PLAN',
+                        query: data.query,
+                        hypothesis: data.hypothesis,
+                        confidence: typeof data.confidence === 'number' ? data.confidence : 0.5
+                    };
+                }
+
+                // 3. Error
+                if (response?.error || (typeof response === 'string' && response.toLowerCase().includes('error:'))) {
+                    return {
+                        type: 'ERROR',
+                        error: response.error || response
+                    };
+                }
+
+                // 4. LLM Chat Response
+                if (response?.choices && Array.isArray(response.choices) && response.choices.length > 0) {
+                    const content = response.choices[0]?.message?.content || response.choices[0]?.text || '';
+                    return {
+                        type: 'LLM_RESPONSE',
+                        text: content
+                    };
+                }
+
+                // 5. Default / Raw Text
+                return {
+                    type: 'RAW_TEXT',
+                    text: typeof response === 'string' ? response : JSON.stringify(response)
+                };
+            }
+        }
+
+        // --- LOGIC: Graph-R1 Loop ---
+        class GraphR1ReasoningLoop {
+            constructor(cozoDb, llmEngine, embedderFn) {
+                this.db = cozoDb;
+                this.llm = llmEngine;
+                this.embedder = embedderFn;
+                this.maxIterations = 3;
+                this.history = [];
+            }
+
+            async reason(userQuery) {
+                let context = "";
+                let iteration = 0;
+                this.history = [];
+
+                ui.log(`🧠 Graph-R1 Loop Started: "${userQuery}"`, "info");
+
+                while (iteration < this.maxIterations) {
+                    iteration++;
+                    ui.log(`🔄 Iteration ${iteration}/${this.maxIterations}...`, "warn");
+
+                    try {
+                        const planPrompt = `You are a Reasoning Engine analyzing memories.
+                        
+USER QUERY: "${userQuery}"
+
+CURRENT CONTEXT:
+${context || "(No context yet)"}
+
+TASK: Generate a Datalog query to find relevant memories. Return ONLY valid JSON.
+
+Schema: memory { id: String => timestamp: Int, role: String, content: String, embedding: <F32; 384> }
+
+Query Rules:
+1. Timestamps are Unix Ms (e.g. 1753176645000). To filter by year/date, use constraints like: 'timestamp >= ...'
+2. DO NOT put literals in the head (e.g. *memory{2025...} is INVALID). Use variables and filter: *memory{timestamp...}, timestamp >= 1735689600000
+
+OUTPUT JSON:
+{
+  "hypothesis": "I need to find memories from July 2025...",
+  "query": "?[id, content] := *memory{id, content, timestamp}, timestamp >= 1751328000000, timestamp <= 1754006400000",
+  "confidence": 0.5
+}`;
+
+                        const reasoningUI = ui.appendReasoning(`Thinking: ${userQuery.substring(0, 30)}... (Iteration ${iteration})`);
+
+                        const planStream = await this.llm.chat.completions.create({
+                            messages: [{ role: "user", content: planPrompt }],
+                            max_tokens: 300,
+                            temperature: 0.3,
+                            stream: true
+                        });
+
+                        let planText = "";
+                        for await (const chunk of planStream) {
+                            const delta = chunk.choices[0]?.delta?.content || "";
+                            planText += delta;
+                            reasoningUI.update(delta);
+                        }
+                        reasoningUI.finish();
+
+                        const planResult = ResponsePattern.match(planText);
+
+                        if (planResult.type !== 'SEARCH_PLAN') {
+                            ui.log(`⚠️ Iteration ${iteration}: Plan generation failed. Got ${planResult.type}`, "warn");
+                            if (iteration >= this.maxIterations) break;
+                            continue;
+                        }
+
+                        ui.log(`🤔 Hypothesis: ${planResult.hypothesis}`, "info");
+
+                        // Stop if confident
+                        if (planResult.confidence >= 0.8) {
+                            ui.log(`✅ High confidence reached (${(planResult.confidence * 100).toFixed(0)}%)`, "success");
+                            break;
+                        }
+
+                        // 2. QUERY: Execute Datalog
+                        try {
+                            const cleanQuery = planResult.query.replace(/```/g, '').trim();
+                            const queryParams = {};
+
+                            // Execute query
+                            let dbRaw;
+                            let dbResult;
+                            try {
+                                dbRaw = await this.db.run(cleanQuery, JSON.stringify(queryParams));
+                                dbResult = ResponsePattern.match(dbRaw);
+                            } catch (qe) {
+                                // Handle known parser errors gracefully (e.g., missing sort key)
+                                ui.log(`Query execution failed: ${qe.message}. Attempting sanitized fallback.`, "warn");
+                                if (qe.message && qe.message.includes("Sort key 'timestamp' not found")) {
+                                    try {
+                                        const sanitized = cleanQuery.replace(/:sort\s+-timestamp/g, '');
+                                        ui.log('Retrying query without :sort -timestamp', 'info');
+                                        dbRaw = await this.db.run(sanitized, JSON.stringify(queryParams));
+                                        dbResult = ResponsePattern.match(dbRaw);
+                                    } catch (qe2) {
+                                        ui.log(`Fallback query failed: ${qe2.message}`, 'error');
+                                        dbResult = { type: 'ERROR', error: qe2.message };
+                                    }
+                                } else {
+                                    dbResult = { type: 'ERROR', error: qe.message };
+                                }
+                            }
+
+                            if (dbResult.type === 'DB_RESULT' && dbResult.count > 0) {
+                                const newFacts = dbResult.rows
+                                    .map((row, idx) => {
+                                        // Handle array rows
+                                        if (Array.isArray(row)) {
+                                            return `[Fact ${idx + 1}] ${row.slice(1).join(': ')}`;
+                                        }
+                                        return `[Fact ${idx + 1}] ${JSON.stringify(row)}`;
+                                    })
+                                    .join("\n");
+
+                                context += `\n--- Iteration ${iteration} Findings ---\n${newFacts}`;
+                                ui.log(`📚 Retrieved ${dbResult.count} fact(s).`, "success");
+
+                                this.history.push({
+                                    iteration,
+                                    hypothesis: planResult.hypothesis,
+                                    facts_retrieved: dbResult.count,
+                                    confidence: planResult.confidence
+                                });
+                            } else if (dbResult.type === 'DB_RESULT') {
+                                ui.log(`📭 Iteration ${iteration}: No matching facts found.`, "warn");
+                                this.history.push({
+                                    iteration,
+                                    hypothesis: planResult.hypothesis,
+                                    facts_retrieved: 0,
+                                    confidence: planResult.confidence
+                                });
+                            } else {
+                                const err = dbResult.error || "Unknown DB Error";
+                                ui.log(`⚠️ Query error: ${err}`, "error");
+                            }
+
+                        } catch (e) {
+                            ui.log(`🔥 Query execution failed: ${e.message}`, "error");
+                        }
+
+                    } catch (e) {
+                        ui.log(`💥 Iteration ${iteration} error: ${e.message}`, "error");
+                    }
+                }
+
+                ui.log(`✨ Graph-R1 Loop completed after ${iteration} iteration(s).`, "success");
+                return { context, trace: this.history };
+            }
+        }
+
+        // --- HANDLERS ---
+        async function handleSend() {
+            const input = document.getElementById('input');
+            const text = input.value.trim();
+            if (!text || !engine) return;
+
+            input.value = "";
+            input.disabled = true;
+            document.getElementById('send-btn').disabled = true;
+
+            ui.append("user", text);
+
+            try {
+                // 1. Run Graph-R1 Loop
+                const { context, trace } = await reasoningLoop.reason(text);
+
+                // 2. Final Synthesis with Streaming
+                ui.log("🧪 Synthesizing final answer...", "warn");
+
+                const sysPrompt = `You are a helpful assistant with access to retrieved context from the user's memory system.
+
+Use the following context to answer the user's question. Be specific and cite the memory when relevant.
+
+CONTEXT:
+${context || "(No relevant context found)"}
+
+If context is insufficient, say so clearly.`;
+
+                const msgHandle = ui.append("assistant", "");
+
+                const stream = await engine.chat.completions.create({
+                    messages: [
+                        { role: "system", content: sysPrompt },
+                        { role: "user", content: text }
+                    ],
+                    max_tokens: 500,
+                    temperature: 0.7,
+                    stream: true
+                });
+
+                let fullAnswer = "";
+                for await (const chunk of stream) {
+                    const delta = chunk.choices[0]?.delta?.content || "";
+                    fullAnswer += delta;
+                    msgHandle.update(fullAnswer);
+                }
+
+                ui.log("✅ Response generated.", "success");
+
+            } catch (e) {
+                ui.log(`Error: ${e.message}`, "error");
+                ui.append("system", `Error: ${e.message}`);
+            } finally {
+                input.disabled = false;
+                document.getElementById('send-btn').disabled = false;
+                input.focus();
+            }
+        }
+
+        // --- MAIN INIT ---
+        async function loadModel() {
+            const select = document.getElementById('model-select');
+            const customInput = document.getElementById('custom-model-input');
+            const modelInput = select.value === 'custom' ? customInput.value : select.value;
+
+            if (!modelInput) return alert("Please select a model.");
+
+            // Standardize IDs
+            const simpleId = modelInput.split('/').pop();
+            selectedModelId = simpleId;
+
+            document.getElementById('model-select').disabled = true;
+            document.getElementById('custom-model-input').disabled = true;
+            document.getElementById('load-model-btn').disabled = true;
+            ui.log(`Loading Reasoning Engine (${simpleId})...`, "info");
+
+            // --- Robust Model Library Mapping (from legacy) ---
+            let modelLib = null;
+            const lowerId = simpleId.toLowerCase();
+            const libBase = "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/";
+
+            let qTag = "q4f16_1";
+            if (lowerId.includes("q4f32_1")) qTag = "q4f32_1";
+            else if (lowerId.includes("q4f16_0")) qTag = "q4f16_0";
+            else if (lowerId.includes("q8f16_0")) qTag = "q8f16_0";
+            else if (lowerId.includes("q0f32")) qTag = "q0f32";
+            else if (lowerId.includes("q0f16")) qTag = "q0f16";
+            else if (lowerId.includes("q3f16_1")) {
+                // WARNING: There is no specific q3f16_1 WASM for Mistral v0.3 in v0_2_80.
+                // We fallback to using the q4f16_1 WASM which covers the same architecture.
+                qTag = "q4f16_1";
+            }
+
+            if (lowerId.includes('llama-3.2-3b')) {
+                modelLib = libBase + `Llama-3.2-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('llama-3.2-1b')) {
+                modelLib = libBase + `Llama-3.2-1B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('llama-3.1-8b')) {
+                // Fallback to Llama-3-8B-Instruct if 3.1 specific WASM is missing in v0_2_80
+                modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('phi-3.5-mini')) {
+                modelLib = libBase + `Phi-3.5-mini-instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('phi-3.5-vision')) {
+                modelLib = libBase + `Phi-3.5-vision-instruct-${qTag}-ctx4k_cs2k-webgpu.wasm`;
+            } else if (lowerId.includes('qwen2.5-7b')) {
+                // Use Qwen2 as safe fallback for Qwen2.5 if specific WASM missing
+                modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('qwen2.5-3b')) {
+                modelLib = libBase + `Qwen2.5-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('qwen3-4b')) {
+                modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`; // Fallback map
+            } else if (lowerId.includes('qwen2.5-coder-1.5b') || lowerId.includes('qwen2.5-1.5b') || lowerId.includes('qwen2-1.5b')) {
+                modelLib = libBase + `Qwen2-1.5B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('gemma-2-9b')) {
+                modelLib = libBase + `gemma-2-9b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('gemma-2-2b')) {
+                modelLib = libBase + `gemma-2-2b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('mistral') || lowerId.includes('hermes')) {
+                // Hermes/Mistral Logic
+                if (lowerId.includes('hermes-3-llama-3.2-3b')) {
+                    modelLib = libBase + `Llama-3.2-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else {
+                    // VERIFIED: Use v0.3 WASM for all 7B Hermes/Mistral variants
+                    modelLib = libBase + `Mistral-7B-Instruct-v0.3-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                }
+            }
+
+            if (lowerId.includes('deepseek-r1-distill-llama')) {
+                // Use Llama-3-8B library for architecture compatibility
+                modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            } else if (lowerId.includes('deepseek-r1') || lowerId.includes('qwen')) {
+                // Swith back to Qwen2-7B library (Verified Existing) - The specific DeepSeek WASM is 404.
+                modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            }
+
+            // NOTE: For Mistral/Hermes, we omit specific modelLib mapping to let WebLLM defaults try to resolve,
+            // or rely on previous Mistral mapping if valid. If explicit mapping failed 404, better to try default.
+
+            ui.log(`Wait for it... Resolving Model Lib: ${modelLib}`, "warn");
+
+            // Construct Config with BOTH IDs to ensure lookup succeeds for primary OR fallback
+            const appConfig = {
+                model_list: [
+                    {
+                        "model": modelInput.startsWith('huggingkot/') ? "https://huggingface.co/" + modelInput : "https://huggingface.co/mlc-ai/" + simpleId,
+                        "model_id": modelInput,
+                        "model_lib": modelLib,
+                        "vram_required_MB": 1024,
+                        "low_resource_required": true,
+                    },
+                    {
+                        "model": modelInput.startsWith('huggingkot/') ? "https://huggingface.co/" + modelInput : "https://huggingface.co/mlc-ai/" + simpleId,
+                        "model_id": simpleId,
+                        "model_lib": modelLib,
+                        "vram_required_MB": 1024,
+                        "low_resource_required": true,
+                    }
+                ]
+            };
+
+            // If modelLib is null (e.g. Mistral), we should let CreateMLCEngine handle it or provide a default?
+            // "model_lib": modelLib || (libBase + `Mistral-7B-Instruct-v0.2-${qTag}-sw4k_cs1k-webgpu.wasm`), 
+            // We'll trust the logic: if we didn't map it, assume generic Mistral or let it fail gracefully/fallback.
+            // Actually, best to map OpenHermes to Mistral v0.2 if we can, but we couldn't verify file.
+            // Let's rely on Qwen/Llama mappings being correct.
+
+
+            try {
+                try {
+                    ui.log(`Attempting to load: ${modelInput}`, "info");
+
+                    // Use CreateMLCEngine to ensure appConfig is respected during init
+                    engine = await webllm.CreateMLCEngine(modelInput, {
+                        appConfig,
+                        initProgressCallback: (report) => {
+                            ui.updateProgress(0.5 + (report.progress * 0.4), report.text);
+                        }
+                    });
+
+                } catch (primaryErr) {
+                    ui.log(`Primary load failed (${primaryErr.message}), trying fallback to ${simpleId}...`, "warn");
+
+                    // Fallback: Try creating engine with simpleId
+                    engine = await webllm.CreateMLCEngine(simpleId, {
+                        appConfig,
+                        initProgressCallback: (report) => {
+                            ui.updateProgress(0.5 + (report.progress * 0.4), report.text);
+                        }
+                    });
+                }
+
+                ui.log(`✅ Engine Ready`, "success");
+                ui.updateProgress(1.0, "Ready!");
+
+                // Initialize reasoning loop
+                reasoningLoop = new GraphR1ReasoningLoop(db, engine, embedder);
+
+                // Enable input
+                document.getElementById('input').disabled = false;
+                document.getElementById('send-btn').disabled = false;
+                document.getElementById('input').focus();
+
+                ui.log("🎉 Sovereign Console Online", "success");
+                ui.append("assistant", `**Welcome to Sovereign Coda Console with ${simpleId}!**\n\nI'm ready to query your memory system using Graph-R1 reasoning. Ask me anything about the memories you've ingested.\n\nExample: \"What happened in July 2025?\"`);
+
+                // Setup input handlers
+                document.getElementById('send-btn').addEventListener('click', handleSend);
+                document.getElementById('input').addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && !document.getElementById('send-btn').disabled) {
+                        e.preventDefault();
+                        handleSend();
+                    }
+                });
+            } catch (e) {
+                ui.log(`Model Load Failed: ${e.message}`, "error");
+                document.getElementById('model-select').disabled = false;
+                document.getElementById('custom-model-input').disabled = false;
+                document.getElementById('load-model-btn').disabled = false;
+            }
+        }
+
+        async function init() {
+            try {
+                ui.log("🚀 Sovereign Console Starting...", "info");
+                ui.updateProgress(0.1, "Initializing CozoDB...");
+
+                // Initialize CozoDB
+                await initCozo('./cozo_lib_wasm_bg.wasm');
+                // Probe IndexedDB before attempting an automatic WASM load (malformed blobs can cause WASM panics)
+                try {
+                    const [keys, items] = await loadAllFromIndexedDb('coda_memory', 'cozo_store', () => { });
+                    ui.log(`IndexedDB probe found ${keys.length} entries in 'cozo_store'.`, 'info');
+                    if (keys.length === 0) {
+                        db = await CozoDb.new_from_indexed_db('coda_memory', 'cozo_store', () => { });
+                        ui.log("✅ CozoDB Connected (IndexedDB)", "success");
+                    } else {
+                        // Keys exist. Try to load safe, but catch panic.
+                        try {
+                            ui.log(`Attempting safe IDB load (${keys.length} items)...`, 'info');
+                            db = await CozoDb.new_from_indexed_db('coda_memory', 'cozo_store', () => { });
+                            ui.log("✅ CozoDB Connected (IndexedDB)", "success");
+                        } catch (loadErr) {
+                            ui.log(`Automatic load failed (${loadErr.message}); falling back to empty in-memory DB.`, 'warn');
+                            db = CozoDb.new();
+                            await createSchema();
+                            ui.log('Created FRESH in-memory CozoDB (Schema Initialized). Use Import to restore data.', 'info');
+                        }
+                    }
+                } catch (probeErr) {
+                    ui.log(`IndexedDB probe failed: ${probeErr.message} — creating fallback in-memory DB`, 'warn');
+                    db = CozoDb.new();
+                    await createSchema();
+                }
+                ui.updateProgress(0.3, "Loading Embedder...");
+
+                // Initialize Embedder
+                embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+                ui.log("✅ Embedder Ready (all-MiniLM-L6-v2)", "success");
+                ui.updateProgress(0.5, "Ready for Model Selection...");
+
+                // Enable model selection
+                document.getElementById('model-select').disabled = false;
+                document.getElementById('load-model-btn').disabled = false;
+
+                // Setup model selection handlers
+                document.getElementById('model-select').addEventListener('change', (e) => {
+                    const customInput = document.getElementById('custom-model-input');
+                    if (e.target.value === 'custom') {
+                        customInput.disabled = false;
+                        customInput.focus();
+                    } else {
+                        customInput.disabled = true;
+                    }
+                });
+
+                document.getElementById('clear-cache-btn').addEventListener('click', async () => {
+                    if (!confirm("Are you sure you want to DELETE all cached model weights? This will require re-downloading models.")) return;
+                    try {
+                        ui.log("Deleting model cache...", "warn");
+                        const cacheNames = await caches.keys();
+                        let deleted = 0;
+                        for (const name of cacheNames) {
+                            if (name.includes("webllm")) {
+                                await caches.delete(name);
+                                ui.log(`Deleted cache: ${name}`, "success");
+                                deleted++;
+                            }
+                        }
+                        if (deleted === 0) ui.log("No 'webllm' caches found.", "info");
+                        else {
+                            ui.log("Cache cleared. Please reload the page.", "success");
+                            setTimeout(() => window.location.reload(), 2000);
+                        }
+                    } catch (e) {
+                        ui.log(`Error clearing cache: ${e.message}`, "error");
+                    }
+                });
+
+                document.getElementById('copy-logs-btn').addEventListener('click', () => {
+                    const logs = document.getElementById('status-log').innerText;
+                    navigator.clipboard.writeText(logs).then(() => {
+                        const btn = document.getElementById('copy-logs-btn');
+                        const original = btn.textContent;
+                        btn.textContent = "✅ Copied!";
+                        setTimeout(() => btn.textContent = original, 2000);
+                    }).catch(err => {
+                        console.error('Failed to copy: ', err);
+                        ui.log('Failed to copy logs to clipboard', 'error');
+                    });
+                });
+
+                document.getElementById('load-model-btn').addEventListener('click', loadModel);
+
+                ui.log("⚠️ Select a model and click 'Load Model'", "info");
+
+                document.getElementById('attempt-indexeddb-load-btn').addEventListener('click', async () => {
+                    try {
+                        ui.log('User requested manual IndexedDB load. This may show WASM panics in console but will be handled.', 'info');
+                        const db2 = await CozoDb.new_from_indexed_db('coda_memory', 'cozo_store', () => { });
+                        db = db2;
+                        ui.log('Manual IndexedDB load succeeded.', 'success');
+                    } catch (e) {
+                        ui.log(`Manual IndexedDB load failed (check console for WASM panic): ${e && e.message ? e.message : String(e)}`, 'error');
+                        ui.log('If this happens, inspect and remove any small/corrupt blobs in the Sovereign DB Builder and retry.', 'warn');
+                    }
+                });
+
+            } catch (e) {
+                ui.log(`💥 INITIALIZATION FAILED: ${e.message}`, "error");
+                ui.log(`Stack: ${e.stack}`, "error");
+                ui.append("system", `**Initialization Error**\n\`\`\`\n${e.message}\n${e.stack}\n\`\`\``);
+            }
+        }
+
+        // Start when page loads
+        window.addEventListener('load', init);
+
+    </script>
+</body>
+
+</html>

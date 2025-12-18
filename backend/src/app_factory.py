@@ -6,7 +6,7 @@ from src.bootstrap import create_app
 from src.config import settings
 import logging
 
-logging.basicConfig(level=getattr(logging, settings.ece_log_level), format='%(asctime)s - %(levelname)s - %(message)s')
+# logging.basicConfig(level=getattr(logging, settings.ece_log_level), format='%(asctime)s - %(levelname)s - %(message)s')
 
 def create_app_with_routers():
     """Create the FastAPI app and include all API routers.

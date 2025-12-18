@@ -79,20 +79,25 @@ def create_app() -> FastAPI:
         plugin_manager = None
 
         # Initialize plugin manager (preferred) or MCP client for tools
-        if PluginManager:
-            plugin_manager = PluginManager(settings.__dict__)
-            discovered = plugin_manager.discover()
-            if discovered:
-                logger.info(f"Plugin manager loaded plugins: {', '.join(discovered)}")
-                tools = plugin_manager.list_tools()
-                if tools:
-                    tools_dict = {tool['name']: tool for tool in tools}
-                    tool_validator = ToolCallValidator(tools_dict)
-                    logger.info("Tool validator ready (via plugins)")
+        try:
+            if PluginManager:
+                plugin_manager = PluginManager(settings.__dict__)
+                discovered = plugin_manager.discover()
+                if discovered:
+                    logger.info(f"Plugin manager loaded plugins: {', '.join(discovered)}")
+                    tools = plugin_manager.list_tools()
+                    if tools:
+                        tools_dict = {tool['name']: tool for tool in tools}
+                        tool_validator = ToolCallValidator(tools_dict)
+                        logger.info("Tool validator ready (via plugins)")
+                else:
+                    logger.warning("Plugin manager enabled but no plugins discovered (tools disabled)")
             else:
-                logger.warning("Plugin manager enabled but no plugins discovered (tools disabled)")
-        else:
-            logger.warning("PluginManager not available (tools disabled)")
+                logger.warning("PluginManager not available (tools disabled)")
+        except Exception as e:
+            logger.error(f"CRITICAL: Plugin loading failed, but continuing startup. Error: {e}")
+            plugin_manager = None
+            tool_validator = None
 
         # Initialize MCP client if configured
         if settings.mcp_enabled:

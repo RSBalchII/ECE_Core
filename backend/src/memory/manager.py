@@ -218,20 +218,12 @@ class TieredMemory:
             return await self.neo4j.search_memories("", category, limit)
         return await self.neo4j.search_memories(query_text, category, limit)
 
-    async def search_memories_neo4j(self, query_text: str, limit: int = 10) -> List[Dict[str, Any]]:
+    async def search_memories_neo4j(self, query_text: str, category: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]:
         """Search memories specifically in Neo4j (full-text)."""
-        return await self.neo4j.search_memories(query_text, None, limit)
+        return await self.neo4j.search_memories(query_text, category, limit)
 
     async def get_recent_by_category(self, category: str, limit: int = 5) -> List[Dict[str, Any]]:
         """Get recent memories by category."""
-        # This requires a new method in Neo4jStore or a direct query here.
-        # Adding direct query support via Neo4jStore.execute_cypher would be cleaner,
-        # but for now let's add a helper to Neo4jStore or just use search with empty query if supported.
-        # Actually, let's implement it properly by delegating to a new method we'll add to Neo4jStore,
-        # or using search_memories with empty query if it supports sorting by time.
-        # The current search_memories implementation in Neo4jStore sorts by nothing explicit if no query.
-        # Let's add a dedicated method to Neo4jStore in a separate step, but for now we can try search.
-        # Wait, the error is AttributeError on TieredMemory, so we MUST define it here.
         return await self.neo4j.get_recent_by_category(category, limit)
 
     async def get_summaries(self, session_id: str, limit: int = 5) -> List[str]:

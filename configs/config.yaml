@@ -118,3 +118,26 @@ advanced:
 memory_distill_cache_enabled: true
 memory_distill_cache_ttl: 86400
 llm_concurrency: 4
+
+# ============================================================
+# Launcher / Subprocess Output
+# ============================================================
+launcher:
+  # WebGPU bridge stdout/stderr handling: inherit|hide|file
+  bridge_stdout: "inherit"
+  bridge_log_path: "./logs/webgpu_bridge.log"
+
+  # Optional llama-server launch (disabled by default)
+  llama_server_enabled: false
+  # If enabled, and no explicit command is given, launcher will run repo_root/start_llm_server.py
+  llama_server_stdout: "inherit"  # inherit|hide|file
+  llama_server_log_path: "./logs/llama_server.log"
+  llama_server_command: null  # e.g. ["C:/path/to/llama-server.exe", "-m", "...", "--port", "8080"]
+
+# ============================================================
+# Logging Controls (console only)
+# ============================================================
+logging:
+  suppress_embeddings_console: false
+  suppress_weaver_console: false
+  llm_request_timing: true

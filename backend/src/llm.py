@@ -15,6 +15,7 @@ from src.config import settings
 import os
 import re
 import json
+import time
 from src.chat_templates import chat_template_manager
 
 logger = logging.getLogger(__name__)
@@ -97,7 +98,7 @@ class LLMClient:
         
         try:
             # Try to get models list from API
-            response = await self.client.get(f"{self.api_base}/models")
+            response = await self.client.get(f"{self.api_base}/v1/models")
             response.raise_for_status()
             result = response.json()
             
@@ -133,16 +134,44 @@ class LLMClient:
         if self._embeddings_model_detection_attempted:
             return self._detected_embeddings_model or settings.llm_embeddings_model_name or self.model
         self._embeddings_model_detection_attempted = True
+        
+        configured_model = settings.llm_embeddings_model_name
+        
         try:
-            response = await self.client.get(f"{self.embeddings_base}/models")
+            response = await self.client.get(f"{self.embeddings_base}/v1/models")
             response.raise_for_status()
             result = response.json()
             if "data" in result and len(result["data"]) > 0:
                 models = result["data"]
-                if isinstance(models[0], dict) and "id" in models[0]:
-                    self._detected_embeddings_model = models[0]["id"]
-                    # Attempt to parse context window (tokens) from model metadata
-                    md = models[0]
+                
+                selected_model_data = None
+                
+                # If we have a configured model, try to find its metadata
+                if configured_model:
+                    for m in models:
+                        if m.get("id") == configured_model:
+                            selected_model_data = m
+                            break
+                else:
+                    # No config, try to find a suitable model
+                    # 1. Look for "embed" in ID
+                    for m in models:
+                        if "embed" in m.get("id", "").lower():
+                            self._detected_embeddings_model = m["id"]
+                            selected_model_data = m
+                            break
+                    
+                    # 2. Fallback to first model
+                    if not self._detected_embeddings_model and isinstance(models[0], dict) and "id" in models[0]:
+                        self._detected_embeddings_model = models[0]["id"]
+                        selected_model_data = models[0]
+
+                # Always use configured model if set, otherwise use detected
+                final_model = configured_model if configured_model else self._detected_embeddings_model
+                self._detected_embeddings_model = final_model
+
+                if selected_model_data:
+                    md = selected_model_data
                     # Look for typical fields
                     context_keys = [
                         'n_ctx_train', 'n_ctx', 'context', 'context_window', 'max_input_tokens', 'max_context_tokens', 'max_tokens'
@@ -152,22 +181,23 @@ class LLMClient:
                             self._detected_server_context_size = md[ck]
                             print(f"🔎 Detected embeddings model context tokens via model metadata: {self._detected_server_context_size}")
                             break
-                    # If not found, attempt a details endpoint for the model
-                    if not self._detected_server_context_size:
-                        try:
-                            model_detail_resp = await self.client.get(f"{self.embeddings_base}/models/{self._detected_embeddings_model}")
-                            model_detail_resp.raise_for_status()
-                            detail_json = model_detail_resp.json()
-                            if isinstance(detail_json, dict):
-                                for ck in context_keys:
-                                    if ck in detail_json and isinstance(detail_json[ck], int):
-                                        self._detected_server_context_size = detail_json[ck]
-                                        print(f"🔎 Detected embeddings model context tokens via model detail endpoint: {self._detected_server_context_size}")
-                                        break
-                        except Exception:
-                            pass
-                    print(f"✅ Detected embeddings model: {self._detected_embeddings_model}")
-                    return self._detected_embeddings_model
+                
+                # If not found, attempt a details endpoint for the model
+                if not self._detected_server_context_size and self._detected_embeddings_model:
+                    try:
+                        model_detail_resp = await self.client.get(f"{self.embeddings_base}/models/{self._detected_embeddings_model}")
+                        model_detail_resp.raise_for_status()
+                        detail_json = model_detail_resp.json()
+                        if isinstance(detail_json, dict):
+                            for ck in context_keys:
+                                if ck in detail_json and isinstance(detail_json[ck], int):
+                                    self._detected_server_context_size = detail_json[ck]
+                                    print(f"🔎 Detected embeddings model context tokens via model detail endpoint: {self._detected_server_context_size}")
+                                    break
+                    except Exception:
+                        pass
+                print(f"✅ Detected embeddings model: {self._detected_embeddings_model}")
+                return self._detected_embeddings_model
         except Exception as e:
             print(f"⚠️  Embeddings model detection failed: {e}")
         # Fallback to configured embedding model or general model
@@ -257,9 +287,9 @@ class LLMClient:
         is_legacy_completion = self.chat_template_name in ["qwen3", "qwen3-thinking", "gemma", "gemma2", "gemma3", "llama", "llama2", "llama3", "mistral", "phi3", "chatml"]
         
         if is_legacy_completion:
-             api_endpoint = f"{self.api_base}/completions"
+             api_endpoint = f"{self.api_base}/v1/completions"
         else:
-            api_endpoint = f"{self.api_base}/chat/completions"
+            api_endpoint = f"{self.api_base}/v1/chat/completions"
             
         full_response_content = ""
         current_messages = messages.copy() # Keep track of conversation for chat completion mode
@@ -295,8 +325,19 @@ class LLMClient:
                 payload["stop"] = settings.llm_stop_tokens
                 
             try:
+                _t0 = None
+                if bool(getattr(settings, 'logging_llm_request_timing', False)):
+                    _t0 = time.perf_counter()
                 response = await self.client.post(api_endpoint, json=payload)
                 response.raise_for_status()
+                if _t0 is not None:
+                    logger.info(
+                        "LLM HTTP POST completed in %.2fs (endpoint=%s model=%s max_tokens=%s)",
+                        time.perf_counter() - _t0,
+                        api_endpoint,
+                        payload.get("model"),
+                        payload.get("max_tokens"),
+                    )
                 result = response.json()
                 
                 content_chunk = ""
@@ -333,6 +374,90 @@ class LLMClient:
                 raise e
                 
         return full_response_content
+
+    async def generate_response_stream(self,
+                               messages: List[Dict[str, str]],
+                               max_tokens: Optional[int] = None,
+                               temperature: float = None,
+                               json_mode: bool = False):
+        """
+        Generate response stream from a list of messages.
+        Yields chunks of content.
+        """
+        temperature = temperature if temperature is not None else settings.llm_temperature
+        max_tokens = max_tokens or settings.llm_max_tokens
+        
+        if not self._model_detection_attempted:
+            await self.detect_model()
+            
+        formatted_input = self.chat_template.format_messages(messages)
+        
+        is_legacy_completion = self.chat_template_name in ["qwen3", "qwen3-thinking", "gemma", "gemma2", "gemma3", "llama", "llama2", "llama3", "mistral", "phi3", "chatml"]
+        
+        if is_legacy_completion:
+             api_endpoint = f"{self.api_base}/v1/completions"
+        else:
+            api_endpoint = f"{self.api_base}/v1/chat/completions"
+            
+        if is_legacy_completion:
+            payload = {
+                "model": self._detected_model or self.model,
+                "prompt": formatted_input,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "top_p": settings.llm_top_p,
+                "stream": True
+            }
+        else:
+            payload = {
+                "model": self._detected_model or self.model,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "top_p": settings.llm_top_p,
+                "stream": True
+            }
+            
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+            
+        if getattr(settings, 'llm_stop_tokens', None):
+            payload["stop"] = settings.llm_stop_tokens
+
+        _t0 = None
+        if bool(getattr(settings, 'logging_llm_request_timing', False)):
+            _t0 = time.perf_counter()
+
+        async with self.client.stream("POST", api_endpoint, json=payload) as response:
+            response.raise_for_status()
+            if _t0 is not None:
+                logger.info(
+                    "LLM HTTP stream opened in %.2fs (endpoint=%s model=%s max_tokens=%s)",
+                    time.perf_counter() - _t0,
+                    api_endpoint,
+                    payload.get("model"),
+                    payload.get("max_tokens"),
+                )
+            async for line in response.aiter_lines():
+                if line.startswith("data: "):
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        content = ""
+                        if is_legacy_completion:
+                            if "choices" in chunk and len(chunk["choices"]) > 0:
+                                content = chunk["choices"][0].get("text", "")
+                        else:
+                            if "choices" in chunk and len(chunk["choices"]) > 0:
+                                delta = chunk["choices"][0].get("delta", {})
+                                content = delta.get("content", "")
+                        
+                        if content:
+                            yield content
+                    except json.JSONDecodeError:
+                        pass
 
     async def generate(self,
                       prompt: str,

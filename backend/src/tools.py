@@ -11,6 +11,32 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Argument aliasing: fix common hallucinated argument names
+# NOTE: Keep these *generic*; anything tool-specific belongs in TOOL_SPECIFIC_ARG_ALIASES
+# to avoid breaking tools that legitimately use names like `query`.
+COMMON_ARG_ALIASES = {
+    "file_path": "path",
+    "filepath": "path",
+    "filename": "path",
+    "text": "content",
+    "dir_path": "path",
+    "directory": "path",
+}
+
+# Tool-specific aliases for frequently-hallucinated argument names.
+# (e.g. many models call the memory payload `query`, but `store_memory` expects `content`.)
+TOOL_SPECIFIC_ARG_ALIASES = {
+    "store_memory": {
+        "query": "content",
+        "search_query": "content",
+    },
+    "retrieve_memory": {
+        "content": "query",
+        "text": "query",
+        "search_query": "query",
+    },
+}
+
 
 def get_tools_list(plugin_manager: Optional[Any], mcp_client: Optional[Any]):
     """Return a normalized list of tool objects from plugin manager or mcp client.
@@ -53,7 +79,7 @@ class ToolExecutor:
     This encapsulates validation, execution via plugins or MCP, audit logging,
     and re-generation after tool output.
     """
-    def __init__(self, plugin_manager: Optional[Any], mcp_client: Optional[Any], tool_parser: Optional[Any], tool_validator: Optional[Any], llm_client: Optional[Any], audit_logger: Optional[Any], max_iterations: int = 3):
+    def __init__(self, plugin_manager: Optional[Any], mcp_client: Optional[Any], tool_parser: Optional[Any], tool_validator: Optional[Any], llm_client: Optional[Any], audit_logger: Optional[Any], max_iterations: int = 3, native_tools: Optional[List[Dict]] = None):
         self.plugin_manager = plugin_manager
         self.mcp_client = mcp_client
         self.tool_parser = tool_parser
@@ -61,17 +87,79 @@ class ToolExecutor:
         self.llm = llm_client
         self.audit_logger = audit_logger
         self.max_iterations = max_iterations
+        self.native_tools = {t['name']: t for t in native_tools} if native_tools else {}
+
+    def list_available_tools(self) -> List[Dict]:
+        """Return a combined list of all available tools (plugins + MCP + native)."""
+        tools = []
+        
+        # Plugins
+        if self.plugin_manager and getattr(self.plugin_manager, 'enabled', False):
+            tools.extend(self.plugin_manager.list_tools() or [])
+            
+        # MCP (Note: MCP client usually fetches tools async, so we might need to handle that outside or cache it)
+        # For now, we assume the caller handles MCP tool listing if needed, or we skip it here.
+        # Ideally, SGROrchestrator should call this method.
+        
+        # Native Tools
+        for name, tool_def in self.native_tools.items():
+            tools.append({
+                "name": name,
+                "description": tool_def.get("description", ""),
+                "inputSchema": tool_def.get("inputSchema", {})
+            })
+            
+        return tools
 
     async def execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> Any:
         """
         Directly execute a single tool by name.
         Used by SGROrchestrator.
         """
+        # --- Argument Normalization ---
+        # Fix common hallucinations in argument names (e.g., file_path -> path)
+        normalized_args = {}
+        tool_aliases = TOOL_SPECIFIC_ARG_ALIASES.get(tool_name, {})
+        for k, v in tool_args.items():
+            # Prefer tool-specific aliases first
+            if k in tool_aliases:
+                target = tool_aliases[k]
+                if target not in tool_args:
+                    logger.info(f"ToolExecutor: Auto-mapped argument '{k}' -> '{target}' for tool '{tool_name}'")
+                    normalized_args[target] = v
+                else:
+                    normalized_args[k] = v
+            elif k in COMMON_ARG_ALIASES:
+                target = COMMON_ARG_ALIASES[k]
+                if target not in tool_args:
+                    logger.info(f"ToolExecutor: Auto-mapped argument '{k}' -> '{target}' for tool '{tool_name}'")
+                    normalized_args[target] = v
+                else:
+                    normalized_args[k] = v
+            else:
+                normalized_args[k] = v
+        tool_args = normalized_args
+        # --- End Argument Normalization ---
+
+        # 1. Native Tools
+        if tool_name in self.native_tools:
+            func = self.native_tools[tool_name]['func']
+            import inspect
+            try:
+                if inspect.iscoroutinefunction(func):
+                    return await func(**tool_args)
+                else:
+                    return func(**tool_args)
+            except Exception as e:
+                return {"error": f"Native tool execution failed: {str(e)}"}
+
+        # 2. Plugins
         if self.plugin_manager and getattr(self.plugin_manager, 'enabled', False):
             plugin_name = self.plugin_manager.lookup_plugin_for_tool(tool_name)
             if plugin_name:
                 return await self.plugin_manager.execute_tool(f"{plugin_name}:{tool_name}", **tool_args)
         
+        # 3. MCP
         if self.mcp_client:
             return await self.mcp_client.call_tool(tool_name, **tool_args)
             

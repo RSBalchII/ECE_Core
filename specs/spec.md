@@ -7,31 +7,30 @@
 
 ## Architecture Overview
 
-The system follows a **Bridge-Core** architecture with three main components:
+The system follows a **Sovereign-First** architecture with browser-native compute:
 
-### 1. The Core (Brain) - backend/
-- **Type**: Python FastAPI service
-- **Logic**: Modular recipes (CodaChatRecipe for orchestration)
-- **Memory**:
-  - **Neo4j** (primary graph storage) - All memories, summaries, relationships
-  - **Redis** (hot cache) - Active session management with 24h TTL
-- **Agents**: Verifier (truth), Archivist (maintenance), Distiller (compression)
-- **API**: FastAPI on port 8000
+### 1. Browser-Native Layer (tools/)
+- **Type**: Zero-dependency HTML files
+- **Technologies**: WebLLM (WASM), CozoDB (WASM), Transformers.js
+- **Storage**: IndexedDB (persistent, local)
+- **Components**:
+  - **Chat Interface** (`model-server-chat.html`): WebGPU LLM inference + memory recall
+  - **Memory Builder** (`sovereign-db-builder.html`): Document ingestion & embedding
+  - **Log Viewer** (`log-viewer.html`): Real-time debugging interface
+  - **Hub** (`index.html`): Central navigation
 
-### 2. The Body (Interface) - anchor/
-- **Type**: Terminal interface 
-- **Communication**: HTTP/SSE to `localhost:8000`
-- **State**: Local session persistence
-- **Safety**: T-101 protocols with human confirmation flows
+### 2. Optional Backend (backend/) - DEPRECATED
+- **Type**: Python FastAPI service (legacy support only)
+- **Status**: Archived in favor of browser-native approach
+- **Memory**: Neo4j + Redis (replaced by CozoDB WASM)
 
-### 3. The Bridge (Browser Integration) - extension/
+### 3. Browser Extension (extension/) - OPTIONAL
 - **Type**: Chrome Extension (MV3)
-- **Communication**: HTTP/SSE to `localhost:8000` 
-- **State**: Local Storage (Persistence)
+- **Communication**: Direct HTML file integration
 - **Capabilities**:
   - **Voice**: Streaming chat via Side Panel
   - **Sight**: Context injection (reading active tab)
-  - **Memory**: **[Save to Memory]** button for Neo4j ingestion 
+  - **Memory**: **[Save to Memory]** button for CozoDB ingestion
   - **Hands**: JavaScript execution (User-ratified)
 
 ## Infinite Context Pipeline Architecture
@@ -98,6 +97,81 @@ The system follows a **Bridge-Core** architecture with three main components:
   - `web_search` - DuckDuckGo search
   - `filesystem_read` - File and directory operations  
   - `shell_execute` - Shell command execution (with safety checks)
+
+## Appendix A: Infinite Context Pipeline Details
+
+### Troubleshooting
+
+#### Role Alternation Errors
+**Issue**: `Conversation roles must alternate user/assistant/user/assistant/...`
+**Cause**: Improperly formatted conversation history sent to the LLM
+**Solution**: Proper message structure with alternating user/assistant roles
+
+#### Template Parsing Issues
+**Issue**: `.->.->.->` pattern errors
+**Cause**: Template processing conflicts between CLI and backend
+**Solution**: Proper separation of concerns and template configuration
+
+#### Context Overflow
+**Issue**: Context window limitations
+**Solution**: Automatic context rotation and distillation
+
+### Usage
+The system works seamlessly with Qwen Code CLI, providing infinite context capabilities without interfering with the CLI's own functionality. The context rotation happens transparently in the background.
+
+## Appendix B: WebGPU Model Guide
+
+### Finding Existing Models
+The "For Sure" way to find models is to look for the **MLC Format**.
+
+#### Trusted Sources
+*   **[mlc-ai](https://huggingface.co/mlc-ai):** The official creators. All models here are guaranteed to work.
+*   **[vulcan-llm](https://huggingface.co/vulcan-llm):** Community members often upload converted models.
+
+#### Search Strategy
+When searching Hugging Face, look for these keywords in the model name:
+*   `MLC`
+*   `q4f16_1` (The standard 4-bit quantization for WebGPU)
+*   `q4f32_1`
+
+**The "Golden Rule" Check:**
+Before trying a model, go to the **"Files and versions"** tab on Hugging Face. It **MUST** contain:
+1.  `ndarray-cache.json` (The manifest)
+2.  `mlc-chat-config.json` (The config)
+3.  `params_shard_*.bin` (The weights)
+
+### Converting Custom Models
+Your `webgpu-chat.html` uses **WebLLM** (by MLC AI), which requires models to be in a specific **MLC Format** (compiled for TVM runtime). It **cannot** load raw `.safetensors`, `.bin`, or `.onnx` files directly.
+
+#### Prerequisites
+You need a Python environment with `mlc_llm` installed.
+```powershell
+pip install --pre --force-reinstall mlc-llm-nightly-cu122 mlc-ai-nightly-cu122 -f https://mlc.ai/wheels
+# OR standard install
+pip install mlc-llm
+```
+
+#### Conversion Steps
+1.  **Download**: Download the model to a local folder (e.g., `models/Ministral-3-14B`).
+2.  **Convert Weights**:
+    ```powershell
+    mlc_llm convert_weight ./models/Ministral-3-14B ^
+        --quantization q4f16_1 ^
+        -o ./dist/Ministral-3-14B-MLC
+    ```
+3.  **Generate Config**:
+    ```powershell
+    mlc_llm gen_config ./models/Ministral-3-14B ^
+        --quantization q4f16_1 ^
+        --convention mistral ^
+        -o ./dist/Ministral-3-14B-MLC
+    ```
+4.  **Serve**: Host the `./dist` folder on a local web server (CORS enabled) or upload to Hugging Face.
+
+#### Loading in WebGPU Chat
+1.  Open `webgpu-chat.html`.
+2.  Select **"Custom"** in the dropdown.
+3.  Enter the Model ID (e.g., `username/Ministral-3-14B-MLC-q4f16_1`).
   - `mgrep` - Semantic code search
 - **Execution**: Pattern-based for <14B models, structured for >14B models
 

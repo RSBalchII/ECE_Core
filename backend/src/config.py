@@ -241,6 +241,32 @@ class Settings(BaseSettings):
     ece_host: str = "127.0.0.1"
     ece_port: int = 8000
     ece_log_level: str = "INFO"
+
+    # ============================================================
+    # LAUNCHER.PY - Subprocess stdout/stderr handling
+    # ============================================================
+    # How launcher should handle WebGPU bridge stdout/stderr:
+    # - inherit: show in same console as backend
+    # - hide: discard
+    # - file: write to launcher_bridge_log_path
+    launcher_bridge_stdout: str = "inherit"
+    launcher_bridge_log_path: str = "./logs/webgpu_bridge.log"
+
+    # Optional: launch llama-server (or a wrapper script) from launcher.py
+    launcher_llama_server_enabled: bool = False
+    launcher_llama_server_stdout: str = "inherit"  # inherit|hide|file
+    launcher_llama_server_log_path: str = "./logs/llama_server.log"
+    # Optional explicit command to start llama-server. If not provided, launcher will try repo_root/start_llm_server.py
+    launcher_llama_server_command: Optional[list[str]] = None
+
+    # ============================================================
+    # LOGGING - Console noise control & timing
+    # ============================================================
+    # These filters apply only to the console (StreamHandler) in launcher.py.
+    logging_suppress_embeddings_console: bool = False
+    logging_suppress_weaver_console: bool = False
+    # Log per-request LLM latency for HTTP calls (helps distinguish "stalled" vs "slow")
+    logging_llm_request_timing: bool = False
     # Optional full URL form for MCP server (e.g., http://localhost:8008)
     mcp_url: Optional[str] = None
     # Versioning
@@ -446,7 +472,10 @@ def _load_config_fallbacks() -> None:
             # Only set env var if not already present
             if os.environ.get(ek) is None and ev is not None:
                 # print(f"Setting env {ek} = {ev}")
-                os.environ[ek] = str(ev)
+                if isinstance(ev, (list, dict)):
+                    os.environ[ek] = json.dumps(ev)
+                else:
+                    os.environ[ek] = str(ev)
             # else:
             #     print(f"Env {ek} already set to {os.environ.get(ek)}")
 

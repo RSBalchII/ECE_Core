@@ -142,7 +142,12 @@ class MemoryWeaver:
             batch_params['skip'] = offset
             logger.info(f"MemoryWeaver: Running batch {offset}:{offset + resolved_batch} (limit {resolved_batch})")
             try:
-                await run_repair(threshold=batch_params['threshold'], limit=batch_params['limit'], candidate_limit=batch_params['candidate_limit'], dry_run=batch_params['dry_run'], csv_out=batch_params['csv_out'], time_window_hours=batch_params['time_window_hours'], prefer_same_app=batch_params['prefer_same_app'], min_origin_length=batch_params['min_origin_length'], exclude_phrases=batch_params['exclude_phrases'], delta=batch_params['delta'], max_commit=batch_params['max_commit'], commit=batch_params['commit'], run_id=batch_params['run_id'], exclude_tag=batch_params['exclude_tag'], batch_size=batch_params['batch_size'], skip=batch_params.get('skip', 0))
+                result = await run_repair(threshold=batch_params['threshold'], limit=batch_params['limit'], candidate_limit=batch_params['candidate_limit'], dry_run=batch_params['dry_run'], csv_out=batch_params['csv_out'], time_window_hours=batch_params['time_window_hours'], prefer_same_app=batch_params['prefer_same_app'], min_origin_length=batch_params['min_origin_length'], exclude_phrases=batch_params['exclude_phrases'], delta=batch_params['delta'], max_commit=batch_params['max_commit'], commit=batch_params['commit'], run_id=batch_params['run_id'], exclude_tag=batch_params['exclude_tag'], batch_size=batch_params['batch_size'], skip=batch_params.get('skip', 0))
+                
+                # Stop early if no items were processed in this batch
+                if isinstance(result, dict) and result.get('processed', 0) == 0:
+                    logger.info(f"MemoryWeaver: No more items to process in run {run_id}. Stopping early.")
+                    break
             except Exception as e:
                 logger.error(f"MemoryWeaver: Batch failed for range {offset}:{offset + resolved_batch} with error: {e}")
                 # If a batch fails, record and continue (the underlying run_repair already uses resilient embedding backoff)
