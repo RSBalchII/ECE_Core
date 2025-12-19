@@ -738,21 +738,33 @@ Current Time: ${Date.now()}
 TASK: Generate a CozoDB Datalog query to find relevant memories in the 'memory' table.
 Schema: memory { id, timestamp, role, content, embedding } where timestamp is Unix MS.
 
-Allowed Operations:
-- Timestamp: timestamp >= 0 (Search ALL history unless user asks for 'today/recent')
-- Search: Use 'content' variable to capture text.
-- Filtering: Use 'str_includes(content, "substring")' for text search. Do NOT use '=' for long text.
+### COZO DB SYNTAX RULES (STRICT):
+1. Use standard Datalog. DO NOT use SQL (SELECT ...).
+2. Filter by adding conditions AFTER the relation selector, separated by commas.
+3. String matching: Use 'str_includes(content, "substring")'.
+4. Timestamp matching: 'timestamp > 1700000000'.
 
-OUTPUT FORMAT (JSON ONLY):
+### VALID EXAMPLES (COPY THESE PATTERNS):
+
+Goal: Find memories about "Blueberry".
+Query: ?[id, content, timestamp] := *memory{id, content, timestamp}, str_includes(content, "Blueberry")
+
+Goal: Find recent memories.
+Query: ?[id, content, timestamp] := *memory{id, content, timestamp}, timestamp > 1734500000000
+
+Goal: Find user messages about code.
+Query: ?[id, content] := *memory{id, content, role}, role = "user", str_includes(content, "code")
+
+### OUTPUT FORMAT:
+You MUST output strictly in this JSON format inside a markdown block:
+\`\`\`json
 {
-  "hypothesis": "Explanation...",
-  "query": "?[id, content, timestamp] := *memory{id, content, timestamp}, str_includes(content, 'keyword')",
-  "confidence": 0.5
+    "hypothesis": "Searching for X...",
+    "query": "?[id, content, timestamp] := *memory{id, content, timestamp}, str_includes(content, 'X')",
+    "confidence": 0.5
 }
-
-EXAMPLE:
-User: "What is the code?"
-JSON: { "hypothesis": "Searching for code", "query": "?[id, content, timestamp] := *memory{id, content, timestamp}, str_includes(content, 'code')", "confidence": 0.8 }
+\`\`\`
+Do not output anything else outside the thought trace.
 `;
 
                         const reasoningUI = ui.appendReasoning(`Thinking: ${userQuery.substring(0, 30)}... (Iteration ${iteration})`);
@@ -760,7 +772,7 @@ JSON: { "hypothesis": "Searching for code", "query": "?[id, content, timestamp] 
                         // Use global 'engine' directly
                         const planStream = await engine.chat.completions.create({
                             messages: [{ role: "user", content: planPrompt }],
-                            max_tokens: 300,
+                            max_tokens: 600, // Increased for DeepSeek thinking
                             temperature: 0.3,
                             stream: true
                         });
@@ -773,7 +785,33 @@ JSON: { "hypothesis": "Searching for code", "query": "?[id, content, timestamp] 
                         }
                         reasoningUI.finish();
 
-                        const planResult = ResponsePattern.match(planText);
+                        // ROBUST JSON EXTRACTOR (Lobotomy for DeepSeek-R1)
+                        const extractJSON = (text) => {
+                            // 1. Try markdown block
+                            const match = text.match(/```json\s*([\s\S]*?)\s*```/);
+                            if (match) {
+                                try { return JSON.parse(match[1]); } catch (e) { }
+                            }
+                            // 2. Try Brackets
+                            const start = text.indexOf('{');
+                            const end = text.lastIndexOf('}');
+                            if (start !== -1 && end !== -1 && end > start) {
+                                try { return JSON.parse(text.substring(start, end + 1)); } catch (e) { }
+                            }
+                            return null;
+                        };
+
+                        const planData = extractJSON(planText);
+                        let planResult = null;
+
+                        if (planData) {
+                            planResult = {
+                                type: 'SEARCH_PLAN',
+                                ...planData
+                            };
+                        } else {
+                            planResult = { type: 'RAW_TEXT', text: planText };
+                        }
 
                         if (planResult.type !== 'SEARCH_PLAN') {
                             ui.log(`⚠️ Iteration ${iteration}: Plan generation failed. Got ${planResult.type}`, "warn");
