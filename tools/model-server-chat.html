@@ -291,19 +291,19 @@
                     <option value="mlc-ai/Hermes-3-Llama-3.2-3B-q4f16_1-MLC">Hermes-3-Llama-3.2-3B</option>
                 </optgroup>
                 <optgroup label="Medium (3B/4B)">
-                    <option value="huggingkot/Qwen2.5-3B-Instruct">Qwen2.5-3B</option>
+                    <option value="mlc-ai/Qwen2.5-3B-Instruct-q4f16_1-MLC">Qwen2.5-3B</option>
                     <option value="mlc-ai/Qwen3-4B-q4f16_1-MLC">Qwen3-4B</option>
-                    <option value="huggingkot/Llama-3.2-3B-Instruct">Llama-3.2-3B</option>
-                    <option value="huggingkot/Gemma-2-2B-it">Gemma-2-2B</option>
+                    <option value="mlc-ai/Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama-3.2-3B</option>
+                    <option value="mlc-ai/gemma-2-2b-it-q4f16_1-MLC">Gemma-2-2B</option>
                 </optgroup>
                 <optgroup label="Small (1.5B)">
-                    <option value="huggingkot/Qwen2.5-1.5B">Qwen2.5-1.5B</option>
-                    <option value="huggingkot/Llama-3.2-1B-Instruct">Llama-3.2-1B</option>
-                    <option value="huggingkot/Phi-3.5-mini-instruct">Phi-3.5-mini</option>
+                    <option value="mlc-ai/Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-1.5B</option>
+                    <option value="mlc-ai/Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama-3.2-1B</option>
+                    <option value="mlc-ai/Phi-3.5-mini-instruct-q4f16_1-MLC">Phi-3.5-mini</option>
                 </optgroup>
                 <optgroup label="Specialized">
-                    <option value="huggingkot/Qwen2.5-Coder-1.5B">Qwen2.5-Coder</option>
-                    <option value="huggingkot/Phi-3.5-vision-instruct">Phi-3.5-vision</option>
+                    <option value="mlc-ai/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-Coder</option>
+                    <option value="mlc-ai/Phi-3.5-vision-instruct-q4f16_1-MLC">Phi-3.5-vision</option>
                 </optgroup>
                 <option value="custom">-- Custom --</option>
             </select>
@@ -819,13 +819,13 @@ If context is insufficient, say so clearly.`;
             ui.log(`Wait for it... Resolving Model Lib: ${modelLib}`, "warn");
 
             // Dynamic VRAM Calculation
-            let vramVal = 1000; // default for small models
+            let vramVal = 2000; // default for small models (increased stability)
             if (lowerId.includes('72b')) vramVal = 48000;
             else if (lowerId.includes('32b')) vramVal = 24000;
             else if (lowerId.includes('14b')) vramVal = 12000;
             else if (lowerId.includes('8b') || lowerId.includes('9b')) vramVal = 8000;
             else if (lowerId.includes('7b')) vramVal = 6000;
-            else if (lowerId.includes('3b') || lowerId.includes('4b')) vramVal = 3000;
+            else if (lowerId.includes('3b') || lowerId.includes('4b')) vramVal = 4000;
 
             ui.log(`Configuring VRAM Requirement: ${vramVal}MB`, "info");
 
@@ -833,14 +833,14 @@ If context is insufficient, say so clearly.`;
             const appConfig = {
                 model_list: [
                     {
-                        "model": modelInput.startsWith('huggingkot/') ? "https://huggingface.co/" + modelInput : "https://huggingface.co/mlc-ai/" + simpleId,
+                        "model": "https://huggingface.co/mlc-ai/" + simpleId,
                         "model_id": modelInput,
                         "model_lib": modelLib,
                         "vram_required_MB": vramVal,
                         "low_resource_required": true,
                     },
                     {
-                        "model": modelInput.startsWith('huggingkot/') ? "https://huggingface.co/" + modelInput : "https://huggingface.co/mlc-ai/" + simpleId,
+                        "model": "https://huggingface.co/mlc-ai/" + simpleId,
                         "model_id": simpleId,
                         "model_lib": modelLib,
                         "vram_required_MB": vramVal,
