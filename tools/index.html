@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sovereign Console | Launcher</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --card-bg: #2d2d2d;
+            --accent: #0078d4;
+            --text: #ffffff;
+            --secondary-text: #aaaaaa;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        h1 {
+            font-weight: 300;
+            margin-bottom: 40px;
+            letter-spacing: 2px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 900px;
+            padding: 20px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 30px;
+            text-decoration: none;
+            color: var(--text);
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+            border-color: var(--accent);
+        }
+
+        .icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .desc {
+            font-size: 0.9rem;
+            color: var(--secondary-text);
+        }
+
+        .status {
+            margin-top: 15px;
+            font-size: 0.8rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: #333;
+            color: #888;
+        }
+
+        .card:hover .status {
+            background: rgba(0, 120, 212, 0.2);
+            color: var(--accent);
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>SOVEREIGN <span style="color:var(--accent); font-weight:600;">CONSOLE</span></h1>
+
+    <div class="grid">
+        <a href="model-server-chat.html" class="card">
+            <div class="icon">💬</div>
+            <div class="title">Sovereign Chat</div>
+            <div class="desc">The core WebGPU interface. Run LLMs locally with memory integration.</div>
+            <div class="status">Active</div>
+        </a>
+
+        <a href="log-viewer.html" class="card">
+            <div class="icon">📊</div>
+            <div class="title">Log Viewer</div>
+            <div class="desc">Monitor engine performance, VRAM usage, and debug events.</div>
+            <div class="status">Utility</div>
+        </a>
+
+        <a href="sovereign-db-builder.html" class="card">
+            <div class="icon">🧠</div>
+            <div class="title">Memory Builder</div>
+            <div class="desc">Manage and build the CozoDB memory store.</div>
+            <div class="status">Admin</div>
+        </a>
+    </div>
+
+    <div style="margin-top: 50px; color: #555; font-size: 0.8rem;">
+        Running on Localhost • WebGPU Enabled
+    </div>
+
+</body>
+
+</html>

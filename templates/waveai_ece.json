@@ -1,0 +1,15 @@
+{
+  "ece-local": {
+    "display:name": "Sovereign Console (ECE)",
+    "display:order": 1,
+    "display:icon": "microchip",
+    "display:description": "Local WebGPU Model via ECE Bridge",
+    "ai:provider": "custom",
+    "ai:apitype": "openai-chat",
+    "ai:model": "webgpu-chat", 
+    "ai:thinkinglevel": "medium",
+    "ai:endpoint": "http://localhost:8080/v1/chat/completions",
+    "ai:apitoken": "not-needed",
+    "ai:capabilities": ["tools"]
+  }
+}

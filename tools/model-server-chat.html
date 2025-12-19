@@ -374,8 +374,10 @@
                         Profile:</label>
                     <select id="hw-profile" class="form-control"
                         style="width: 100%; padding: 5px; background: #333; color: white; border: 1px solid #555; margin-bottom: 10px;">
-                        <option value="desktop">🚀 Desktop (RTX 4090 / High VRAM)</option>
-                        <option value="mobile" selected>🔋 Mobile (Snapdragon / Integrated)</option>
+                        <option value="lite" selected>🔋 Lite (Snapdragon / Integrated / Mobile)</option>
+                        <option value="mid">💻 Mid-Tier (8GB VRAM / Older Gaming Laptops)</option>
+                        <option value="high">🚀 High-Perf (16GB VRAM / RTX 4090 Laptop)</option>
+                        <option value="ultra">⚡ Ultra (24GB+ VRAM / Desktop Workstation)</option>
                     </select>
                     <select id="model-select" disabled
                         style="width: 100%; padding: 5px; background: #333; color: white; border: 1px solid #555;">
@@ -425,6 +427,14 @@
             <details>
                 <summary>System Controls</summary>
                 <div class="panel-content">
+                    <div
+                        style="background: #222; padding: 4px; margin-bottom: 4px; border: 1px solid #444; border-radius: 4px;">
+                        <input type="checkbox" id="enable-bridge-toggle" onchange="toggleBridge(this.checked)">
+                        <label for="enable-bridge-toggle" style="font-size: 11px; cursor: pointer;">Enable Wave Terminal
+                            Bridge (ws:8080)</label>
+                        <div id="bridge-status" style="font-size: 10px; color: #666; margin-left: 20px;">Disconnected
+                        </div>
+                    </div>
                     <button id="attempt-indexeddb-load-btn"
                         style="width: 100%; padding: 6px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">Attempt
                         Load IndexedDB</button>
@@ -1024,19 +1034,36 @@ If context is insufficient, say so clearly.`;
             const hwProfile = document.getElementById('hw-profile').value;
             let appConfigOverlay = {};
 
-            if (hwProfile === 'mobile') {
-                ui.log("📱 Loading Mobile/Snapdragon Profile: Safe Mode (Chunk=64, Context=2048)", "info");
+            if (hwProfile === 'lite') {
+                ui.log("🔋 Loading Lite Profile (Snapdragon): Safe Mode (Chunk=64, Context=2048)", "info");
                 appConfigOverlay = {
-                    prefillChunkSize: 64,     // Critical for Snapdragon stability
-                    contextWindowSize: 2048,  // Conservative context
-                    slidingWindowSize: 2048,  // Match context
+                    prefillChunkSize: 64,     // Strict safety
+                    contextWindowSize: 2048,
+                    slidingWindowSize: 2048,
                     useIndexedDBCache: true
                 };
-            } else {
-                ui.log("🚀 Loading Desktop/RTX Profile: Unleashed (Max Perf)", "info");
+            } else if (hwProfile === 'mid') {
+                ui.log("💻 Loading Mid-Tier Profile (8GB VRAM): Balanced (Chunk=256, Context=4096)", "info");
                 appConfigOverlay = {
-                    prefillChunkSize: -1,     // -1 = Auto/Max (Fastest for 4090)
-                    contextWindowSize: 32768, // Maximize context
+                    prefillChunkSize: 256,    // Moderate safety for older GPUs
+                    contextWindowSize: 4096,  // Standard context
+                    slidingWindowSize: undefined, // Standard
+                    useIndexedDBCache: true
+                };
+            } else if (hwProfile === 'high') {
+                ui.log("🚀 Loading High-Perf Profile (16GB VRAM): Fast (Chunk=Max, Context=16k)", "info");
+                appConfigOverlay = {
+                    prefillChunkSize: -1,     // Max throughput
+                    contextWindowSize: 16384, // High context
+                    slidingWindowSize: undefined,
+                    useIndexedDBCache: true
+                };
+            } else { // 'ultra' or default
+                ui.log("⚡ Loading Ultra Profile (24GB+ VRAM): Unleashed (Chunk=Max, Context=32k+)", "info");
+                appConfigOverlay = {
+                    prefillChunkSize: -1,
+                    contextWindowSize: 32768, // Massive context
+                    slidingWindowSize: undefined,
                     useIndexedDBCache: true
                 };
             }
@@ -1323,6 +1350,105 @@ If context is insufficient, say so clearly.`;
                     document.body.style.userSelect = '';
                 }
             });
+        }
+
+        // --- BRIDGE LOGIC (Wave Terminal Integration) ---
+        let bridgeWs = null;
+        let bridgeReconnectTimer = null;
+
+        window.toggleBridge = function (enabled) {
+            const statusEl = document.getElementById('bridge-status');
+            if (enabled) {
+                if (!engine) {
+                    alert("Please load a model first!");
+                    document.getElementById('enable-bridge-toggle').checked = false;
+                    return;
+                }
+                statusEl.textContent = "Connecting...";
+                connectBridge();
+            } else {
+                if (bridgeWs) {
+                    bridgeWs.close();
+                    bridgeWs = null;
+                }
+                clearTimeout(bridgeReconnectTimer);
+                statusEl.textContent = "Disconnected";
+            }
+        };
+
+        function connectBridge() {
+            const statusEl = document.getElementById('bridge-status');
+            const bridgeUrl = "ws://localhost:8080/ws/chat"; // Default bridge port
+
+            ui.log(`🌉 Connecting to Bridge (${bridgeUrl})...`, "info");
+            bridgeWs = new WebSocket(bridgeUrl);
+
+            bridgeWs.onopen = () => {
+                statusEl.textContent = "🟢 Connected";
+                statusEl.style.color = "#0f0";
+                ui.log("✅ Bridge Connected (Ready for Wave Terminal)", "success");
+            };
+
+            bridgeWs.onclose = () => {
+                const toggle = document.getElementById('enable-bridge-toggle');
+                if (toggle && toggle.checked) {
+                    statusEl.textContent = "🔴 Disconnected (Retrying...)";
+                    statusEl.style.color = "#f00";
+                    ui.log("⚠️ Bridge Disconnected. Is 'python webgpu_bridge.py' running? Retrying in 5s...", "warn");
+                    bridgeReconnectTimer = setTimeout(connectBridge, 5000);
+                } else {
+                    statusEl.textContent = "Disconnected";
+                    statusEl.style.color = "#666";
+                }
+            };
+
+            bridgeWs.onmessage = async (event) => {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'chat') {
+                    handleBridgeChatRequest(msg.id, msg.data);
+                }
+            };
+        }
+
+        async function handleBridgeChatRequest(reqId, data) {
+            ui.log(`📥 Bridge Request: ${reqId.slice(0, 8)}...`, "info");
+            try {
+                // OpenAI Compatibility Mapping
+                const messages = data.messages;
+                // Force stream to true for bridge efficiency
+
+                const completion = await engine.chat.completions.create({
+                    messages,
+                    stream: true,
+                    temperature: data.temperature || 0.7,
+                    max_tokens: data.max_tokens || 4096,
+                    // Respect current profile settings if needed, but usually request overrides
+                });
+
+                for await (const chunk of completion) {
+                    if (bridgeWs && bridgeWs.readyState === WebSocket.OPEN) {
+                        bridgeWs.send(JSON.stringify({
+                            id: reqId,
+                            chunk: chunk
+                        }));
+                    }
+                }
+
+                // Signal done
+                if (bridgeWs && bridgeWs.readyState === WebSocket.OPEN) {
+                    bridgeWs.send(JSON.stringify({
+                        id: reqId,
+                        done: true
+                    }));
+                }
+                ui.log(`📤 Bridge Request Complete.`, "success");
+
+            } catch (e) {
+                ui.log(`❌ Bridge Request Failed: ${e.message}`, "error");
+                if (bridgeWs && bridgeWs.readyState === WebSocket.OPEN) {
+                    bridgeWs.send(JSON.stringify({ id: reqId, error: e.message }));
+                }
+            }
         }
 
         // Start when page loads
