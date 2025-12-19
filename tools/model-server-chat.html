@@ -1201,8 +1201,8 @@ If context is insufficient, say so clearly.`;
                 }
                 ui.updateProgress(0.3, "Loading Embedder...");
 
-                // Initialize Embedder
-                embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+                // Initialize Embedder (Force CPU/WASM to save GPU for LLM and prevent TDR)
+                embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { device: 'wasm' });
                 ui.log("✅ Embedder Ready (all-MiniLM-L6-v2)", "success");
                 ui.updateProgress(0.5, "Ready for Model Selection...");
 
