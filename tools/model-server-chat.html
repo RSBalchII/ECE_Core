@@ -733,21 +733,26 @@
                     try {
                         const planPrompt = `You are a Reasoning Engine.
 User Query: "${userQuery}"
-Time: ${Date.now()}
+Current Time: ${Date.now()}
 
-TASK: Generate a Datalog query to find relevant memories in the 'memory' table.
+TASK: Generate a CozoDB Datalog query to find relevant memories in the 'memory' table.
 Schema: memory { id, timestamp, role, content, embedding } where timestamp is Unix MS.
+
+Allowed Operations:
+- Timestamp: timestamp >= 0 (Search ALL history unless user asks for 'today/recent')
+- Search: Use 'content' variable to capture text.
+- Filtering: Use 'str_includes(content, "substring")' for text search. Do NOT use '=' for long text.
 
 OUTPUT FORMAT (JSON ONLY):
 {
-  "hypothesis": "Explanation of what to search for",
-  "query": "?[id, content] := *memory{id, content, timestamp}, timestamp >= START, timestamp <= END",
+  "hypothesis": "Explanation...",
+  "query": "?[id, content, timestamp] := *memory{id, content, timestamp}, str_includes(content, 'keyword')",
   "confidence": 0.5
 }
 
-EXAMPLE (Do NOT Copy):
-User: "What did I eat?"
-JSON: { "hypothesis": "Searching for food memories", "query": "?[id, content] := *memory{id, content, timestamp}", "confidence": 0.9 }
+EXAMPLE:
+User: "What is the code?"
+JSON: { "hypothesis": "Searching for code", "query": "?[id, content, timestamp] := *memory{id, content, timestamp}, str_includes(content, 'code')", "confidence": 0.8 }
 `;
 
                         const reasoningUI = ui.appendReasoning(`Thinking: ${userQuery.substring(0, 30)}... (Iteration ${iteration})`);
