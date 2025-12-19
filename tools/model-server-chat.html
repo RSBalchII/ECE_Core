@@ -384,6 +384,8 @@
                             </option>
                             <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-14B-q4f16_1-MLC">DeepSeek-R1-14B (Qwen)
                             </option>
+                            <option value="mlc-ai/DeepSeek-V2-Lite-Chat-q4f16_1-MLC">DeepSeek-V2-Lite (Experimental)
+                            </option>
                             <option value="mlc-ai/Hermes-3-Llama-3.2-3B-q4f16_1-MLC">Hermes-3-Llama-3.2-3B</option>
                         </optgroup>
                         <optgroup label="Experimental / Legacy">
@@ -919,10 +921,14 @@ If context is insufficient, say so clearly.`;
                 // Use Llama-3-8B library for architecture compatibility
                 modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
             } else if (lowerId.includes('deepseek-r1') || lowerId.includes('qwen')) {
-                // Swith back to Qwen2-7B library (Verified Existing)
-                // This covers Qwen2.5-7B, Qwen2.5-14B, DeepSeek-R1-Distill-Qwen-7B/14B, and "Qwen3" (which is Qwen2 type)
-                // Note: Qwen2-7B WASM driver typically handles 14B/72B variants of same architecture if VRAM allows.
+                // Switch back to Qwen2-7B library (Verified Existing)
                 if (!modelLib) modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+            }
+
+            // FINAL FALLBACK: Prevent null crash
+            if (!modelLib) {
+                ui.log("⚠️ No specific WASM driver found. Defaulting to Qwen2-7B driver.", "warn");
+                modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
             }
 
             // NOTE: For Mistral/Hermes, we omit specific modelLib mapping to let WebLLM defaults try to resolve,
@@ -981,6 +987,11 @@ If context is insufficient, say so clearly.`;
                     });
 
                 } catch (primaryErr) {
+                    if (primaryErr.message.includes("add' on 'Cache'") || primaryErr.message.includes("quota")) {
+                        ui.log("❌ STORAGE QUOTA EXCEEDED! Browser cache is full.", "error");
+                        alert("Your Browser Storage is FULL.\n\nPlease click 'Delete Model Cache' in the System Controls panel, then try again.");
+                        throw primaryErr; // Stop trying fallback, it will fail too
+                    }
                     ui.log(`Primary load failed (${primaryErr.message}), trying fallback to ${simpleId}...`, "warn");
 
                     // Fallback: Try creating engine with simpleId
@@ -1133,24 +1144,44 @@ If context is insufficient, say so clearly.`;
             clearBtn.addEventListener('click', async () => {
                 if (!confirm("Are you sure you want to DELETE all cached model weights? This will require re-downloading models.")) return;
                 try {
-                    // Determine UI logging method (if ui exists, use it; else console)
+                    // Determine UI logging method
                     const log = (msg, type) => (typeof ui !== 'undefined' && ui.log) ? ui.log(msg, type) : console.log(msg);
 
                     log("Deleting model cache...", "warn");
+
+                    // 1. Cache Storage API (Main Weights)
                     const cacheNames = await caches.keys();
                     let deleted = 0;
                     for (const name of cacheNames) {
-                        if (name.includes("webllm")) {
+                        // WebLLM usually uses "webllm/..." or just user provided names if custom
+                        // We will delete ANYTHING that looks like a model cache to be safe
+                        if (name.includes("webllm") || name.includes("param") || name.includes("wasm")) {
                             await caches.delete(name);
                             log(`Deleted cache: ${name}`, "success");
                             deleted++;
                         }
                     }
-                    if (deleted === 0) log("No 'webllm' caches found.", "info");
-                    else {
-                        log("Cache cleared. Please reload the page.", "success");
-                        setTimeout(() => window.location.reload(), 2000);
+
+                    // 2. Clear Transformers.js cache (if used)
+                    if (cacheNames.includes('transformers-cache')) {
+                        await caches.delete('transformers-cache');
+                        log("Deleted transformers-cache", "success");
+                        deleted++;
                     }
+
+                    if (deleted === 0) {
+                        log("No obvious model caches found. Trying to list all...", "info");
+                        // Desperate mode: list all and ask/delete
+                        for (const name of cacheNames) {
+                            log(`Found generic cache: ${name}`, "warn");
+                            // Uncomment to nuke all: await caches.delete(name);
+                        }
+                    }
+
+                    log(`Cache clear routine finished. (${deleted} caches removed).`, "success");
+                    alert(`Deleted ${deleted} cache(s). Page will now reload.`);
+                    window.location.reload();
+
                 } catch (e) {
                     console.error(e);
                     alert(`Error clearing cache: ${e.message}`);

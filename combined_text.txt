@@ -1,477 +1,64 @@
 --- START OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\README.md (Section: ROOT_PROJECT) ---
 
-> **⚠️ ARCHITECTURAL PIVOT:** This project now runs entirely in the browser (WASM/CozoDB). See `tools/` for the active application. The legacy Python/Neo4j backend has been moved to `archive/v1_python_backend/`.
-
-# External Context Engine (ECE) - Browser Native Edition: Infinite Context Pipeline
-
-> **Executive Cognitive Enhancement (ECE)** - A browser-native infinite context system that runs entirely in your browser with zero backend dependencies.
-
-**Philosophy**: Your mind, augmented. Your data, sovereign. Your tools, open. **Infinite context, unlimited conversations.**
-
----
-
-## Architecture: Browser-Native Sovereignty
-
-Context-Engine now runs entirely in your browser with WebGPU-accelerated inference:
-
-### ⚡ **Sovereign Tools** - Browser-Native
-**Role**: Zero-dependency HTML tools with WebGPU inference and WASM memory
-**Location**: `tools/`
-
-- **Memory Architecture**: CozoDB WASM (graph storage) + IndexedDB (persistent)
-- **Inference**: WebLLM with DeepSeek-R1 7B, Qwen 2.5, Gemma 2
-- **Embeddings**: Transformers.js (all-MiniLM-L6-v2)
-- **Interface**: Pure HTML - no servers, no installation
-
-**Key Features**:
-- ✅ Double-click HTML → instant AI with memory
-- ✅ Local inference with WebGPU acceleration
-- ✅ Graph-based memory with vector search
-- ✅ Zero data transmission (completely private)
-- ✅ Corruption recovery with automatic fallback
-
-### 🤖 **Anchor** - The Body
-**Role**: Terminal interface and interaction layer
-**Location**: `anchor/`
-
-- **Interface**: Lightweight CLI with streaming responses
-- **Integration**: Connects to ECE_Core API for memory-enhanced conversations
-- **Tool Execution**: Pattern-based tool mode for reliable execution
-- **Deployment**: Can be packaged as standalone executable
-
-**Key Features**:
-- ✅ Real-time streaming responses
-- ✅ Memory-enhanced conversations
-- ✅ Simple tool mode for reliable tool execution
-- ✅ Security hardening (whitelist, confirmation flows)
-
-### 🌉 **Extension** - The Bridge
-**Role**: Browser integration and active context injection
-**Location**: `extension/`
-
-- **Interface**: Chrome Side Panel with persistent chat
-- **Integration**: Connects to ECE_Core API for context-aware browsing
-- **Ingestion**: "Save to Memory" capability to archive web content and chat transcripts directly to the knowledge graph.
-- **Capabilities**:
-  - 👁️ **Sight**: Reads active page content on demand
-  - 🗣️ **Voice**: Streaming chat interface
-  - ✋ **Hands**: Executes JavaScript actions on the page
-
-### 🛠️ **Sovereign Tools** - The Toolkit
-**Role**: Portable, browser-native inference and diagnostics
-**Location**: `tools/`
-
-**Phase A: Graph-R1 Reasoning Console** (Current)
-- **`model-server-chat.html`** (Canonical) — Full Graph-R1 iterative reasoning with local memory retrieval. This is the primary entry point for Phase A.
-  - Iterative Think→Query→Refine loops (up to 3 iterations)
-  - CozoDB WASM memory engine with 211 ingested memories
-  - DeepSeek-R1 7B reasoning via WebLLM
-  - Reasoning trace audit trail
-  - Pattern-matched response parsing
-- **`sovereign-db-builder.html`** — Data ingestion pipeline for memories and research papers
-- **`model-server-chat.legacy.html`** — Previous simple retrieval+synthesis (archived reference)
-
-**Architecture**: Zero-dependency, offline-capable, "run anywhere" tools. Designed for sovereignty: all data stays local, no backend required.
-
-**Future Phases**:
-- **Phase B**: Test Graph-R1 quality with research papers; measure iteration improvements
-- **Phase C**: Extension Bridge for Gemini injection (3-second pause trigger, context append)
-- **Phase D**: Scale testing and adversarial retrieval (contradiction finding)
-
----
-
-## Infinite Context Pipeline: Hardware + Logic
-
-### 🔧 **Phase 1: Hardware Foundation**
-- **64k Context Window**: All servers now boot with 65,536 token capacity
-- **GPU Optimization**: Full layer offload (99) with Q8 quantized KV cache
-- **Flash Attention**: Enabled for optimal performance with long contexts
-
-### 🧩 **Phase 2: Context Rotation Protocol** 
-- **Context Shifting**: Automatic rotation when context approaches 55k tokens
-- **Intelligent Distillation**: Old context compressed to "Narrative Gists" using Distiller
-- **Persistent Storage**: Gists stored in Neo4j as `:ContextGist` nodes with chronological links
-
-### 🧠 **Phase 3: Graph-R1 Reasoning Enhancement**
-- **Gist Retrieval**: GraphReasoner now searches `:ContextGist` nodes for historical context
-- **Continuity Maintenance**: Maintains reasoning flow across context rotations
-- **Smart Querying**: Enhanced retrieval logic with historical context awareness
-
----
-
-## Data Flow
-
-```
-User Input (Anchor CLI / Extension)
-    ↓
-ECE_Core API (:8000)
-    ↓
-├─ Redis: Check active session cache
-├─ Neo4j: Graph traversal + semantic search + ContextGist retrieval
-└─ LLM: Generate response with full context (including historical gists)
-    ↓
-Cognitive Agents (optional)
-├─ Verifier: Fact-check via Empirical Distrust
-├─ Distiller: Summarize and extract entities + Context Rotation
-└─ Archivist: Maintain freshness, schedule repairs
-    ↓
-Response → Anchor → User
-```
-
----
-
-## Memory Architecture
-
-### Current (Production)
-- **Neo4j** (port 7687) - PRIMARY STORAGE
-  - All memories, summaries, relationships
-  - ContextGist nodes for historical context
-  - Graph-based retrieval with Graph-R1 optimization
-- **Redis** (port 6379) - ACTIVE SESSION CACHE
-  - Hot cache for active conversations (24h TTL)
-  - Graceful fallback to Neo4j if unavailable
-
-### Deprecated
-- ~~**SQLite**~~ - Fully removed 2025-11-13, migrated to Neo4j
-
----
-
-## 🚀 Quick Start
-
-### Zero Dependencies (Recommended)
-```bash
-# Just open HTML files in Chrome/Edge
-cd tools && start index.html
-```
-
-### Legacy Backend (Optional)
-```bash
-# Only if you need the old Python backend
-pip install -r requirements.txt
-python backend/launcher.py
-```
-
----
-
-## Full Stack Setup (Production)
-
-### Prerequisites
-- Python 3.11+
-- Neo4j database (local or remote)
-- Redis server (optional, but recommended)
-- llama.cpp server (will be started by our scripts)
-
-### Clean Architecture - 3 Main Scripts
-This project now uses a simplified 3-script architecture:
-
-1. **`python start_llm_server.py`** - Interactive LLM server with model selection (64k window)
-2. **`python start_ece.py`** - ECE Core with integrated MCP memory system
-3. **`python start_embedding_server.py`** - Auto-selects gemma-300m embedding server
-
-### Three-Terminal Startup
-
-**Terminal 1 - LLM Server:**
-```bash
-python start_llm_server.py  # Interactive model selection, 64k window
-```
-
-**Terminal 2 - ECE_Core (The Brain):**
-```bash
-python start_ece.py  # Includes MCP endpoints at port 8000
-```
-
-**Terminal 3 - Embedding Server (optional):**
-```bash
-python start_embedding_server.py  # Auto-selects gemma-300m
-```
-
-### Quick Reka Configuration
-For Reka Flash 3 21B optimized settings:
-```bash
-start-reka.bat  # Starts all services with RTX 4090 optimized parameters
-```
-
-### Alternative: All-in-one Safe Startup
-
-To start all services with conservative defaults using the new Python architecture:
-```bash
-python start_all_safe.py  # Python version (recommended)
-# OR
-start_all_safe_simple.bat  # Batch wrapper
-```
-
-### Health Checks
-```bash
-# Verify LLM
-curl http://localhost:8080/v1/models
-
-# Verify ECE_Core
-curl http://localhost:8000/health
-```
-
-### Troubleshooting: Proxy & Missing Dependencies
-
-If your `start-openai-stream-proxy.*` script returns an error such as:
-
-```
-ModuleNotFoundError: No module named 'sse_starlette'
-```
-
-then your Python environment is missing the `sse-starlette` package. The proxy requires `sse-starlette` for SSE support and `uvicorn` to run.
-
-Quick fix (Windows PowerShell):
-```pwsh
-cd C:\Users\rsbiiw\Projects\Context-Engine\ece-core
-.\.venv\Scripts\Activate  # Or whichever venv you use
-pip install -r requirements.txt
-```
-
-Quick fix (Unix/macOS):
-```bash
-cd /path/to/Context-Engine\ece-core
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-After installing dependencies, re-run the proxy script or the `start-all-safe.*` wrapper.
-
-If you see "The filename, directory name, or volume label syntax is incorrect.", ensure you're running the start script from the repo root and that there are no stray quotes or illegal characters in your path. The wrapper assumes `start-openai-stream-proxy.*` will be run from the repo root (so `%~dp0` works as expected).
-
-## All-in-one Safe Startup (recommended for devs)
-
-To start all core services in a single command using conservative defaults that reduce OOMs and contention, use the safe startup scripts.
-
-This wrapper starts (in order):
-- LLaMa safe server (lower ubatch & single parallel-slot)
-- LLaMa embedding server (optional)
-- LLM Server with Reka-optimized settings
-- ECE Core with MCP enabled
-- MCP server (integrated into ECE Core when enabled)
-
-Usage:
-```bash
-# Windows (Python version - recommended)
-python start_all_safe.py
-
-# Windows (Batch wrapper)
-start_all_safe_simple.bat
-
-# Windows (Reka-optimized)
-start-reka.bat
-```
-
-The scripts perform basic health checks and will wait for LLaMa and ECE Core to be reachable before starting dependent components.
-
-## Configuration
-
-### ECE_Core Configuration
-- **Primary config**: `ece-core/.env` (from `.env.example`)
-- **LLM settings**: Context size, GPU layers, model path
-- **Memory settings**: Redis/Neo4j connection strings
-- **Agent settings**: Enable/disable Verifier, Archivist, Distiller
-
-### Anchor Configuration
-- **Primary config**: `anchor/.env` (from `.env.example`)
-- **ECE connection**: `ECE_URL=http://localhost:8000`
-- **Tool settings**: `PLUGINS_ENABLED=true` to enable tools
-
----
-
-## Documentation
-
-### Core Specs (Single Source of Truth)
-- `specs/spec.md` - Technical architecture
-- `specs/plan.md` - Vision, roadmap, ADRs
-- `specs/tasks.md` - Implementation backlog
-- `specs/TROUBLESHOOTING.md` - Operational debugging
-
-### Component Specs
-- `backend/specs/spec.md` - Backend technical specs
-- `backend/specs/plan.md` - Backend roadmap
-- `backend/specs/tasks.md` - Backend tasks
-- `anchor/specs/spec.md` - Anchor technical specs
-- `anchor/specs/plan.md` - Anchor roadmap
-- `anchor/specs/tasks.md` - Anchor tasks
-
-### Supplementary
-- `CHANGELOG.md` - Complete project history
-- `archive/README.md` - Archived code explanation
-
----
-
-## Tool Architecture
-
-**Current**: Plugin-based UTCP (Simple Tool Mode) and MCP Integration
-
-Tools are discovered via multiple methods:
-- **Plugin-based UTCP**: `ece-core/plugins/` directory
-  - `web_search` - DuckDuckGo search
-  - `filesystem_read` - File and directory operations
-  - `shell_execute` - Shell command execution (with safety checks)
-  - `mgrep` - Semantic code search
-- **MCP Integration**: Memory tools via `/mcp` endpoints
-  - `add_memory` - Add to Neo4j memory graph
-  - `search_memories` - Search memory graph with relationships
-  - `get_summaries` - Get session summaries
-
-**Note**: MCP (Model Context Protocol) is now integrated into the main ECE server when `mcp.enabled: true` in config.
-
----
-
-## Cognitive Architecture: Agents
-
-ECE_Core implements an agent-based architecture for memory hygiene and cognitive enhancement:
-
-### Verifier Agent
-- **Role**: Truth-checking via Empirical Distrust
-- **Method**: Provenance-aware scoring (primary sources > summaries)
-- **Goal**: Reduce hallucinations, increase factual accuracy
-
-### Distiller Agent
-- **Role**: Memory summarization and compression + Context Rotation
-- **Method**: LLM-assisted distillation with salience scoring
-- **Goal**: Maintain high-value context, prune noise, enable infinite context
-
-### Archivist Agent
-- **Role**: Knowledge base maintenance and freshness + Context Management
-- **Method**: Scheduled verification, stale node detection, context rotation oversight
-- **Goal**: Keep memory graph current and trustworthy, manage context windows
-
-### Memory Weaver (Maintenance Engine)
-- **Role**: Automated relationship repair
-- **Method**: Embedding-based similarity with audit trail
-- **Goal**: Maintain graph integrity with full traceability
-
----
-
-## Small Model Considerations
-
-**Tool Usage**:
-- ⚠️ Models < 14B parameters are **unreliable** for structured tool protocols
-- ✅ Use "Simple Tool Mode" (pattern-based execution) for 4B-8B models
-- ✅ Use 14B+ models (DeepSeek-R1, Qwen2.5-14B) for full tool support
-- ✅ MCP Integration works with any model for memory operations
-
-**Recommended Models**:
-- **Gemma-3 4B** - Best for speed (chat only, tools unreliable)
-- **Qwen3-8B** - Best for reasoning (Simple Tool Mode works)
-- **DeepSeek-R1-14B** - Best for tools (full structured protocol support)
-- **Reka Flash 3 21B** - Best for reasoning (use start-reka.bat)
-
----
-
-## Development
-
-### Install Dependencies
-```bash
-# ECE_Core
-cd ece-core
-pip install -e .
-
-# Anchor
-cd anchor
-pip install -e .
-```
-
-### Run Tests
-```bash
-# ECE_Core tests
-cd ece-core
-python -m pytest tests/
-
-# Anchor tests
-cd anchor
-python -m pytest tests/
-```
-
-### Package Distribution
-```bash
-# ECE_Core wheel
-cd ece-core
-python -m build
-
-# Anchor standalone executable
-cd anchor
-pyinstaller anchor.spec
-```
-
----
-
-## Project Status
-
-**Current Phase**: Infinite Context Implementation (Phase 5)
-**Version**: Context-Engine 1.0.0, ECE_Core 1.0.0, Anchor 0.1.0-alpha
-**Last Updated**: 2025-12-08
-
-### ✅ Completed
-- Neo4j + Redis architecture (SQLite removed)
-- Plugin-based tool system (UTCP)
-- MCP integration into main ECE server
-- Cognitive agents (Verifier, Archivist, Distiller)
-- Traceability & rollback for automated repairs
-- Security hardening (API auth, audit logs)
-- PyInstaller packaging
-- **NEW: Infinite Context Pipeline** (64k windows, context rotation, Graph-R1 integration)
-
-### 🔄 In Progress
-- Vector adapter + C2C hot-replica for semantic retrieval
-- Compressed summaries + passage recall (EC-T-133)
-- SLM benchmarking and ALScore measurements
-
-### 📅 Planned
-- CLI wrapper for script operations (`ece-cli`)
-- Increase test coverage to 80%+
-- Developer onboarding (`docker-compose.dev.yaml`)
-
----
-
-## Target Users
-
-### Primary: Developers with Executive Function Challenges
-**Pain Points**: Memory decay, context switching, project knowledge retention
-**Solution**: Persistent external memory with automatic retrieval
-
-### Secondary: Privacy-Conscious Developers
-**Pain Points**: Cloud dependency, data sovereignty, vendor lock-in
-**Solution**: 100% local, zero telemetry, your data stays yours
-
-### Tertiary: AI Power Users
-**Pain Points**: Need long-term memory, tool integration, customization
-**Solution**: Memory-enhanced workflows, extensible architecture, open source
-
----
-
-## Research Foundation
-
-- **Graph-R1**: Memory retrieval patterns (https://arxiv.org/abs/2507.21892)
-- **Markovian Reasoning**: Chunked thinking (https://arxiv.org/abs/2506.21734)
-- **Hierarchical Reasoning Model (HRM)**: Multi-level context processing
-- **Empirical Distrust**: Primary source supremacy for verification
-
-See `ece-core/specs/references.md` for complete bibliography.
-
----
-
-## License
-
-MIT - Use, modify, and distribute freely.
-
----
-
-## Acknowledgments
-
-Built for neurodivergent hackers who need their tools to work reliably.
-
-**"Your mind, augmented. Your data, sovereign. Your tools, open."**
-
----
-
-## Need Help?
-
-- **Operational Issues**: See `specs/TROUBLESHOOTING.md`
-- **Architecture Questions**: See `specs/spec.md`
-- **Implementation Tasks**: See `specs/tasks.md`
-- **Project History**: See `CHANGELOG.md`
+# Context Information Engine (Sovereign Edition)
+
+> **Philosophy:** Your mind, augmented. Your data, sovereign. Your tools, open.
+
+A **Browser-Native** cognitive extraction system. No servers. No cloud. No installation.
+Just you, your browser, and your infinite context.
+
+---
+
+## ⚡ Quick Start
+
+1.  **Download** this repository.
+2.  **Open** `tools/index.html` in Chrome or Edge.
+3.  **Click** "Double Click to Launch" on the Console.
+
+*That's it. You are running a local LLM with persistent Graph Memory.*
+
+---
+
+## 🏗️ Architecture
+
+The system runs entirely in `tools/` using WebAssembly (WASM).
+
+### 1. The Sovereign Loop
+```mermaid
+graph TD
+    User -->|Input| HTML[model-server-chat.html]
+    
+    subgraph Browser_Memory [Two Birds, One Stone]
+        HTML -->|Store/Retrieve| Cozo[CozoDB WASM]
+        Cozo -->|Persist| IDB[IndexedDB/OPFS]
+    end
+    
+    subgraph Cognitive_Engine
+        HTML -->|Context + Prompt| WebLLM[DeepSeek-R1 (WASM)]
+        WebLLM -->|Reasoning Trace| HTML
+    end
+```
+
+### 2. Core Components
+*   **Brain**: `model-server-chat.html` - Runs the Graph-R1 Reasoning Loop.
+*   **Memory**: `CozoDB (WASM)` - Stores relations (`*memory`) and vectors. Persists to browser IndexedDB.
+*   **Stomach**: `sovereign-db-builder.html` - Ingests files (Markdown/JSON) into the graph.
+
+---
+
+## 📚 Documentation
+
+*   **Architecture**: [specs/spec.md](specs/spec.md)
+*   **Roadmap**: [specs/plan.md](specs/plan.md)
+*   **Memory Schema**: [specs/architecture/memory-layer.spec.md](specs/architecture/memory-layer.spec.md)
+*   **WASM Layer**: [specs/architecture/sovereign-wasm.spec.md](specs/architecture/sovereign-wasm.spec.md)
+
+---
+
+## 🧹 Legacy Support
+The old Python/Neo4j backend has been **archived**.
+*   Legacy README: [archive/v1_python_backend/README_LEGACY.md](archive/v1_python_backend/README_LEGACY.md)
+*   Legacy Code: `archive/v1_python_backend/`
 
 --- END OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\README.md ---
 
@@ -776,75 +363,6 @@ Built for neurodivergent hackers who need their tools to work reliably.
 
 --- END OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\CHANGELOG.md ---
 
---- START OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\architecture-overview.md (Section: ROOT_SPECS) ---
-
-# Architecture Overview: Sovereign Coda (Browser-Native)
-
-**Status:** Production (V2)
-**Philosophy:** 100% Local, 100% Browser, 0% Backend.
-
-## Core Stack
-
-The system has migrated from a Python/Neo4j backend to a pure [WASM (WebAssembly)](https://webassembly.org/) stack running directly in the user's browser (Chrome/Edge).
-
-### 1. Compute Layer (WebLLM)
-- **Engine:** [WebLLM](https://webllm.mlc.ai/) (MLC-AI)
-- **Runtime:** WebGPU (Hardware accelerated)
-- **Models:** Quantized (q4f16_1) Llama 3, Qwen 2.5, DeepSeek R1, Gemma 2.
-- **Function:** Real-time reasoning, chat inference, logic execution.
-
-### 2. Memory Layer (CozoDB WASM)
-- **Database:** [CozoDB](https://cozodb.org/) (Datalog/Relational/Graph)
-- **Storage:** IndexedDB / OPFS (Origin Private File System)
-- **Structure:**
-  - `*memory`: Stored relations (content, timestamp, embedding).
-  - `*vectors`: HNSW vector index for semantic search.
-- **Query Language:** Datalog (logic-based query).
-
-### 3. Application Layer (HTML5)
-- **Format:** Zero-dependency HTML files (no Node.js/Bundler required).
-- **Files:**
-  - `model-server-chat.html`: The **Brain**. Loads LLM, connects to DB, runs the Reasoning Loop.
-  - `sovereign-db-builder.html`: The **Stomach**. Ingests raw files (Markdown/JSON) and creates vector embeddings.
-  - `log-viewer.html`: The **Nerves**. Real-time system diagnostics.
-
-## Data Flow
-
-```mermaid
-graph TD
-    User[User] -->|Chat| UI[model-server-chat.html]
-    UI -->|Inference| WebLLM[WebLLM ServiceWorker]
-    UI -->|Query| Cozo[CozoDB WASM]
-    
-    subgraph Browser Storage
-        Cozo -->|Persist| IDB[IndexedDB]
-        Cozo -->|Vector| Embed[Transformers.js]
-    end
-    
-    File[Data Files] -->|Drag & Drop| Builder[sovereign-db-builder.html]
-    Builder -->|Insert| IDB
-```
-
-## Critical Workflows
-
-### 1. The Reasoning Loop (Graph-R1)
-1. User asks a question.
-2. LLM generates a **Datalog Query** (Thinking Process).
-3. CozoDB executes the query against local memory.
-4. Results are fed back to LLM as Context.
-5. LLM synthesizes final answer.
-
-### 2. Context Injection
-- **Sovereign-First:** User manually feeds context via the Memory Builder.
-- **Privacy:** No data leaves the browser. No API keys sent to cloud.
-
-## Reference Specs
-- [Sovereign WASM Spec](architecture/sovereign-wasm.spec.md)
-- [Extension Bridge Spec](architecture/extension-bridge.spec.md)
-
-
---- END OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\architecture-overview.md ---
-
 --- START OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\doc_policy.md (Section: ROOT_SPECS) ---
 
 # Documentation Policy (Context-Engine)
@@ -1075,6 +593,146 @@ await window.db.run(":create memory { id: String => timestamp: Int, role: String
 
 --- END OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\mlc-urls.md ---
 
+--- START OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\orchestration_summary_2025_12_19.md (Section: ROOT_SPECS) ---
+
+# Orchestration Summary: 2025-12-19
+
+**Session Goal:** UI Modernization, Architecture Pivot, and Documentation Reset.
+
+## 1. Architecture Pivot: Browser-Native Verified
+The system has fully transitioned to the **Sovereign WASM Stack**.
+*   **Legacy Backend:** Archived to `archive/v1_python_backend`.
+*   **Active Stack:**
+    *   **Compute:** WebLLM (WebGPU) running DeepSeek-R1 / Qwen2.5.
+    *   **Memory:** CozoDB (WASM) persisted via IndexedDB.
+    *   **Interface:** `tools/model-server-chat.html` (Zero Dependency).
+
+## 2. Documentation Hard Reset
+We performed a "Hard Reset" of the documentation to match the new reality.
+*   **`README.md`**: Rewritten. Now purely focuses on the `tools/` directory and browser-native philosophy.
+*   **`doc_policy.md`**: Enforced. `specs/` is the single source of truth.
+*   **Archive**: `docs/` and legacy configs moved to `archive/`.
+*   **New Specs**:
+    *   `specs/spec.md`: High-level architecture.
+    *   `specs/architecture/memory-layer.spec.md`: Definitive CozoDB schema.
+
+## 3. UI Modernization
+`tools/model-server-chat.html` was significantly upgraded:
+*   **Collapsible Panels**: Model Selection, Controls, and Logs now fold away.
+*   **Resizable Layout**: draggable Sidebar vs. Chat split.
+*   **Mobile Optimizations**: Stacked layout for small screens.
+*   **Smart Defaults**: 14B Model support (DeepSeek-R1-Distill-Qwen-14B) with dynamic VRAM refs.
+
+## 4. Code & Scripts
+*   **`read_all.py`**: Refactored to be **Zero Dependency** (removed `chardet`).
+*   **`.gitignore`**: Updated to ignore `archive/` to keep repo clean.
+
+## Next Steps (Start of Next Session)
+1.  **Context Injection Debugging**: Verify that the `*memory` graph is *actually* being properly retrieved and injected into the DeepSeek model context window.
+2.  **Extension Bridge**: Re-verify the Chrome Extension connection to this new WASM stack.
+
+
+--- END OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\orchestration_summary_2025_12_19.md ---
+
+--- START OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\plan.md (Section: ROOT_SPECS) ---
+
+# Sovereign Coda Roadmap (V2)
+
+**Status:** Execution Phase (Browser-Native Pivot)
+**Focus:** Stability, Model Expansion, Context Injection.
+
+## Phase 1: Foundation (Completed)
+- [x] Pivot to WebLLM/WebGPU stack.
+- [x] Implement CozoDB (WASM) for memory.
+- [x] Create core HTML tools (`model-server-chat`, `sovereign-db-builder`, `log-viewer`).
+
+## Phase 2: Stabilization (Current)
+- [x] Fix Model Loading (Quota/VRAM config).
+- [x] Add 14B Model Support (Qwen2.5, DeepSeek-R1).
+- [x] UI Modernization (Collapsible, Resizable).
+- [x] Clean Dependencies (Remove Python backend, fix scripts).
+
+## Phase 3: Context Injection (Next)
+- [ ] **Context Injection Debugging**: Ensure loaded context is actually used by the model.
+- [ ] **Extension Integration**: Re-verify Chrome Extension bridge.
+- [ ] **Hybrid RAG**: Optimize vector + graph retrieval.
+
+## Phase 4: Expansion
+- [ ] **Agentic Capabilities**: Re-introduce Verifier/Distiller logic in JS.
+- [/] **Mobile Optimization**: Iterate on `model-server-chat.html` mobile UX.
+
+
+--- END OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\plan.md ---
+
+--- START OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\spec.md (Section: ROOT_SPECS) ---
+
+# Architecture Overview: Sovereign Coda (Browser-Native)
+
+**Status:** Production (V2)
+**Philosophy:** 100% Local, 100% Browser, 0% Backend.
+
+## Core Stack
+
+The system has migrated from a Python/Neo4j backend to a pure [WASM (WebAssembly)](https://webassembly.org/) stack running directly in the user's browser (Chrome/Edge).
+
+### 1. Compute Layer (WebLLM)
+- **Engine:** [WebLLM](https://webllm.mlc.ai/) (MLC-AI)
+- **Runtime:** WebGPU (Hardware accelerated)
+- **Models:** Quantized (q4f16_1) Llama 3, Qwen 2.5, DeepSeek R1, Gemma 2.
+- **Function:** Real-time reasoning, chat inference, logic execution.
+
+### 2. Memory Layer (CozoDB WASM)
+- **Database:** [CozoDB](https://cozodb.org/) (Datalog/Relational/Graph)
+- **Storage:** IndexedDB / OPFS (Origin Private File System)
+- **Structure:**
+  - `*memory`: Stored relations (content, timestamp, embedding).
+  - `*vectors`: HNSW vector index for semantic search.
+- **Query Language:** Datalog (logic-based query).
+
+### 3. Application Layer (HTML5)
+- **Format:** Zero-dependency HTML files (no Node.js/Bundler required).
+- **Files:**
+  - `model-server-chat.html`: The **Brain**. Loads LLM, connects to DB, runs the Reasoning Loop.
+  - `sovereign-db-builder.html`: The **Stomach**. Ingests raw files (Markdown/JSON) and creates vector embeddings.
+  - `log-viewer.html`: The **Nerves**. Real-time system diagnostics.
+
+## Data Flow
+
+```mermaid
+graph TD
+    User[User] -->|Chat| UI[model-server-chat.html]
+    UI -->|Inference| WebLLM[WebLLM ServiceWorker]
+    UI -->|Query| Cozo[CozoDB WASM]
+    
+    subgraph Browser Storage
+        Cozo -->|Persist| IDB[IndexedDB]
+        Cozo -->|Vector| Embed[Transformers.js]
+    end
+    
+    File[Data Files] -->|Drag & Drop| Builder[sovereign-db-builder.html]
+    Builder -->|Insert| IDB
+```
+
+## Critical Workflows
+
+### 1. The Reasoning Loop (Graph-R1)
+1. User asks a question.
+2. LLM generates a **Datalog Query** (Thinking Process).
+3. CozoDB executes the query against local memory.
+4. Results are fed back to LLM as Context.
+5. LLM synthesizes final answer.
+
+### 2. Context Injection
+- **Sovereign-First:** User manually feeds context via the Memory Builder.
+- **Privacy:** No data leaves the browser. No API keys sent to cloud.
+
+## Reference Specs
+- [Sovereign WASM Spec](architecture/sovereign-wasm.spec.md)
+- [Extension Bridge Spec](architecture/extension-bridge.spec.md)
+
+
+--- END OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\spec.md ---
+
 --- START OF FILE: C:\Users\rsbiiw\Projects\Context-Engine\specs\tasks.md (Section: ROOT_SPECS) ---
 
 # Context-Engine Implementation Tasks
@@ -1095,20 +753,7 @@ await window.db.run(":create memory { id: String => timestamp: Int, role: String
   - [ ] Resolve memory retrieval integration
   - [ ] Test reasoning trace display
 
-### Deferred - Backend Optimization (Post-Pivot)
-- [ ] Vector Adapter & C2C Replication (backend archived)
-- [ ] Implement VectorAdapter interface for semantic search (EC-V-101)
-  - [ ] Define abstract base class with required methods
-  - [ ] Implement Redis VectorAdapter with HNSW indexing
-  - [ ] Implement FAISS VectorAdapter for local deployment
-  - [ ] Performance benchmarking against graph-only retrieval
-  - [ ] Integration testing with ContextManager
 
-- [ ] C2C (Context-to-Context) Hot-Replica System (EC-C2C-102)  
-  - [ ] Define hot-replica synchronization protocol
-  - [ ] Implement real-time vector index updates
-  - [ ] Cross-validation between graph and vector retrieval
-  - [ ] Automatic failover from vector to graph when needed
 
 ### Active Development - Compressed Summaries
 - [ ] Compressed Summary Architecture (EC-CS-133)
