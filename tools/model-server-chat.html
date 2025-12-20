@@ -737,7 +737,10 @@
                 const rawWords = userText.match(/[a-zA-Z0-9_\-]+/g) || [];
                 const stopWords = new Set([
                     'the', 'and', 'was', 'for', 'are', 'with', 'what', 'when', 'where', 'who', 'how', 'why', 'that', 'this',
-                    'can', 'you', 'know', 'about', 'from', 'have', 'has', 'had', 'not', 'but', 'all'
+                    'can', 'you', 'know', 'about', 'from', 'have', 'has', 'had', 'not', 'but', 'all',
+                    'doing', 'going',
+                    // Context safety stops
+                    'recall', 'remember', 'think', 'thought', 'should', 'would', 'could'
                 ]);
 
                 // Filter and ensure length > 2
@@ -755,7 +758,7 @@
                 const conditions = keywords.map(w => `regex_matches(content, '(?i)${w}')`).join(' or ');
 
                 // Query: Select ID, Content from memory where content contains keywords (case-insensitive)
-                const query = `?[id, content, timestamp] := *memory{id, content, timestamp}, ${conditions}`;
+                const query = `?[id, content, timestamp] := *memory{id, content, timestamp}, ${conditions} :limit 10`;
 
                 ui.log(`🔍 Exectuing DB Query: ${query}`, "debug");
 
@@ -800,10 +803,66 @@
 
                     if (parsed.rows && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
                         ui.log(`✅ Reflex found ${parsed.rows.length} matches.`, "success");
-                        const memoryBlock = parsed.rows.slice(0, 10).map(row =>
-                            `- [Memory]: ${row[1]}`
-                        ).join('\n');
-                        return memoryBlock;
+                        // --- SEMANTIC FILE SYSTEM (SFS) TRANSFORMATION ---
+                        const items = parsed.rows.slice(0, 10);
+                        const paths = [];
+                        const clues = items.map((row, index) => {
+                            const id = index + 1;
+                            const rawContent = row[1];
+                            const timestamp = row[2] || "Unknown Date";
+
+                            // 1. Virtual Path Generation
+                            let path = `/knowledge/general/doc_${id}`;
+                            if (rawContent.includes('"type": "Sybil"')) {
+                                path = `/memories/sessions/chat_log_${id}`;
+                            } else if (timestamp !== "Unknown Date") {
+                                // Try to parse year/month
+                                try {
+                                    const date = new Date(timestamp);
+                                    if (!isNaN(date)) {
+                                        path = `/memories/dated/${date.getFullYear()}/${date.getMonth() + 1}/doc_${id}`;
+                                    }
+                                } catch (e) { }
+                            }
+
+                            paths.push(path);
+
+                            // 2. Clue Formatting (Snippet Constraint)
+                            // Truncate to 200 chars for extreme token safety while providing "Scent"
+                            let snippet = rawContent.substring(0, 250).replace(/\n/g, ' ');
+                            if (rawContent.length > 250) snippet += "...";
+
+                            return `[CLUE #${id}] [Path: ${path}] [Date: ${timestamp}]\nSnippet: "${snippet}"`;
+                        });
+
+                        // 3. Reality Map Generation (Directory Tree)
+                        // Simple ASCII tree for context
+                        const treeLines = ["[REALITY MAP (Active Mounts)]"];
+                        const uniqueDirs = new Set();
+                        paths.forEach(p => {
+                            const parts = p.split('/');
+                            // e.g. /memories/sessions/chat_log_1 -> /memories/sessions
+                            if (parts.length > 3) uniqueDirs.add(`/${parts[1]}/${parts[2]}/`);
+                            else uniqueDirs.add(`/${parts[1]}/`);
+                        });
+
+                        // Add dirs
+                        uniqueDirs.forEach(d => treeLines.push(d));
+                        // Add files (simplified visualization)
+                        paths.forEach(p => {
+                            const parts = p.split('/');
+                            const file = parts[parts.length - 1];
+                            const dir = p.substring(0, p.lastIndexOf('/') + 1);
+                            // Only show file if we listed the dir? For now just simple list
+                        });
+
+                        // actually, let's just list the full paths for clarity in V1 of SFS
+                        const treeMap = `[CURRENT REALITY MAP]\n` + paths.map(p => `- ${p}`).join('\n');
+
+                        // Final Assembly
+                        const sfsBlock = `${treeMap}\n\n[CONTEXT CLUES]\n${clues.join('\n\n')}`;
+                        return sfsBlock;
+
                     } else {
                         // Graceful match failure
                         ui.log("Reflex: No matching memories found in DB keyword search.", "warn");
@@ -851,7 +910,7 @@ ${userText}
 
                     // Build the "God Prompt"
                     const fullPrompt = this.buildVirtualPrompt(
-                        "You are Sovereign Coda. Answer the user based on context. If you need more info to answer, output ONLY: 'NEED_CONTEXT: <search_term>'. Otherwise, provide the final answer.",
+                        "You are Sovereign Coda, an Agent operating within a Semantic Virtual File System (SFS). Use the [REALITY MAP] to locate information and [CONTEXT CLUES] to answer. If a Clue is insufficient, reference the Clue ID. Do not hallucinate files not present in the Map.",
                         currentContext,
                         history.slice(-5), // Last 5 turns 
                         userText
@@ -1124,10 +1183,15 @@ If context is insufficient, say so clearly.`;
                 const snapdragonId = "snapdragon-" + simpleId;
 
                 // DeepSeek-R1-Distill Specific Override
-                let convOverride = {};
                 if (lowerId.includes('deepseek-r1-distill')) {
                     ui.log("⚙️ Applying 'qwen2' Chat Template Override for compatibility...", "info");
                     convOverride = { "conv_template": "qwen2" };
+                }
+
+                // SAFETY CLAMP: If the WASM driver is 4k-limited, we MUST clamp context or it will crash.
+                if (modelLib.includes('ctx4k') && appConfigOverlay.contextWindowSize > 4096) {
+                    ui.log(`⚠️ Driver Limit Detected (ctx4k). Clamping context from ${appConfigOverlay.contextWindowSize} to 4096.`, "warn");
+                    appConfigOverlay.contextWindowSize = 4096;
                 }
 
                 const appConfig = {
@@ -1175,7 +1239,9 @@ If context is insufficient, say so clearly.`;
                     let adapter = null;
                     let device = null;
 
-                    if (navigator.gpu) {
+                    // Only pre-allocate device for Mobile/Lite profiles to respect Snapdragon limits
+                    // For Desktop (High/Ultra), we trust WebLLM's internal management
+                    if (navigator.gpu && (hwProfile === 'lite' || hwProfile === 'mid')) {
                         adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }) || await navigator.gpu.requestAdapter();
                         if (adapter) {
                             const features = [];
