@@ -13,6 +13,7 @@
 - [x] Add 14B Model Support (Qwen2.5, DeepSeek-R1).
 - [x] UI Modernization (Collapsible, Resizable).
 - [x] Clean Dependencies (Remove Python backend, fix scripts).
+- [x] **Snapdragon Optimization**: Implemented Buffer Override (256MB) and Portable Profiles.
 
 ## Phase 3: Context Injection (Next)
 - [ ] **Context Injection Debugging**: Ensure loaded context is actually used by the model.

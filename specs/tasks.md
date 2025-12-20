@@ -10,6 +10,11 @@
   - [x] Zero-dependency HTML architecture
   - [x] Hermes/Mistral Model Verification (v0.3 WASM)
 
+### Completed - Snapdragon Stability 🐉
+- [x] **WebGPU Buffer Optimization**: Implemented 256MB override for Adreno GPUs (via `appConfig` injection).
+- [x] **Model Expansion**: Added Llama-3.2-1B and Qwen3-4B optimized profiles.
+- [x] **Portable Runtime**: Created `browser_data` strategy for self-contained execution.
+
 ### Active Development - Context Injection Debugging
 - [ ] Fix context injection in model-server-chat.html
   - [ ] Debug Graph-R1 reasoning loop coordination

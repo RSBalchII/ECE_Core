@@ -12,3 +12,7 @@ wheels/
 backend/archive/db/
 
 archive/
+browser_data/
+edge_profile_vulkan/
+launch-edge-unsafe.bat
+launch-edge-vulkan.bat

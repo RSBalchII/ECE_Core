@@ -387,8 +387,13 @@
                             <option value="mlc-ai/Llama-3-8B-Instruct-q4f16_1-MLC">Llama-3-8B</option>
                             <option value="mlc-ai/Mistral-7B-Instruct-v0.2-q4f16_1-MLC">Mistral-7B-v0.2</option>
                         </optgroup>
-                        <optgroup label="New / High Power">
+                        <optgroup label="Snapdragon Optimized (Fast & Safe)">
+                            <option value="mlc-ai/Qwen3-4B-q4f16_1-MLC">Qwen3-4B (Highly Versatile)</option>
+                            <option value="mlc-ai/Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama-3.2-1B (Recommended)</option>
                             <option value="mlc-ai/Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-1.5B (Fastest)</option>
+                            <option value="mlc-ai/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-Coder-1.5B</option>
+                        </optgroup>
+                        <optgroup label="New / High Power">
                             <option value="mlc-ai/Qwen2.5-14B-Instruct-q4f16_1-MLC">Qwen2.5-14B (Powerful)</option>
                             <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC">DeepSeek-R1-7B (Qwen)
                             </option>
@@ -441,6 +446,10 @@
                     <button id="clear-cache-btn"
                         style="width: 100%; padding: 6px; background: #a43131; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">⚠️
                         Delete All Model Cache</button>
+                    <button id="debug-gpu-btn"
+                        style="width: 100%; padding: 6px; background: #555; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; margin-top: 5px;">
+                        ❓ Debug GPU Status
+                    </button>
                     <small style="display:block;color:#aaa;">Use if WASM panicked or Quota Exceeded.</small>
                 </div>
             </details>
@@ -506,7 +515,7 @@
         let db;
         let embedder;
         let engine;
-        let reasoningLoop;
+        let contextManager;
         let selectedModelId = null;
 
         // --- BROADCAST CHANNEL FOR LOG-VIEWER ---
@@ -705,147 +714,153 @@
             }
         }
 
-        // --- LOGIC: Graph-R1 Loop (Meta-Aware) ---
-        class GraphR1ReasoningLoop {
-            constructor(cozoDb, embedderFn) {
-                this.db = cozoDb;
-                this.embedder = embedderFn;
-                this.MAX_ITERATIONS = 10; // Increased for self-correction
-                this.history = [];
+        // --- LOGIC: Context Manager (The "Context OS") ---
+        class ContextManager {
+            constructor(engine, db) {
+                this.engine = engine;
+                this.db = db;
+                this.maxIterations = 3;
+                this.history = []; // Debug trace
             }
 
-            async reason(userQuery) {
-                let context = "";
-                let iteration = 0;
-                let lastError = null; // Stores "Pain"
-                this.history = [];
+            // 1. The "Reflex": Fast, programmatic search
+            // Finds obvious keywords immediately (e.g., "Blueberry-Omega")
+            async retrieveInitialContext(userText) {
+                ui.log("🔍 Reflex: Scanning for keywords...", "info");
 
-                ui.log(`🧠 Graph-R1 Loop Started: "${userQuery}"`, "info");
+                // Extract words > 3 chars as rough keywords, excluding common stops
+                const rawWords = userText.match(/\b\w{3,}\b/g) || [];
+                const stopWords = new Set(['the', 'and', 'was', 'for', 'are', 'with', 'what', 'when', 'where', 'who', 'how', 'why', 'that', 'this']);
+                const keywords = rawWords.filter(w => !stopWords.has(w.toLowerCase()));
 
-                // Ensure engine is alive and reset context
-                if (!engine) throw new Error("LLM Engine not initialized.");
-                await engine.resetChat();
+                if (keywords.length === 0) return "";
 
-                while (iteration < this.MAX_ITERATIONS) {
-                    iteration++;
-                    ui.log(`🔄 Iteration ${iteration}/${this.MAX_ITERATIONS}...`, "warn");
+                // Construct simple OR query for CozoDB
+                // We use 'str_includes' for substring matching
+                const conditions = keywords.map(w => `str_includes(content, '${w}')`).join(' or ');
+                const query = `?[id, content, timestamp] := *memory{id, content, timestamp}, ${conditions}`;
 
+                try {
+                    const result = await this.db.run(query);
+                    // ui.log(`DEBUG: DB Result: ${JSON.stringify(result)}`, "debug");
+
+                    let parsed = null;
                     try {
-                        const planPrompt = `SYSTEM: You are the Sovereign Coda Reasoning Engine.
-Your goal is to retrieve memory using CozoDB Datalog.
+                        parsed = ResponsePattern.match(result);
+                    } catch (parseErr) {
+                        // Ignore parsing errors
+                    }
 
-Current Objective: "${userQuery}"
+                    // SAFE CHECK: Ensure rows array exists before checking length
+                    if (parsed && parsed.rows && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+                        ui.log(`🔍 Reflex found ${parsed.rows.length} matches for keywords: [${keywords.join(', ')}]`, "success");
+                        // Format as a "Retrieved Memories" block
+                        // Row format: [id, content, timestamp]
+                        return parsed.rows.slice(0, 10).map(row =>
+                            `- [Memory]: ${row[1]}`
+                        ).join('\n');
+                    }
+                } catch (e) {
+                    if (!e.message.includes("length")) {
+                        ui.log(`Reflex search error: ${e.message}`, "warn");
+                    }
+                }
+                return "";
+            }
 
-LAST ERROR: ${lastError ? lastError : "None - Initial Attempt"}
+            // 2. The "Virtual Markdown" Builder
+            // Assembles the "God Prompt" that the model sees as its reality
+            buildVirtualPrompt(systemPrompt, retrievedMemories, chatHistory, userText) {
+                return `
+--- SYSTEM OS ---
+${systemPrompt}
 
-SCHEMA DEFINITION:
-Relation: *memory
-Columns: {id, content, timestamp, role, source, embedding}
+--- 🧠 LONG-TERM MEMORY (Reflex Retrieval) ---
+${retrievedMemories ? retrievedMemories : "No specific memories found yet (Model may request more)."}
 
-CRITICAL SYNTAX RULES:
-1. WRONG: *memory{keyword}
-2. CORRECT: *memory{id, content, timestamp}
-3. FILTER: str_includes(content, 'keyword')
+--- 📜 RECENT CHAT CONTEXT ---
+${chatHistory.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n')}
 
-You MUST output strictly in this JSON format inside a markdown block:
-\`\`\`json
-{
-    "hypothesis": "Searching for X...",
-    "query": "?[id, content, timestamp] := *memory{id, content, timestamp}, str_includes(content, 'X')",
-    "confidence": 0.5
-}
-\`\`\`
+--- 👤 CURRENT USER INPUT ---
+${userText}
 `;
+            }
 
-                        const reasoningUI = ui.appendReasoning(`Thinking: ${userQuery.substring(0, 30)}... (Iteration ${iteration})`);
+            // 3. The R1 Loop Wrapper
+            // Allows the model to ask for MORE info if Reflex wasn't enough
+            async executeR1Loop(userText, history) {
+                this.history = [];
+                let iteration = 0;
 
-                        // Use global 'engine' directly
-                        const planStream = await engine.chat.completions.create({
-                            messages: [{ role: "user", content: planPrompt }],
-                            max_tokens: 600, // Increased for DeepSeek thinking
-                            temperature: 0.3,
-                            stream: true
+                // Step A: Reflex Search (Immediate)
+                let currentContext = await this.retrieveInitialContext(userText);
+                if (currentContext) {
+                    ui.appendContext("Reflex Retrieval", currentContext);
+                }
+
+                while (iteration < this.maxIterations) {
+                    iteration++;
+
+                    // Build the "God Prompt"
+                    const fullPrompt = this.buildVirtualPrompt(
+                        "You are Sovereign Coda. Answer the user based on context. If you need more info to answer, output ONLY: 'NEED_CONTEXT: <search_term>'. Otherwise, provide the final answer.",
+                        currentContext,
+                        history.slice(-5), // Last 5 turns 
+                        userText
+                    );
+
+                    ui.log(`🧠 R1 Thinking (Iteration ${iteration})...`, "info");
+
+                    let reply = "";
+                    try {
+                        // Call Model (Non-streaming for logic check)
+                        const response = await this.engine.chat.completions.create({
+                            messages: [{ role: "user", content: fullPrompt }],
+                            temperature: 0.1, // Precision needed
+                            max_tokens: 100 // REDUCED FROM 500 to save VRAM on Snapdragon
                         });
 
-                        let planText = "";
-                        for await (const chunk of planStream) {
-                            const delta = chunk.choices[0]?.delta?.content || "";
-                            planText += delta;
-                            reasoningUI.update(delta);
+                        reply = response.choices[0].message.content.trim();
+                    } catch (genErr) {
+                        ui.log(`💥 Engine Crash: ${genErr.message}`, "error");
+                        if (genErr.message.includes("Instance reference") || genErr.message.includes("disposed")) {
+                            alert("GPU CRASHED (D3D12).\n\nPlease CLOSE this window and run 'launch-edge-vulkan.bat' to use the Vulkan backend.");
+                            return { context: currentContext, finalAnswer: "⚠️ System Crash: GPU Driver lost. Please run `launch-edge-vulkan.bat`." };
                         }
-                        reasoningUI.finish();
-
-                        // ROBUST JSON EXTRACTOR
-                        const extractJSON = (text) => {
-                            const match = text.match(/```json\s*([\s\S]*?)\s*```/);
-                            if (match) { try { return JSON.parse(match[1]); } catch (e) { } }
-                            const start = text.indexOf('{');
-                            const end = text.lastIndexOf('}');
-                            if (start !== -1 && end > start) { try { return JSON.parse(text.substring(start, end + 1)); } catch (e) { } }
-                            return null;
-                        };
-
-                        const planData = extractJSON(planText);
-
-                        if (!planData) {
-                            throw new Error("No JSON found. Output valid JSON inside ```json``` blocks.");
-                        }
-
-                        ui.log(`🤔 Hypothesis: ${planData.hypothesis}`, "info");
-
-                        // Execute Query
-                        try {
-                            const cleanQuery = planData.query.replace(/```/g, '').trim();
-
-                            if (cleanQuery.toLowerCase().includes("select")) {
-                                throw new Error("Invalid Syntax: SQL detected. Use Datalog syntax only.");
-                            }
-
-                            ui.log(`Exec: ${cleanQuery}`, 'info');
-
-                            const dbRaw = await this.db.run(cleanQuery);
-                            const dbResult = ResponsePattern.match(dbRaw);
-
-                            if (dbResult.type === 'ERROR') {
-                                throw new Error(`CozoDB Syntax Error: ${dbResult.error}`);
-                            }
-
-                            if (dbResult.type === 'DB_RESULT' && dbResult.count > 0) {
-                                const newFacts = dbResult.rows
-                                    .map((row, idx) => Array.isArray(row) ? `[Fact ${idx + 1}] ${row.slice(1).join(': ')}` : `[Fact ${idx + 1}] ${JSON.stringify(row)}`)
-                                    .join("\n");
-
-                                context += `\n--- Iteration ${iteration} Findings ---\n${newFacts}`;
-                                ui.log(`📚 Retrieved ${dbResult.count} fact(s).`, "success");
-                                ui.appendContext(`Iteration ${iteration} Findings (${dbResult.count} facts)`, newFacts);
-
-                                this.history.push({
-                                    iteration,
-                                    hypothesis: planData.hypothesis,
-                                    facts_retrieved: dbResult.count,
-                                    confidence: planData.confidence
-                                });
-                                // Success - we can stop or continue if confidence is low, but usually we stop on success
-                                break;
-                            } else {
-                                ui.log(`📭 Empty Result. Retrying...`, "warn");
-                                lastError = "Query returned 0 results. Try a broader substring search.";
-                                continue;
-                            }
-
-                        } catch (qe) {
-                            throw new Error(`Execution Error: ${qe.message}`);
-                        }
-
-                    } catch (err) {
-                        ui.log(`❌ Iteration ${iteration} Failed: ${err.message}`, "error");
-                        lastError = err.message;
+                        throw genErr;
                     }
-                } // End While
 
-                ui.log(`✨ Graph-R1 Loop completed after ${iteration} iteration(s).`, "success");
-                return { context, trace: this.history };
+                    // Check if Model is asking for help (The Wrapper Logic)
+                    if (reply.includes("NEED_CONTEXT:")) {
+                        const searchTerm = reply.split("NEED_CONTEXT:")[1].trim();
+                        ui.log(`🤖 Model requested semantic search: "${searchTerm}"`, "warn");
+
+                        // Perform Semantic Search (simulated via keyword reflex for now, can be vector later)
+                        const extraData = await this.retrieveInitialContext(searchTerm);
+
+                        if (extraData) {
+                            currentContext += `\n--- Additional Context (${searchTerm}) ---\n${extraData}`;
+                            ui.appendContext(`Requested: ${searchTerm}`, extraData);
+                            ui.log(`✅ Found additional context for "${searchTerm}"`, "success");
+                        } else {
+                            currentContext += `\n--- Additional Context (${searchTerm}) ---\n(No results found)`;
+                            ui.log(`❌ No data found for "${searchTerm}"`, "warn");
+                        }
+
+                        continue; // Loop again with new data
+                    }
+
+                    // If no request, this is the final answer (or close to it)
+                    // We return the Context and the Reply (if it acts as the answer)
+                    // But typically handleSend wants to stream the FINAL answer. 
+                    // To keep compatible with handleSend logic, we return the accumulated context.
+                    return { context: currentContext, finalAnswer: reply };
+                }
+
+                return { context: currentContext, finalAnswer: null };
             }
+
+            // TODO: ingestAndCompress(largeText) implementation for 20k->1k distillation
         }
 
         // --- HANDLERS ---
@@ -861,8 +876,14 @@ You MUST output strictly in this JSON format inside a markdown block:
             ui.append("user", text);
 
             try {
-                // 1. Run Graph-R1 Loop
-                const { context, trace } = await reasoningLoop.reason(text);
+                // 1. Run Context Manager (Reflex + R1 Loop)
+                const { context, finalAnswer } = await contextManager.executeR1Loop(text, []);
+
+                // CHECK FOR CRASH
+                if (finalAnswer && finalAnswer.includes("System Crash")) {
+                    ui.log("🛑 Execution halted due to GPU Crash.", "error");
+                    return; // Stop here, do not try to synthesize
+                }
 
                 // 2. Final Synthesis with Streaming
                 ui.log("🧪 Synthesizing final answer...", "warn");
@@ -922,171 +943,205 @@ If context is insufficient, say so clearly.`;
             document.getElementById('model-select').disabled = true;
             document.getElementById('custom-model-input').disabled = true;
             document.getElementById('load-model-btn').disabled = true;
-            ui.log(`Loading Reasoning Engine (${simpleId})...`, "info");
-
-            // --- Robust Model Library Mapping (from legacy) ---
-            let modelLib = null;
-            const lowerId = simpleId.toLowerCase();
-            const libBase = "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/";
-
-            let qTag = "q4f16_1";
-            if (lowerId.includes("q4f32_1")) qTag = "q4f32_1";
-            else if (lowerId.includes("q4f16_0")) qTag = "q4f16_0";
-            else if (lowerId.includes("q8f16_0")) qTag = "q8f16_0";
-            else if (lowerId.includes("q0f32")) qTag = "q0f32";
-            else if (lowerId.includes("q0f16")) qTag = "q0f16";
-            else if (lowerId.includes("q3f16_1")) {
-                // WARNING: There is no specific q3f16_1 WASM for Mistral v0.3 in v0_2_80.
-                // We fallback to using the q4f16_1 WASM which covers the same architecture.
-                qTag = "q4f16_1";
-            }
-
-            if (lowerId.includes('llama-3.2-3b')) {
-                modelLib = libBase + `Llama-3.2-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('llama-3.2-1b')) {
-                modelLib = libBase + `Llama-3.2-1B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('llama-3.1-8b')) {
-                // Fallback to Llama-3-8B-Instruct if 3.1 specific WASM is missing in v0_2_80
-                modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('phi-3.5-mini')) {
-                modelLib = libBase + `Phi-3.5-mini-instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('phi-3.5-vision')) {
-                modelLib = libBase + `Phi-3.5-vision-instruct-${qTag}-ctx4k_cs2k-webgpu.wasm`;
-            } else if (lowerId.includes('qwen2.5-7b')) {
-                // Use Qwen2 as safe fallback for Qwen2.5 if specific WASM missing
-                modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('qwen2.5-3b')) {
-                modelLib = libBase + `Qwen2.5-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('qwen3-4b')) {
-                modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`; // Fallback map
-            } else if (lowerId.includes('qwen2.5-coder-1.5b') || lowerId.includes('qwen2.5-1.5b') || lowerId.includes('qwen2-1.5b')) {
-                modelLib = libBase + `Qwen2-1.5B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('gemma-2-9b')) {
-                modelLib = libBase + `gemma-2-9b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('gemma-2-2b')) {
-                modelLib = libBase + `gemma-2-2b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('mistral') || lowerId.includes('hermes')) {
-                // Hermes/Mistral Logic
-                if (lowerId.includes('hermes-3-llama-3.2-3b')) {
-                    modelLib = libBase + `Llama-3.2-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                } else {
-                    // VERIFIED: Use v0.3 WASM for all 7B Hermes/Mistral variants
-                    modelLib = libBase + `Mistral-7B-Instruct-v0.3-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                }
-            }
-
-            if (lowerId.includes('deepseek-r1-distill-llama')) {
-                // Use Llama-3-8B library for architecture compatibility
-                modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('deepseek-r1') || lowerId.includes('qwen')) {
-                // Switch back to Qwen2-7B library (Verified Existing)
-                if (!modelLib) modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            }
-
-            // FINAL FALLBACK: Prevent null crash
-            if (!modelLib) {
-                ui.log("⚠️ No specific WASM driver found. Defaulting to Qwen2-7B driver.", "warn");
-                modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            }
-
-            // NOTE: For Mistral/Hermes, we omit specific modelLib mapping to let WebLLM defaults try to resolve,
-            // or rely on previous Mistral mapping if valid. If explicit mapping failed 404, better to try default.
-
-            ui.log(`Wait for it... Resolving Model Lib: ${modelLib}`, "warn");
-
-            // Dynamic VRAM Calculation
-            let vramVal = 2000; // default for small models (increased stability)
-            if (lowerId.includes('72b')) vramVal = 48000;
-            else if (lowerId.includes('32b')) vramVal = 24000;
-            else if (lowerId.includes('14b')) vramVal = 12000;
-            else if (lowerId.includes('8b') || lowerId.includes('9b')) vramVal = 8000;
-            else if (lowerId.includes('7b')) vramVal = 6000;
-            else if (lowerId.includes('3b') || lowerId.includes('4b')) vramVal = 4000;
-
-            ui.log(`Configuring VRAM Requirement: ${vramVal}MB`, "info");
-
-            // Construct Config with BOTH IDs to ensure lookup succeeds for primary OR fallback
-
-            // HARDWARE PROFILE LOGIC
-            const hwProfile = document.getElementById('hw-profile').value;
-            let appConfigOverlay = {};
-
-            if (hwProfile === 'lite') {
-                ui.log("🔋 Loading Lite Profile (Snapdragon): Safe Mode (Chunk=64, Context=1024)", "info");
-                appConfigOverlay = {
-                    prefillChunkSize: 64,     // Strict safety
-                    contextWindowSize: 1024,  // Maximally minimal context
-                    slidingWindowSize: 1024,
-                    useIndexedDBCache: true
-                };
-            } else if (hwProfile === 'mid') {
-                ui.log("💻 Loading Mid-Tier Profile (8GB VRAM): Balanced (Chunk=256, Context=4096)", "info");
-                appConfigOverlay = {
-                    prefillChunkSize: 256,    // Moderate safety for older GPUs
-                    contextWindowSize: 4096,  // Standard context
-                    slidingWindowSize: undefined, // Standard
-                    useIndexedDBCache: true
-                };
-            } else if (hwProfile === 'high') {
-                ui.log("🚀 Loading High-Perf Profile (16GB VRAM): Fast (Chunk=Max, Context=16k)", "info");
-                appConfigOverlay = {
-                    prefillChunkSize: -1,     // Max throughput
-                    contextWindowSize: 16384, // High context
-                    slidingWindowSize: undefined,
-                    useIndexedDBCache: true
-                };
-            } else { // 'ultra' or default
-                ui.log("⚡ Loading Ultra Profile (24GB+ VRAM): Unleashed (Chunk=Max, Context=32k+)", "info");
-                appConfigOverlay = {
-                    prefillChunkSize: -1,
-                    contextWindowSize: 32768, // Massive context
-                    slidingWindowSize: undefined,
-                    useIndexedDBCache: true
-                };
-            }
-            const appConfig = {
-                "useIndexedDBCache": appConfigOverlay.useIndexedDBCache,
-                "model_list": [
-                    {
-                        "model": "https://huggingface.co/mlc-ai/" + simpleId,
-                        "model_id": modelInput,
-                        "model_lib": modelLib,
-                        "vram_required_MB": vramVal,
-                        "low_resource_required": true,
-                        "required_features": ["shader-f16"],
-                        "context_window_size": appConfigOverlay.contextWindowSize,
-                        "sliding_window_size": appConfigOverlay.slidingWindowSize,
-                        "prefill_chunk_size": appConfigOverlay.prefillChunkSize,
-                    },
-                    {
-                        "model": "https://huggingface.co/mlc-ai/" + simpleId,
-                        "model_id": simpleId,
-                        "model_lib": modelLib,
-                        "vram_required_MB": vramVal,
-                        "low_resource_required": true,
-                        "required_features": ["shader-f16"],
-                        "context_window_size": appConfigOverlay.contextWindowSize,
-                        "sliding_window_size": appConfigOverlay.slidingWindowSize,
-                        "prefill_chunk_size": appConfigOverlay.prefillChunkSize,
-                    }
-                ]
-            };
-
-
-            // If modelLib is null (e.g. Mistral), we should let CreateMLCEngine handle it or provide a default?
-            // "model_lib": modelLib || (libBase + `Mistral-7B-Instruct-v0.2-${qTag}-sw4k_cs1k-webgpu.wasm`), 
-            // We'll trust the logic: if we didn't map it, assume generic Mistral or let it fail gracefully/fallback.
-            // Actually, best to map OpenHermes to Mistral v0.2 if we can, but we couldn't verify file.
-            // Let's rely on Qwen/Llama mappings being correct.
-
-
             try {
-                try {
-                    ui.log(`Attempting to load: ${modelInput}`, "info");
+                ui.log(`Loading Reasoning Engine (${simpleId})...`, "info");
 
-                    // Use CreateMLCEngine to ensure appConfig is respected during init
-                    engine = await webllm.CreateMLCEngine(modelInput, {
+                // --- Robust Model Library Mapping (from legacy) ---
+                let modelLib = null;
+                const lowerId = simpleId.toLowerCase();
+                const libBase = "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/";
+
+                let qTag = "q4f16_1";
+                if (lowerId.includes("q4f32_1")) qTag = "q4f32_1";
+                else if (lowerId.includes("q4f16_0")) qTag = "q4f16_0";
+                else if (lowerId.includes("q8f16_0")) qTag = "q8f16_0";
+                else if (lowerId.includes("q0f32")) qTag = "q0f32";
+                else if (lowerId.includes("q0f16")) qTag = "q0f16";
+                else if (lowerId.includes("q3f16_1")) {
+                    // WARNING: There is no specific q3f16_1 WASM for Mistral v0.3 in v0_2_80.
+                    // We fallback to using the q4f16_1 WASM which covers the same architecture.
+                    qTag = "q4f16_1";
+                }
+
+                if (lowerId.includes('llama-3.2-3b')) {
+                    modelLib = libBase + `Llama-3.2-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('llama-3.2-1b')) {
+                    modelLib = libBase + `Llama-3.2-1B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('llama-3.1-8b')) {
+                    // Fallback to Llama-3-8B-Instruct if 3.1 specific WASM is missing in v0_2_80
+                    modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('phi-3.5-mini')) {
+                    modelLib = libBase + `Phi-3.5-mini-instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('phi-3.5-vision')) {
+                    modelLib = libBase + `Phi-3.5-vision-instruct-${qTag}-ctx4k_cs2k-webgpu.wasm`;
+                } else if (lowerId.includes('qwen2.5-7b')) {
+                    // Use Qwen2 as safe fallback for Qwen2.5 if specific WASM missing
+                    modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('qwen2.5-3b')) {
+                    modelLib = libBase + `Qwen2.5-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('qwen3-4b')) {
+                    modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`; // Fallback map
+                } else if (lowerId.includes('qwen2.5-coder-1.5b') || lowerId.includes('qwen2.5-1.5b') || lowerId.includes('qwen2-1.5b')) {
+                    modelLib = libBase + `Qwen2-1.5B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('gemma-2-9b')) {
+                    modelLib = libBase + `gemma-2-9b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('gemma-2-2b')) {
+                    modelLib = libBase + `gemma-2-2b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('mistral') || lowerId.includes('hermes')) {
+                    // Hermes/Mistral Logic
+                    if (lowerId.includes('hermes-3-llama-3.2-3b')) {
+                        modelLib = libBase + `Llama-3.2-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    } else {
+                        // VERIFIED: Use v0.3 WASM for all 7B Hermes/Mistral variants
+                        modelLib = libBase + `Mistral-7B-Instruct-v0.3-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    }
+                }
+
+                if (lowerId.includes('deepseek-r1-distill-llama')) {
+                    // Use Llama-3-8B library for architecture compatibility
+                    modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('deepseek-r1') || lowerId.includes('qwen')) {
+                    // Switch back to Qwen2-7B library (Verified Existing)
+                    if (!modelLib) modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                }
+
+                // FINAL FALLBACK: Prevent null crash
+                if (!modelLib) {
+                    ui.log("⚠️ No specific WASM driver found. Defaulting to Qwen2-7B driver.", "warn");
+                    modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                }
+
+                // NOTE: For Mistral/Hermes, we omit specific modelLib mapping to let WebLLM defaults try to resolve,
+                // or rely on previous Mistral mapping if valid. If explicit mapping failed 404, better to try default.
+
+                ui.log(`Wait for it... Resolving Model Lib: ${modelLib}`, "warn");
+
+                // Dynamic VRAM Calculation
+                let vramVal = 2000; // default for small models (increased stability)
+                if (lowerId.includes('72b')) vramVal = 48000;
+                else if (lowerId.includes('32b')) vramVal = 24000;
+                else if (lowerId.includes('14b')) vramVal = 12000;
+                else if (lowerId.includes('8b') || lowerId.includes('9b')) vramVal = 8000;
+                else if (lowerId.includes('7b')) vramVal = 6000;
+                else if (lowerId.includes('3b') || lowerId.includes('4b')) vramVal = 4000;
+
+                ui.log(`Configuring VRAM Requirement: ${vramVal}MB`, "info");
+
+                // Construct Config with BOTH IDs to ensure lookup succeeds for primary OR fallback
+
+                // --- WebGPU Probe (Move up to inform config) ---
+                let maxBuffer = 128 * 1024 * 1024;
+                try {
+                    const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }) || await navigator.gpu.requestAdapter();
+                    if (adapter) maxBuffer = adapter.limits.maxStorageBufferBindingSize;
+                } catch (e) { }
+                ui.log(`Configuring WebGPU Buffer: ${Math.round(maxBuffer / 1024 / 1024)}MB`, "info");
+
+                const hwProfile = document.getElementById('hw-profile').value;
+                let appConfigOverlay = {};
+
+                if (hwProfile === 'lite') {
+                    ui.log("🔋 Loading Lite Profile (Snapdragon): Nuclear Mode (Chunk=32, Context=512)", "warn");
+                    appConfigOverlay = {
+                        prefillChunkSize: 32,     // STRICTEST safety
+                        contextWindowSize: 512,   // MINIMUM viable context
+                        slidingWindowSize: 512,
+                        useIndexedDBCache: true
+                    };
+                } else if (hwProfile === 'mid') {
+                    ui.log("💻 Loading Mid-Tier Profile (8GB VRAM): Balanced (Chunk=256, Context=4096)", "info");
+                    appConfigOverlay = {
+                        prefillChunkSize: 256,    // Moderate safety for older GPUs
+                        contextWindowSize: 4096,  // Standard context
+                        slidingWindowSize: undefined, // Standard
+                        useIndexedDBCache: true
+                    };
+                } else if (hwProfile === 'high') {
+                    ui.log("🚀 Loading High-Perf Profile (16GB VRAM): Fast (Chunk=Max, Context=16k)", "info");
+                    appConfigOverlay = {
+                        prefillChunkSize: -1,     // Max throughput
+                        contextWindowSize: 16384, // High context
+                        slidingWindowSize: undefined,
+                        useIndexedDBCache: true
+                    };
+                } else { // 'ultra' or default
+                    ui.log("⚡ Loading Ultra Profile (24GB+ VRAM): Unleashed (Chunk=Max, Context=32k+)", "info");
+                    appConfigOverlay = {
+                        prefillChunkSize: -1,
+                        contextWindowSize: 32768, // Massive context
+                        slidingWindowSize: undefined,
+                        useIndexedDBCache: true
+                    };
+                }
+                const snapdragonId = "snapdragon-" + simpleId;
+                const appConfig = {
+                    "useIndexedDBCache": appConfigOverlay.useIndexedDBCache,
+                    "requiredLimits": { "maxStorageBufferBindingSize": maxBuffer }, // Double tap
+                    "model_list": [
+                        {
+                            "model": "https://huggingface.co/" + modelInput + "/resolve/main/",
+                            "model_id": snapdragonId,
+                            "model_lib": modelLib,
+                            "vram_required_MB": vramVal,
+                            "low_resource_required": true,
+                            "required_features": ["shader-f16"],
+                            "context_window_size": appConfigOverlay.contextWindowSize,
+                            "sliding_window_size": appConfigOverlay.slidingWindowSize,
+                            "prefill_chunk_size": appConfigOverlay.prefillChunkSize,
+                            "buffer_size_required_bytes": maxBuffer // <--- THE OVERRIDE
+                        },
+                        {
+                            "model": "https://huggingface.co/mlc-ai/" + simpleId + "/resolve/main/",
+                            "model_id": simpleId,
+                            "model_lib": modelLib,
+                            "vram_required_MB": vramVal,
+                            "low_resource_required": true,
+                            "required_features": ["shader-f16"],
+                            "context_window_size": appConfigOverlay.contextWindowSize,
+                            "sliding_window_size": appConfigOverlay.slidingWindowSize,
+                            "prefill_chunk_size": appConfigOverlay.prefillChunkSize,
+                            "buffer_size_required_bytes": maxBuffer // <--- THE OVERRIDE
+                        }
+                    ]
+                };
+                ui.log(`🚀 Using Snapdragon Override: ${snapdragonId}`, "info");
+
+
+                // If modelLib is null (e.g. Mistral), we should let CreateMLCEngine handle it or provide a default?
+                // "model_lib": modelLib || (libBase + `Mistral-7B-Instruct-v0.2-${qTag}-sw4k_cs1k-webgpu.wasm`), 
+                // We'll trust the logic: if we didn't map it, assume generic Mistral or let it fail gracefully/fallback.
+                // Actually, best to map OpenHermes to Mistral v0.2 if we can, but we couldn't verify file.
+                // Let's rely on Qwen/Llama mappings being correct.
+
+                try {
+                    // --- WebGPU Optimization: Pre-configure Device ---
+                    let adapter = null;
+                    let device = null;
+
+                    if (navigator.gpu) {
+                        adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }) || await navigator.gpu.requestAdapter();
+                        if (adapter) {
+                            const features = [];
+                            if (adapter.features.has("shader-f16")) features.push("shader-f16");
+
+                            // Explicitly request exactly the buffer size the hardware allows
+                            // This prevents WebLLM from requesting 1024MB and triggering the 128MB fallback.
+                            device = await adapter.requestDevice({
+                                requiredFeatures: features,
+                                requiredLimits: {
+                                    maxStorageBufferBindingSize: maxBuffer
+                                }
+                            });
+                            ui.log("✅ WebGPU Device pre-allocated (Snapdragon Optimized)", "success");
+                        }
+                    }
+
+                    ui.log(`Attempting to load Reasoning Engine...`, "info");
+
+                    // Use snapdragonId and our PRE-CREATED device
+                    engine = await webllm.CreateMLCEngine(snapdragonId, {
                         appConfig,
+                        device, // <--- THE FIX: Bypass WebLLM's internal device request
                         initProgressCallback: (report) => {
                             ui.updateProgress(0.5 + (report.progress * 0.4), report.text);
                         }
@@ -1112,8 +1167,8 @@ If context is insufficient, say so clearly.`;
                 ui.log(`✅ Engine Ready`, "success");
                 ui.updateProgress(1.0, "Ready!");
 
-                // Initialize reasoning loop
-                reasoningLoop = new GraphR1ReasoningLoop(db, embedder);
+                // Initialize Context Manager (The Brain)
+                contextManager = new ContextManager(engine, db);
 
                 // Enable input
                 document.getElementById('input').disabled = false;
@@ -1171,11 +1226,23 @@ If context is insufficient, say so clearly.`;
                     db = CozoDb.new();
                     await createSchema();
                 }
-                ui.updateProgress(0.3, "Loading Embedder...");
+                ui.updateProgress(0.3, "Loading Embedder (WASM)...");
 
-                // Initialize Embedder
-                embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-                ui.log("✅ Embedder Ready (all-MiniLM-L6-v2)", "success");
+                // Initialize Embedder with Timeout (15s)
+                // If this hangs (CDN/Network issue), we skip it so the Console remains usable.
+                const embedderPromise = pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { device: 'wasm' });
+
+                try {
+                    embedder = await Promise.race([
+                        embedderPromise,
+                        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000))
+                    ]);
+                    ui.log("✅ Embedder Ready (all-MiniLM-L6-v2)", "success");
+                } catch (err) {
+                    ui.log(`⚠️ Embedder Init Failed/Timed Out: ${err.message}. Context features disabled.`, "warn");
+                    embedder = null; // System proceeds without Embedder
+                }
+
                 ui.updateProgress(0.5, "Ready for Model Selection...");
 
                 // Enable model selection
@@ -1386,6 +1453,25 @@ If context is insufficient, say so clearly.`;
                 }
             };
         }
+
+        document.getElementById('debug-gpu-btn').addEventListener('click', async () => {
+            let msg = "WebGPU Debug Info:\n\n";
+            if (!navigator.gpu) {
+                msg += "❌ navigator.gpu is UNDEFINED. Browser does not support WebGPU or it is disabled.\n";
+            } else {
+                msg += "✅ navigator.gpu exists.\n";
+                try {
+                    const adapter = await navigator.gpu.requestAdapter();
+                    msg += adapter ? `✅ Default Adapter: ${adapter.limits.maxBufferSize}\n` : "❌ Default Adapter: NULL\n";
+                } catch (e) { msg += `❌ Default Adapter Error: ${e.message}\n`; }
+
+                try {
+                    const lowAdapter = await navigator.gpu.requestAdapter({ powerPreference: 'low-power' });
+                    msg += lowAdapter ? `✅ Low-Power Adapter: ${lowAdapter.limits.maxBufferSize}\n` : "❌ Low-Power Adapter: NULL\n";
+                } catch (e) { msg += `❌ Low-Power Adapter Error: ${e.message}\n`; }
+            }
+            alert(msg);
+        });
 
         async function handleBridgeChatRequest(reqId, data) {
             ui.log(`📥 Bridge Request: ${reqId.slice(0, 8)}...`, "info");
