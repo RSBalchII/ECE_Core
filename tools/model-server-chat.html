@@ -943,208 +943,205 @@ If context is insufficient, say so clearly.`;
             document.getElementById('model-select').disabled = true;
             document.getElementById('custom-model-input').disabled = true;
             document.getElementById('load-model-btn').disabled = true;
-            ui.log(`Loading Reasoning Engine (${simpleId})...`, "info");
-
-            // --- Robust Model Library Mapping (from legacy) ---
-            let modelLib = null;
-            const lowerId = simpleId.toLowerCase();
-            const libBase = "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/";
-
-            let qTag = "q4f16_1";
-            if (lowerId.includes("q4f32_1")) qTag = "q4f32_1";
-            else if (lowerId.includes("q4f16_0")) qTag = "q4f16_0";
-            else if (lowerId.includes("q8f16_0")) qTag = "q8f16_0";
-            else if (lowerId.includes("q0f32")) qTag = "q0f32";
-            else if (lowerId.includes("q0f16")) qTag = "q0f16";
-            else if (lowerId.includes("q3f16_1")) {
-                // WARNING: There is no specific q3f16_1 WASM for Mistral v0.3 in v0_2_80.
-                // We fallback to using the q4f16_1 WASM which covers the same architecture.
-                qTag = "q4f16_1";
-            }
-
-            if (lowerId.includes('llama-3.2-3b')) {
-                modelLib = libBase + `Llama-3.2-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('llama-3.2-1b')) {
-                modelLib = libBase + `Llama-3.2-1B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('llama-3.1-8b')) {
-                // Fallback to Llama-3-8B-Instruct if 3.1 specific WASM is missing in v0_2_80
-                modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('phi-3.5-mini')) {
-                modelLib = libBase + `Phi-3.5-mini-instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('phi-3.5-vision')) {
-                modelLib = libBase + `Phi-3.5-vision-instruct-${qTag}-ctx4k_cs2k-webgpu.wasm`;
-            } else if (lowerId.includes('qwen2.5-7b')) {
-                // Use Qwen2 as safe fallback for Qwen2.5 if specific WASM missing
-                modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('qwen2.5-3b')) {
-                modelLib = libBase + `Qwen2.5-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('qwen3-4b')) {
-                modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`; // Fallback map
-            } else if (lowerId.includes('qwen2.5-coder-1.5b') || lowerId.includes('qwen2.5-1.5b') || lowerId.includes('qwen2-1.5b')) {
-                modelLib = libBase + `Qwen2-1.5B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('gemma-2-9b')) {
-                modelLib = libBase + `gemma-2-9b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('gemma-2-2b')) {
-                modelLib = libBase + `gemma-2-2b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('mistral') || lowerId.includes('hermes')) {
-                // Hermes/Mistral Logic
-                if (lowerId.includes('hermes-3-llama-3.2-3b')) {
-                    modelLib = libBase + `Llama-3.2-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                } else {
-                    // VERIFIED: Use v0.3 WASM for all 7B Hermes/Mistral variants
-                    modelLib = libBase + `Mistral-7B-Instruct-v0.3-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                }
-            }
-
-            if (lowerId.includes('deepseek-r1-distill-llama')) {
-                // Use Llama-3-8B library for architecture compatibility
-                modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            } else if (lowerId.includes('deepseek-r1') || lowerId.includes('qwen')) {
-                // Switch back to Qwen2-7B library (Verified Existing)
-                if (!modelLib) modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            }
-
-            // FINAL FALLBACK: Prevent null crash
-            if (!modelLib) {
-                ui.log("⚠️ No specific WASM driver found. Defaulting to Qwen2-7B driver.", "warn");
-                modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-            }
-
-            // NOTE: For Mistral/Hermes, we omit specific modelLib mapping to let WebLLM defaults try to resolve,
-            // or rely on previous Mistral mapping if valid. If explicit mapping failed 404, better to try default.
-
-            ui.log(`Wait for it... Resolving Model Lib: ${modelLib}`, "warn");
-
-            // Dynamic VRAM Calculation
-            let vramVal = 2000; // default for small models (increased stability)
-            if (lowerId.includes('72b')) vramVal = 48000;
-            else if (lowerId.includes('32b')) vramVal = 24000;
-            else if (lowerId.includes('14b')) vramVal = 12000;
-            else if (lowerId.includes('8b') || lowerId.includes('9b')) vramVal = 8000;
-            else if (lowerId.includes('7b')) vramVal = 6000;
-            else if (lowerId.includes('3b') || lowerId.includes('4b')) vramVal = 4000;
-
-            ui.log(`Configuring VRAM Requirement: ${vramVal}MB`, "info");
-
-            // Construct Config with BOTH IDs to ensure lookup succeeds for primary OR fallback
-
-            // HARDWARE PROFILE LOGIC
-            const hwProfile = document.getElementById('hw-profile').value;
-            let appConfigOverlay = {};
-
-            if (hwProfile === 'lite') {
-                ui.log("🔋 Loading Lite Profile (Snapdragon): Nuclear Mode (Chunk=32, Context=512)", "warn");
-                appConfigOverlay = {
-                    prefillChunkSize: 32,     // STRICTEST safety
-                    contextWindowSize: 512,   // MINIMUM viable context
-                    slidingWindowSize: 512,
-                    useIndexedDBCache: true   // RE-ENABLED: Vulkan + New Profile allows caching
-                };
-            } else if (hwProfile === 'mid') {
-                ui.log("💻 Loading Mid-Tier Profile (8GB VRAM): Balanced (Chunk=256, Context=4096)", "info");
-                appConfigOverlay = {
-                    prefillChunkSize: 256,    // Moderate safety for older GPUs
-                    contextWindowSize: 4096,  // Standard context
-                    slidingWindowSize: undefined, // Standard
-                    useIndexedDBCache: true
-                };
-            } else if (hwProfile === 'high') {
-                ui.log("🚀 Loading High-Perf Profile (16GB VRAM): Fast (Chunk=Max, Context=16k)", "info");
-                appConfigOverlay = {
-                    prefillChunkSize: -1,     // Max throughput
-                    contextWindowSize: 16384, // High context
-                    slidingWindowSize: undefined,
-                    useIndexedDBCache: true
-                };
-            } else { // 'ultra' or default
-                ui.log("⚡ Loading Ultra Profile (24GB+ VRAM): Unleashed (Chunk=Max, Context=32k+)", "info");
-                appConfigOverlay = {
-                    prefillChunkSize: -1,
-                    contextWindowSize: 32768, // Massive context
-                    slidingWindowSize: undefined,
-                    useIndexedDBCache: true
-                };
-            }
-            const appConfig = {
-                "useIndexedDBCache": appConfigOverlay.useIndexedDBCache,
-                "model_list": [
-                    {
-                        "model": "https://huggingface.co/mlc-ai/" + simpleId,
-                        "model_id": modelInput,
-                        "model_lib": modelLib,
-                        "vram_required_MB": vramVal,
-                        "low_resource_required": true,
-                        "required_features": ["shader-f16"],
-                        "context_window_size": appConfigOverlay.contextWindowSize,
-                        "sliding_window_size": appConfigOverlay.slidingWindowSize,
-                        "prefill_chunk_size": appConfigOverlay.prefillChunkSize,
-                    },
-                    {
-                        "model": "https://huggingface.co/mlc-ai/" + simpleId,
-                        "model_id": simpleId,
-                        "model_lib": modelLib,
-                        "vram_required_MB": vramVal,
-                        "low_resource_required": true,
-                        "required_features": ["shader-f16"],
-                        "context_window_size": appConfigOverlay.contextWindowSize,
-                        "sliding_window_size": appConfigOverlay.slidingWindowSize,
-                        "prefill_chunk_size": appConfigOverlay.prefillChunkSize,
-                    }
-                ]
-            };
-
-
-            // If modelLib is null (e.g. Mistral), we should let CreateMLCEngine handle it or provide a default?
-            // "model_lib": modelLib || (libBase + `Mistral-7B-Instruct-v0.2-${qTag}-sw4k_cs1k-webgpu.wasm`), 
-            // We'll trust the logic: if we didn't map it, assume generic Mistral or let it fail gracefully/fallback.
-            // Actually, best to map OpenHermes to Mistral v0.2 if we can, but we couldn't verify file.
-            // Let's rely on Qwen/Llama mappings being correct.
-
-
             try {
-                try {
-                    // --- DIAGNOSTICS: Probe GPU explicitly ---
-                    if (navigator.gpu) {
-                        ui.log("🔍 Probing WebGPU Adapter...", "info");
-                        let adapter = await navigator.gpu.requestAdapter();
-                        if (adapter) {
-                            // Safe check for requestAdapterInfo (non-standard in some browsers)
-                            let info = { vendor: 'Generic WebGPU', architecture: '' };
-                            if (typeof adapter.requestAdapterInfo === 'function') {
-                                try { info = await adapter.requestAdapterInfo(); } catch (e) { }
-                            }
-                            ui.log(`✅ GPU Found: ${info.vendor} ${info.architecture || ''}`, "success");
-                        } else {
-                            ui.log("⚠️ Default Adapter NULL. Trying Low-Power preference...", "warn");
-                            // Fallback: Snapdragon often reports as "Low Power" integrated
-                            adapter = await navigator.gpu.requestAdapter({ powerPreference: 'low-power' });
-                            if (adapter) {
-                                let info = { vendor: 'Low-Power GPU', architecture: '' };
-                                if (typeof adapter.requestAdapterInfo === 'function') {
-                                    try { info = await adapter.requestAdapterInfo(); } catch (e) { }
-                                }
-                                ui.log(`✅ Low-Power GPU Found: ${info.vendor}`, "success");
-                            } else {
-                                ui.log("❌ WebGPU Adapter returned NULL (All Modes). GPU Process is likely dead.", "error");
-                                ui.append("system", `
-<div style="background: #330000; border: 1px solid #f00; padding: 10px; margin: 10px 0;">
-  <strong>💥 GPU PROCESS DEAD</strong><br/>
-  The browser has lost contact with the GPU driver.<br/>
-  1. Close ALL Edge windows.<br/>
-  2. Run <code>kill-edge.bat</code> (to ensure it's dead).<br/>
-  3. Try <code>launch-edge-vulkan.bat</code> if standard launch fails.
-</div>`);
-                            }
-                        }
+                ui.log(`Loading Reasoning Engine (${simpleId})...`, "info");
+
+                // --- Robust Model Library Mapping (from legacy) ---
+                let modelLib = null;
+                const lowerId = simpleId.toLowerCase();
+                const libBase = "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/";
+
+                let qTag = "q4f16_1";
+                if (lowerId.includes("q4f32_1")) qTag = "q4f32_1";
+                else if (lowerId.includes("q4f16_0")) qTag = "q4f16_0";
+                else if (lowerId.includes("q8f16_0")) qTag = "q8f16_0";
+                else if (lowerId.includes("q0f32")) qTag = "q0f32";
+                else if (lowerId.includes("q0f16")) qTag = "q0f16";
+                else if (lowerId.includes("q3f16_1")) {
+                    // WARNING: There is no specific q3f16_1 WASM for Mistral v0.3 in v0_2_80.
+                    // We fallback to using the q4f16_1 WASM which covers the same architecture.
+                    qTag = "q4f16_1";
+                }
+
+                if (lowerId.includes('llama-3.2-3b')) {
+                    modelLib = libBase + `Llama-3.2-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('llama-3.2-1b')) {
+                    modelLib = libBase + `Llama-3.2-1B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('llama-3.1-8b')) {
+                    // Fallback to Llama-3-8B-Instruct if 3.1 specific WASM is missing in v0_2_80
+                    modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('phi-3.5-mini')) {
+                    modelLib = libBase + `Phi-3.5-mini-instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('phi-3.5-vision')) {
+                    modelLib = libBase + `Phi-3.5-vision-instruct-${qTag}-ctx4k_cs2k-webgpu.wasm`;
+                } else if (lowerId.includes('qwen2.5-7b')) {
+                    // Use Qwen2 as safe fallback for Qwen2.5 if specific WASM missing
+                    modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('qwen2.5-3b')) {
+                    modelLib = libBase + `Qwen2.5-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('qwen3-4b')) {
+                    modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`; // Fallback map
+                } else if (lowerId.includes('qwen2.5-coder-1.5b') || lowerId.includes('qwen2.5-1.5b') || lowerId.includes('qwen2-1.5b')) {
+                    modelLib = libBase + `Qwen2-1.5B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('gemma-2-9b')) {
+                    modelLib = libBase + `gemma-2-9b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('gemma-2-2b')) {
+                    modelLib = libBase + `gemma-2-2b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('mistral') || lowerId.includes('hermes')) {
+                    // Hermes/Mistral Logic
+                    if (lowerId.includes('hermes-3-llama-3.2-3b')) {
+                        modelLib = libBase + `Llama-3.2-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
                     } else {
-                        ui.log("❌ navigator.gpu is undefined. Flags likely missing.", "error");
+                        // VERIFIED: Use v0.3 WASM for all 7B Hermes/Mistral variants
+                        modelLib = libBase + `Mistral-7B-Instruct-v0.3-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    }
+                }
+
+                if (lowerId.includes('deepseek-r1-distill-llama')) {
+                    // Use Llama-3-8B library for architecture compatibility
+                    modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                } else if (lowerId.includes('deepseek-r1') || lowerId.includes('qwen')) {
+                    // Switch back to Qwen2-7B library (Verified Existing)
+                    if (!modelLib) modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                }
+
+                // FINAL FALLBACK: Prevent null crash
+                if (!modelLib) {
+                    ui.log("⚠️ No specific WASM driver found. Defaulting to Qwen2-7B driver.", "warn");
+                    modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                }
+
+                // NOTE: For Mistral/Hermes, we omit specific modelLib mapping to let WebLLM defaults try to resolve,
+                // or rely on previous Mistral mapping if valid. If explicit mapping failed 404, better to try default.
+
+                ui.log(`Wait for it... Resolving Model Lib: ${modelLib}`, "warn");
+
+                // Dynamic VRAM Calculation
+                let vramVal = 2000; // default for small models (increased stability)
+                if (lowerId.includes('72b')) vramVal = 48000;
+                else if (lowerId.includes('32b')) vramVal = 24000;
+                else if (lowerId.includes('14b')) vramVal = 12000;
+                else if (lowerId.includes('8b') || lowerId.includes('9b')) vramVal = 8000;
+                else if (lowerId.includes('7b')) vramVal = 6000;
+                else if (lowerId.includes('3b') || lowerId.includes('4b')) vramVal = 4000;
+
+                ui.log(`Configuring VRAM Requirement: ${vramVal}MB`, "info");
+
+                // Construct Config with BOTH IDs to ensure lookup succeeds for primary OR fallback
+
+                // --- WebGPU Probe (Move up to inform config) ---
+                let maxBuffer = 128 * 1024 * 1024;
+                try {
+                    const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }) || await navigator.gpu.requestAdapter();
+                    if (adapter) maxBuffer = adapter.limits.maxStorageBufferBindingSize;
+                } catch (e) { }
+                ui.log(`Configuring WebGPU Buffer: ${Math.round(maxBuffer / 1024 / 1024)}MB`, "info");
+
+                const hwProfile = document.getElementById('hw-profile').value;
+                let appConfigOverlay = {};
+
+                if (hwProfile === 'lite') {
+                    ui.log("🔋 Loading Lite Profile (Snapdragon): Nuclear Mode (Chunk=32, Context=512)", "warn");
+                    appConfigOverlay = {
+                        prefillChunkSize: 32,     // STRICTEST safety
+                        contextWindowSize: 512,   // MINIMUM viable context
+                        slidingWindowSize: 512,
+                        useIndexedDBCache: true
+                    };
+                } else if (hwProfile === 'mid') {
+                    ui.log("💻 Loading Mid-Tier Profile (8GB VRAM): Balanced (Chunk=256, Context=4096)", "info");
+                    appConfigOverlay = {
+                        prefillChunkSize: 256,    // Moderate safety for older GPUs
+                        contextWindowSize: 4096,  // Standard context
+                        slidingWindowSize: undefined, // Standard
+                        useIndexedDBCache: true
+                    };
+                } else if (hwProfile === 'high') {
+                    ui.log("🚀 Loading High-Perf Profile (16GB VRAM): Fast (Chunk=Max, Context=16k)", "info");
+                    appConfigOverlay = {
+                        prefillChunkSize: -1,     // Max throughput
+                        contextWindowSize: 16384, // High context
+                        slidingWindowSize: undefined,
+                        useIndexedDBCache: true
+                    };
+                } else { // 'ultra' or default
+                    ui.log("⚡ Loading Ultra Profile (24GB+ VRAM): Unleashed (Chunk=Max, Context=32k+)", "info");
+                    appConfigOverlay = {
+                        prefillChunkSize: -1,
+                        contextWindowSize: 32768, // Massive context
+                        slidingWindowSize: undefined,
+                        useIndexedDBCache: true
+                    };
+                }
+                const snapdragonId = "snapdragon-" + simpleId;
+                const appConfig = {
+                    "useIndexedDBCache": appConfigOverlay.useIndexedDBCache,
+                    "requiredLimits": { "maxStorageBufferBindingSize": maxBuffer }, // Double tap
+                    "model_list": [
+                        {
+                            "model": "https://huggingface.co/" + modelInput + "/resolve/main/",
+                            "model_id": snapdragonId,
+                            "model_lib": modelLib,
+                            "vram_required_MB": vramVal,
+                            "low_resource_required": true,
+                            "required_features": ["shader-f16"],
+                            "context_window_size": appConfigOverlay.contextWindowSize,
+                            "sliding_window_size": appConfigOverlay.slidingWindowSize,
+                            "prefill_chunk_size": appConfigOverlay.prefillChunkSize,
+                            "buffer_size_required_bytes": maxBuffer // <--- THE OVERRIDE
+                        },
+                        {
+                            "model": "https://huggingface.co/mlc-ai/" + simpleId + "/resolve/main/",
+                            "model_id": simpleId,
+                            "model_lib": modelLib,
+                            "vram_required_MB": vramVal,
+                            "low_resource_required": true,
+                            "required_features": ["shader-f16"],
+                            "context_window_size": appConfigOverlay.contextWindowSize,
+                            "sliding_window_size": appConfigOverlay.slidingWindowSize,
+                            "prefill_chunk_size": appConfigOverlay.prefillChunkSize,
+                            "buffer_size_required_bytes": maxBuffer // <--- THE OVERRIDE
+                        }
+                    ]
+                };
+                ui.log(`🚀 Using Snapdragon Override: ${snapdragonId}`, "info");
+
+
+                // If modelLib is null (e.g. Mistral), we should let CreateMLCEngine handle it or provide a default?
+                // "model_lib": modelLib || (libBase + `Mistral-7B-Instruct-v0.2-${qTag}-sw4k_cs1k-webgpu.wasm`), 
+                // We'll trust the logic: if we didn't map it, assume generic Mistral or let it fail gracefully/fallback.
+                // Actually, best to map OpenHermes to Mistral v0.2 if we can, but we couldn't verify file.
+                // Let's rely on Qwen/Llama mappings being correct.
+
+                try {
+                    // --- WebGPU Optimization: Pre-configure Device ---
+                    let adapter = null;
+                    let device = null;
+
+                    if (navigator.gpu) {
+                        adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }) || await navigator.gpu.requestAdapter();
+                        if (adapter) {
+                            const features = [];
+                            if (adapter.features.has("shader-f16")) features.push("shader-f16");
+
+                            // Explicitly request exactly the buffer size the hardware allows
+                            // This prevents WebLLM from requesting 1024MB and triggering the 128MB fallback.
+                            device = await adapter.requestDevice({
+                                requiredFeatures: features,
+                                requiredLimits: {
+                                    maxStorageBufferBindingSize: maxBuffer
+                                }
+                            });
+                            ui.log("✅ WebGPU Device pre-allocated (Snapdragon Optimized)", "success");
+                        }
                     }
 
-                    ui.log(`Attempting to load: ${modelInput}`, "info");
+                    ui.log(`Attempting to load Reasoning Engine...`, "info");
 
-                    // Use CreateMLCEngine to ensure appConfig is respected during init
-                    engine = await webllm.CreateMLCEngine(modelInput, {
+                    // Use snapdragonId and our PRE-CREATED device
+                    engine = await webllm.CreateMLCEngine(snapdragonId, {
                         appConfig,
+                        device, // <--- THE FIX: Bypass WebLLM's internal device request
                         initProgressCallback: (report) => {
                             ui.updateProgress(0.5 + (report.progress * 0.4), report.text);
                         }

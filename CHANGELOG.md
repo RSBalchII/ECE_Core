@@ -12,6 +12,19 @@
 
 ---
 
+## [1.2.3] - 2025-12-19 "Snapdragon Optimization"
+
+### Added
+- **Qwen3 Support**: Added `Qwen3-4B-Instruct` to the verified model list.
+- **Llama 3.2 Support**: Added `Llama-3.2-1B-Instruct` as the recommended lightweight model.
+- **Buffer Override**: Implemented `appConfig` overrides to force high-end performance on 256MB GPUs (fixing Adreno throttling).
+
+### Changed
+- **Portable Launchers**: All scripts now use `--user-data-dir="%~dp0browser_data"` for fully portable, clean-running instances.
+- **Model Config**: Refactored `CreateMLCEngine` initialization to handle both URL-based and ID-based model definitions reliably.
+
+---
+
 ## [1.2.2] - 2025-12-18 "Hermes & CozoDB Fixes"
 
 ### Fixed
