@@ -387,8 +387,13 @@
                             <option value="mlc-ai/Llama-3-8B-Instruct-q4f16_1-MLC">Llama-3-8B</option>
                             <option value="mlc-ai/Mistral-7B-Instruct-v0.2-q4f16_1-MLC">Mistral-7B-v0.2</option>
                         </optgroup>
-                        <optgroup label="New / High Power">
+                        <optgroup label="Snapdragon Optimized (Fast & Safe)">
+                            <option value="mlc-ai/Qwen3-4B-q4f16_1-MLC">Qwen3-4B (Highly Versatile)</option>
+                            <option value="mlc-ai/Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama-3.2-1B (Recommended)</option>
                             <option value="mlc-ai/Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-1.5B (Fastest)</option>
+                            <option value="mlc-ai/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-Coder-1.5B</option>
+                        </optgroup>
+                        <optgroup label="New / High Power">
                             <option value="mlc-ai/Qwen2.5-14B-Instruct-q4f16_1-MLC">Qwen2.5-14B (Powerful)</option>
                             <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC">DeepSeek-R1-7B (Qwen)
                             </option>
@@ -441,6 +446,10 @@
                     <button id="clear-cache-btn"
                         style="width: 100%; padding: 6px; background: #a43131; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">⚠️
                         Delete All Model Cache</button>
+                    <button id="debug-gpu-btn"
+                        style="width: 100%; padding: 6px; background: #555; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; margin-top: 5px;">
+                        ❓ Debug GPU Status
+                    </button>
                     <small style="display:block;color:#aaa;">Use if WASM panicked or Quota Exceeded.</small>
                 </div>
             </details>
@@ -506,7 +515,7 @@
         let db;
         let embedder;
         let engine;
-        let reasoningLoop;
+        let contextManager;
         let selectedModelId = null;
 
         // --- BROADCAST CHANNEL FOR LOG-VIEWER ---
@@ -705,211 +714,153 @@
             }
         }
 
-        // --- LOGIC: Graph-R1 Loop ---
-        class GraphR1ReasoningLoop {
-            constructor(cozoDb, embedderFn) {
-                this.db = cozoDb;
-                // this.llm removed - we will use global 'engine' to ensure freshness
-                this.embedder = embedderFn;
+        // --- LOGIC: Context Manager (The "Context OS") ---
+        class ContextManager {
+            constructor(engine, db) {
+                this.engine = engine;
+                this.db = db;
                 this.maxIterations = 3;
-                this.history = [];
+                this.history = []; // Debug trace
             }
 
-            async reason(userQuery) {
-                let context = "";
-                let iteration = 0;
+            // 1. The "Reflex": Fast, programmatic search
+            // Finds obvious keywords immediately (e.g., "Blueberry-Omega")
+            async retrieveInitialContext(userText) {
+                ui.log("🔍 Reflex: Scanning for keywords...", "info");
+
+                // Extract words > 3 chars as rough keywords, excluding common stops
+                const rawWords = userText.match(/\b\w{3,}\b/g) || [];
+                const stopWords = new Set(['the', 'and', 'was', 'for', 'are', 'with', 'what', 'when', 'where', 'who', 'how', 'why', 'that', 'this']);
+                const keywords = rawWords.filter(w => !stopWords.has(w.toLowerCase()));
+
+                if (keywords.length === 0) return "";
+
+                // Construct simple OR query for CozoDB
+                // We use 'str_includes' for substring matching
+                const conditions = keywords.map(w => `str_includes(content, '${w}')`).join(' or ');
+                const query = `?[id, content, timestamp] := *memory{id, content, timestamp}, ${conditions}`;
+
+                try {
+                    const result = await this.db.run(query);
+                    // ui.log(`DEBUG: DB Result: ${JSON.stringify(result)}`, "debug");
+
+                    let parsed = null;
+                    try {
+                        parsed = ResponsePattern.match(result);
+                    } catch (parseErr) {
+                        // Ignore parsing errors
+                    }
+
+                    // SAFE CHECK: Ensure rows array exists before checking length
+                    if (parsed && parsed.rows && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+                        ui.log(`🔍 Reflex found ${parsed.rows.length} matches for keywords: [${keywords.join(', ')}]`, "success");
+                        // Format as a "Retrieved Memories" block
+                        // Row format: [id, content, timestamp]
+                        return parsed.rows.slice(0, 10).map(row =>
+                            `- [Memory]: ${row[1]}`
+                        ).join('\n');
+                    }
+                } catch (e) {
+                    if (!e.message.includes("length")) {
+                        ui.log(`Reflex search error: ${e.message}`, "warn");
+                    }
+                }
+                return "";
+            }
+
+            // 2. The "Virtual Markdown" Builder
+            // Assembles the "God Prompt" that the model sees as its reality
+            buildVirtualPrompt(systemPrompt, retrievedMemories, chatHistory, userText) {
+                return `
+--- SYSTEM OS ---
+${systemPrompt}
+
+--- 🧠 LONG-TERM MEMORY (Reflex Retrieval) ---
+${retrievedMemories ? retrievedMemories : "No specific memories found yet (Model may request more)."}
+
+--- 📜 RECENT CHAT CONTEXT ---
+${chatHistory.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n')}
+
+--- 👤 CURRENT USER INPUT ---
+${userText}
+`;
+            }
+
+            // 3. The R1 Loop Wrapper
+            // Allows the model to ask for MORE info if Reflex wasn't enough
+            async executeR1Loop(userText, history) {
                 this.history = [];
+                let iteration = 0;
 
-                ui.log(`🧠 Graph-R1 Loop Started: "${userQuery}"`, "info");
-
-                // Ensure engine is alive and reset context
-                if (!engine) throw new Error("LLM Engine not initialized.");
-                await engine.resetChat();
+                // Step A: Reflex Search (Immediate)
+                let currentContext = await this.retrieveInitialContext(userText);
+                if (currentContext) {
+                    ui.appendContext("Reflex Retrieval", currentContext);
+                }
 
                 while (iteration < this.maxIterations) {
                     iteration++;
-                    ui.log(`🔄 Iteration ${iteration}/${this.maxIterations}...`, "warn");
 
+                    // Build the "God Prompt"
+                    const fullPrompt = this.buildVirtualPrompt(
+                        "You are Sovereign Coda. Answer the user based on context. If you need more info to answer, output ONLY: 'NEED_CONTEXT: <search_term>'. Otherwise, provide the final answer.",
+                        currentContext,
+                        history.slice(-5), // Last 5 turns 
+                        userText
+                    );
+
+                    ui.log(`🧠 R1 Thinking (Iteration ${iteration})...`, "info");
+
+                    let reply = "";
                     try {
-                        const planPrompt = `
-You are a Memory Retrieval Agent. Your ONLY job is to convert the User's question into a specific CozoDB query format.
-
-### RULES
-1. IGNORE timestamps.
-2. IGNORE complex logic.
-3. JUST find the most important KEYWORD in the user's input.
-4. Output JSON inside a markdown block.
-
-### TEMPLATE (COPY THIS EXACTLY)
-User: "What is the code?"
-Response:
-\`\`\`json
-{
-    "hypothesis": "Searching for keyword 'code'",
-    "query": "?[id, content, timestamp] := *memory{id, content, timestamp}, str_includes(content, 'code')",
-    "confidence": 0.5
-}
-\`\`\`
-
-User: "Who is Jade?"
-Response:
-\`\`\`json
-{
-    "hypothesis": "Searching for keyword 'Jade'",
-    "query": "?[id, content, timestamp] := *memory{id, content, timestamp}, str_includes(content, 'Jade')",
-    "confidence": 0.5
-}
-\`\`\`
-
-### YOUR TURN
-User Input: "${userQuery}"
-`;
-
-                        const reasoningUI = ui.appendReasoning(`Thinking: ${userQuery.substring(0, 30)}... (Iteration ${iteration})`);
-
-                        // Use global 'engine' directly
-                        const planStream = await engine.chat.completions.create({
-                            messages: [{ role: "user", content: planPrompt }],
-                            max_tokens: 600, // Increased for DeepSeek thinking
-                            temperature: 0.3,
-                            stream: true
+                        // Call Model (Non-streaming for logic check)
+                        const response = await this.engine.chat.completions.create({
+                            messages: [{ role: "user", content: fullPrompt }],
+                            temperature: 0.1, // Precision needed
+                            max_tokens: 100 // REDUCED FROM 500 to save VRAM on Snapdragon
                         });
 
-                        let planText = "";
-                        for await (const chunk of planStream) {
-                            const delta = chunk.choices[0]?.delta?.content || "";
-                            planText += delta;
-                            reasoningUI.update(delta);
+                        reply = response.choices[0].message.content.trim();
+                    } catch (genErr) {
+                        ui.log(`💥 Engine Crash: ${genErr.message}`, "error");
+                        if (genErr.message.includes("Instance reference") || genErr.message.includes("disposed")) {
+                            alert("GPU CRASHED (D3D12).\n\nPlease CLOSE this window and run 'launch-edge-vulkan.bat' to use the Vulkan backend.");
+                            return { context: currentContext, finalAnswer: "⚠️ System Crash: GPU Driver lost. Please run `launch-edge-vulkan.bat`." };
                         }
-                        reasoningUI.finish();
-
-                        // ROBUST JSON EXTRACTOR (Lobotomy for DeepSeek-R1)
-                        const extractJSON = (text) => {
-                            // 1. Try markdown block
-                            const match = text.match(/```json\s*([\s\S]*?)\s*```/);
-                            if (match) {
-                                try { return JSON.parse(match[1]); } catch (e) { }
-                            }
-                            // 2. Try Brackets
-                            const start = text.indexOf('{');
-                            const end = text.lastIndexOf('}');
-                            if (start !== -1 && end !== -1 && end > start) {
-                                try { return JSON.parse(text.substring(start, end + 1)); } catch (e) { }
-                            }
-                            return null;
-                        };
-
-                        const planData = extractJSON(planText);
-                        let planResult = null;
-
-                        if (planData) {
-                            planResult = {
-                                type: 'SEARCH_PLAN',
-                                ...planData
-                            };
-                        } else {
-                            planResult = { type: 'RAW_TEXT', text: planText };
-                        }
-
-                        if (planResult.type !== 'SEARCH_PLAN') {
-                            ui.log(`⚠️ Iteration ${iteration}: Plan generation failed. Got ${planResult.type}`, "warn");
-                            if (iteration >= this.maxIterations) break;
-                            continue;
-                        }
-
-                        ui.log(`🤔 Hypothesis: ${planResult.hypothesis}`, "info");
-
-                        // Stop if confident
-                        if (planResult.confidence >= 0.8) {
-                            ui.log(`✅ High confidence reached (${(planResult.confidence * 100).toFixed(0)}%)`, "success");
-                            break;
-                        }
-
-                        // 2. QUERY: Execute Datalog
-                        try {
-                            const cleanQuery = planResult.query.replace(/```/g, '').trim();
-                            const queryParams = {};
-
-                            // Execute query
-                            let dbRaw;
-                            let dbResult;
-                            try {
-                                dbRaw = await this.db.run(cleanQuery, JSON.stringify(queryParams));
-                                dbResult = ResponsePattern.match(dbRaw);
-                            } catch (qe) {
-                                // Handle known parser errors gracefully (e.g., missing sort key)
-                                ui.log(`Query execution failed: ${qe.message}. Attempting sanitized fallback.`, "warn");
-                                if (qe.message && qe.message.includes("Sort key 'timestamp' not found")) {
-                                    try {
-                                        const sanitized = cleanQuery.replace(/:sort\s+-timestamp/g, '');
-                                        ui.log('Retrying query without :sort -timestamp', 'info');
-                                        dbRaw = await this.db.run(sanitized, JSON.stringify(queryParams));
-                                        dbResult = ResponsePattern.match(dbRaw);
-                                    } catch (qe2) {
-                                        ui.log(`Fallback query failed: ${qe2.message}`, 'error');
-                                        dbResult = { type: 'ERROR', error: qe2.message };
-                                    }
-                                } else {
-                                    dbResult = { type: 'ERROR', error: qe.message };
-                                }
-                            }
-
-                            if (dbResult.type === 'DB_RESULT' && dbResult.count > 0) {
-                                const newFacts = dbResult.rows
-                                    .map((row, idx) => {
-                                        // Handle array rows
-                                        if (Array.isArray(row)) {
-                                            return `[Fact ${idx + 1}] ${row.slice(1).join(': ')}`;
-                                        }
-                                        return `[Fact ${idx + 1}] ${JSON.stringify(row)}`;
-                                    })
-                                    .join("\n");
-
-                                context += `\n--- Iteration ${iteration} Findings ---\n${newFacts}`;
-                                ui.log(`📚 Retrieved ${dbResult.count} fact(s).`, "success");
-
-                                // UPDATE CONTEXT UI
-                                ui.appendContext(`Iteration ${iteration} Findings (${dbResult.count} facts)`, newFacts);
-
-                                this.history.push({
-                                    iteration,
-                                    hypothesis: planResult.hypothesis,
-                                    facts_retrieved: dbResult.count,
-                                    confidence: planResult.confidence
-                                });
-                            } else if (dbResult.type === 'DB_RESULT') {
-                                ui.log(`📭 Iteration ${iteration}: No matching facts found.`, "warn");
-                                ui.appendContext(`Iteration ${iteration}`, "No matching memories found for: " + planResult.hypothesis);
-
-                                this.history.push({
-                                    iteration,
-                                    hypothesis: planResult.hypothesis,
-                                    facts_retrieved: 0,
-                                    confidence: planResult.confidence
-                                });
-                            } else {
-                                const err = dbResult.error || "Unknown DB Error";
-                                ui.log(`⚠️ Query error: ${err}`, "error");
-                                ui.appendContext(`Iteration ${iteration} Error`, err);
-                            }
-
-                        } catch (e) {
-                            ui.log(`🔥 Query execution failed: ${e.message}`, "error");
-                        }
-
-                    } catch (e) {
-                        ui.log(`💥 Iteration ${iteration} error: ${e.message}`, "error");
-                        if (e.message.includes("disposed") || e.message.includes("valid external Instance")) {
-                            ui.log("❌ GPU CONTEXT LOST! The model driver has crashed. Please reload the page.", "error");
-                            alert("GPU Crash Detected\n\nThe WebGPU context was lost (likely due to buffer overflow). Please reload the page.");
-                            break; // Critical failure, stop loop
-                        }
+                        throw genErr;
                     }
+
+                    // Check if Model is asking for help (The Wrapper Logic)
+                    if (reply.includes("NEED_CONTEXT:")) {
+                        const searchTerm = reply.split("NEED_CONTEXT:")[1].trim();
+                        ui.log(`🤖 Model requested semantic search: "${searchTerm}"`, "warn");
+
+                        // Perform Semantic Search (simulated via keyword reflex for now, can be vector later)
+                        const extraData = await this.retrieveInitialContext(searchTerm);
+
+                        if (extraData) {
+                            currentContext += `\n--- Additional Context (${searchTerm}) ---\n${extraData}`;
+                            ui.appendContext(`Requested: ${searchTerm}`, extraData);
+                            ui.log(`✅ Found additional context for "${searchTerm}"`, "success");
+                        } else {
+                            currentContext += `\n--- Additional Context (${searchTerm}) ---\n(No results found)`;
+                            ui.log(`❌ No data found for "${searchTerm}"`, "warn");
+                        }
+
+                        continue; // Loop again with new data
+                    }
+
+                    // If no request, this is the final answer (or close to it)
+                    // We return the Context and the Reply (if it acts as the answer)
+                    // But typically handleSend wants to stream the FINAL answer. 
+                    // To keep compatible with handleSend logic, we return the accumulated context.
+                    return { context: currentContext, finalAnswer: reply };
                 }
 
-                ui.log(`✨ Graph-R1 Loop completed after ${iteration} iteration(s).`, "success");
-                return { context, trace: this.history };
+                return { context: currentContext, finalAnswer: null };
             }
+
+            // TODO: ingestAndCompress(largeText) implementation for 20k->1k distillation
         }
 
         // --- HANDLERS ---
@@ -925,8 +876,14 @@ User Input: "${userQuery}"
             ui.append("user", text);
 
             try {
-                // 1. Run Graph-R1 Loop
-                const { context, trace } = await reasoningLoop.reason(text);
+                // 1. Run Context Manager (Reflex + R1 Loop)
+                const { context, finalAnswer } = await contextManager.executeR1Loop(text, []);
+
+                // CHECK FOR CRASH
+                if (finalAnswer && finalAnswer.includes("System Crash")) {
+                    ui.log("🛑 Execution halted due to GPU Crash.", "error");
+                    return; // Stop here, do not try to synthesize
+                }
 
                 // 2. Final Synthesis with Streaming
                 ui.log("🧪 Synthesizing final answer...", "warn");
@@ -1076,12 +1033,12 @@ If context is insufficient, say so clearly.`;
             let appConfigOverlay = {};
 
             if (hwProfile === 'lite') {
-                ui.log("🔋 Loading Lite Profile (Snapdragon): Safe Mode (Chunk=64, Context=1024)", "info");
+                ui.log("🔋 Loading Lite Profile (Snapdragon): Nuclear Mode (Chunk=32, Context=512)", "warn");
                 appConfigOverlay = {
-                    prefillChunkSize: 64,     // Strict safety
-                    contextWindowSize: 1024,  // Maximally minimal context
-                    slidingWindowSize: 1024,
-                    useIndexedDBCache: true
+                    prefillChunkSize: 32,     // STRICTEST safety
+                    contextWindowSize: 512,   // MINIMUM viable context
+                    slidingWindowSize: 512,
+                    useIndexedDBCache: true   // RE-ENABLED: Vulkan + New Profile allows caching
                 };
             } else if (hwProfile === 'mid') {
                 ui.log("💻 Loading Mid-Tier Profile (8GB VRAM): Balanced (Chunk=256, Context=4096)", "info");
@@ -1146,6 +1103,43 @@ If context is insufficient, say so clearly.`;
 
             try {
                 try {
+                    // --- DIAGNOSTICS: Probe GPU explicitly ---
+                    if (navigator.gpu) {
+                        ui.log("🔍 Probing WebGPU Adapter...", "info");
+                        let adapter = await navigator.gpu.requestAdapter();
+                        if (adapter) {
+                            // Safe check for requestAdapterInfo (non-standard in some browsers)
+                            let info = { vendor: 'Generic WebGPU', architecture: '' };
+                            if (typeof adapter.requestAdapterInfo === 'function') {
+                                try { info = await adapter.requestAdapterInfo(); } catch (e) { }
+                            }
+                            ui.log(`✅ GPU Found: ${info.vendor} ${info.architecture || ''}`, "success");
+                        } else {
+                            ui.log("⚠️ Default Adapter NULL. Trying Low-Power preference...", "warn");
+                            // Fallback: Snapdragon often reports as "Low Power" integrated
+                            adapter = await navigator.gpu.requestAdapter({ powerPreference: 'low-power' });
+                            if (adapter) {
+                                let info = { vendor: 'Low-Power GPU', architecture: '' };
+                                if (typeof adapter.requestAdapterInfo === 'function') {
+                                    try { info = await adapter.requestAdapterInfo(); } catch (e) { }
+                                }
+                                ui.log(`✅ Low-Power GPU Found: ${info.vendor}`, "success");
+                            } else {
+                                ui.log("❌ WebGPU Adapter returned NULL (All Modes). GPU Process is likely dead.", "error");
+                                ui.append("system", `
+<div style="background: #330000; border: 1px solid #f00; padding: 10px; margin: 10px 0;">
+  <strong>💥 GPU PROCESS DEAD</strong><br/>
+  The browser has lost contact with the GPU driver.<br/>
+  1. Close ALL Edge windows.<br/>
+  2. Run <code>kill-edge.bat</code> (to ensure it's dead).<br/>
+  3. Try <code>launch-edge-vulkan.bat</code> if standard launch fails.
+</div>`);
+                            }
+                        }
+                    } else {
+                        ui.log("❌ navigator.gpu is undefined. Flags likely missing.", "error");
+                    }
+
                     ui.log(`Attempting to load: ${modelInput}`, "info");
 
                     // Use CreateMLCEngine to ensure appConfig is respected during init
@@ -1176,8 +1170,8 @@ If context is insufficient, say so clearly.`;
                 ui.log(`✅ Engine Ready`, "success");
                 ui.updateProgress(1.0, "Ready!");
 
-                // Initialize reasoning loop
-                reasoningLoop = new GraphR1ReasoningLoop(db, embedder);
+                // Initialize Context Manager (The Brain)
+                contextManager = new ContextManager(engine, db);
 
                 // Enable input
                 document.getElementById('input').disabled = false;
@@ -1235,11 +1229,23 @@ If context is insufficient, say so clearly.`;
                     db = CozoDb.new();
                     await createSchema();
                 }
-                ui.updateProgress(0.3, "Loading Embedder...");
+                ui.updateProgress(0.3, "Loading Embedder (WASM)...");
 
-                // Initialize Embedder (Force CPU/WASM to save GPU for LLM and prevent TDR)
-                embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { device: 'wasm' });
-                ui.log("✅ Embedder Ready (all-MiniLM-L6-v2)", "success");
+                // Initialize Embedder with Timeout (15s)
+                // If this hangs (CDN/Network issue), we skip it so the Console remains usable.
+                const embedderPromise = pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { device: 'wasm' });
+
+                try {
+                    embedder = await Promise.race([
+                        embedderPromise,
+                        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000))
+                    ]);
+                    ui.log("✅ Embedder Ready (all-MiniLM-L6-v2)", "success");
+                } catch (err) {
+                    ui.log(`⚠️ Embedder Init Failed/Timed Out: ${err.message}. Context features disabled.`, "warn");
+                    embedder = null; // System proceeds without Embedder
+                }
+
                 ui.updateProgress(0.5, "Ready for Model Selection...");
 
                 // Enable model selection
@@ -1450,6 +1456,25 @@ If context is insufficient, say so clearly.`;
                 }
             };
         }
+
+        document.getElementById('debug-gpu-btn').addEventListener('click', async () => {
+            let msg = "WebGPU Debug Info:\n\n";
+            if (!navigator.gpu) {
+                msg += "❌ navigator.gpu is UNDEFINED. Browser does not support WebGPU or it is disabled.\n";
+            } else {
+                msg += "✅ navigator.gpu exists.\n";
+                try {
+                    const adapter = await navigator.gpu.requestAdapter();
+                    msg += adapter ? `✅ Default Adapter: ${adapter.limits.maxBufferSize}\n` : "❌ Default Adapter: NULL\n";
+                } catch (e) { msg += `❌ Default Adapter Error: ${e.message}\n`; }
+
+                try {
+                    const lowAdapter = await navigator.gpu.requestAdapter({ powerPreference: 'low-power' });
+                    msg += lowAdapter ? `✅ Low-Power Adapter: ${lowAdapter.limits.maxBufferSize}\n` : "❌ Low-Power Adapter: NULL\n";
+                } catch (e) { msg += `❌ Low-Power Adapter Error: ${e.message}\n`; }
+            }
+            alert(msg);
+        });
 
         async function handleBridgeChatRequest(reqId, data) {
             ui.log(`📥 Bridge Request: ${reqId.slice(0, 8)}...`, "info");

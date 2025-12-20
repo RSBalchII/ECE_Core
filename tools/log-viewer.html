@@ -239,7 +239,7 @@
         async function pollServerLogs() {
             try {
                 // Use relative path so it targets same origin when proxied; fall back to explicit host if needed
-                const resp = await fetch('/audit/server-logs?limit=50');
+                const resp = await fetch('http://localhost:8080/audit/server-logs?limit=50');
 
                 if (resp.status === 404) {
                     if (!serverLogsErrorShown) {
