@@ -1,4 +1,4 @@
-# Context Information Engine (Sovereign Edition)
+# Context Engine (Sovereign Edition)
 
 > **Philosophy:** Your mind, augmented. Your data, sovereign. Your tools, open.
 
