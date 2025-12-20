@@ -315,22 +315,31 @@
         let analyser = null;
         let dataArray = null;
         let animationId = null;
+        let silenceStart = 0;
 
         // --- 1. INITIALIZATION ---
 
         async function init() {
-            // PROTOCOL CHECK: WebLLM requires Cache API, which fails on file://
-            if (window.location.protocol === 'file:') {
+            // PROTOCOL CHECK: WebLLM requires Cache API, which fails on file:// or Insecure Contexts (HTTP LAN)
+            const isSecure = window.isSecureContext;
+            const hasCache = typeof caches !== 'undefined';
+
+            if (window.location.protocol === 'file:' || !isSecure || !hasCache) {
                 UI.loadingText.innerHTML = `
-                    <span style="color: #ff4444">❌ ERROR: file:// Protocol Detected</span><br/><br/>
+                    <span style="color: #ff4444">❌ ERROR: Secure Context Required</span><br/><br/>
                     <div style="font-size: 0.8em; color: #ccc; max-width: 400px; line-height: 1.5;">
-                        Modern browsers block "Cache API" and "WebGPU" on local files for security.<br/><br/>
+                        Modern browsers block "Cache API" and "WebGPU" on insecure connections.<br/>
+                        <b>Status:</b><br/>
+                        File Protocol: ${window.location.protocol === 'file:' ? 'YES (Block)' : 'NO'}<br/>
+                        Secure Context: ${isSecure ? 'YES' : 'NO (Block)'}<br/>
+                        Cache API: ${hasCache ? 'Available' : 'MISSING (Block)'}<br/><br/>
                         <b>Solution:</b><br/>
-                        1. Open the "Sovereign Server" (launch-edge-vulkan.bat)<br/>
-                        2. Go to: <a href="http://localhost:8000/tools/sovereign-mic.html" style="color: #00ff88">http://localhost:8000/tools/sovereign-mic.html</a>
+                        1. Use <b>http://localhost:8000</b> (Not IP address)<br/>
+                        2. Or set up HTTPS.<br/>
+                        3. <b>Dev Bypass:</b> Go to <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>, enable it, and add this IP (http://HOST:PORT).
                     </div>
                 `;
-                UI.loading.querySelector('.loader').style.display = 'none'; // Hide spinner
+                UI.loading.querySelector('.loader').style.display = 'none';
                 return;
             }
 
@@ -338,19 +347,19 @@
                 // Initialize Whisper
                 UI.loadingText.innerText = "Step 1/2: Downloading Whisper (Ears)...";
                 env.allowLocalModels = false; // Force CDN for portability
-                
+
                 // Add a callback proxy if possible? No, pipeline simple API doesn't support it easily.
                 // We just await it.
                 whisperer = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
                 UI.loadingText.innerText = "✅ Ears Ready.";
-                
+
                 // Initialize LLM (The Brain)
                 UI.loadingText.innerText = "Step 2/2: Config Qwen2.5 (Brain)...";
                 await initLLM();
 
                 UI.loading.style.opacity = '0';
                 setTimeout(() => UI.loading.style.display = 'none', 500);
-                
+
                 initVisualizer();
             } catch (e) {
                 console.error(e);
@@ -450,8 +459,11 @@
 
                 animateVisualizer();
 
+                animateVisualizer();
+
                 mediaRecorder.start();
                 isRecording = true;
+                silenceStart = Date.now(); // Init timer
                 UI.micBtn.classList.add('active');
                 UI.status.innerText = "Listening...";
                 UI.output.innerText = "...";
@@ -480,10 +492,24 @@
             analyser.getByteFrequencyData(dataArray);
 
             const bars = document.querySelectorAll('.bar');
+            let maxVol = 0;
+
             for (let i = 0; i < bars.length; i++) {
                 const val = dataArray[i];
+                if (val > maxVol) maxVol = val;
+
                 const height = Math.max(4, (val / 255) * 50);
                 bars[i].style.height = `${height}px`;
+            }
+
+            // SILENCE DETECTION: Warn if input is dead for > 3s
+            if (maxVol > 10) {
+                silenceStart = Date.now(); // Reset
+                if (UI.status.innerText.includes("⚠️")) UI.status.innerText = "Listening...";
+            } else {
+                if (Date.now() - silenceStart > 3000) {
+                    UI.status.innerText = "⚠️ No Audio? Check Mic / Permissions";
+                }
             }
         }
 
@@ -503,10 +529,20 @@
             // Transcribe
             UI.status.innerText = "Transcribing...";
             const result = await whisperer(audioData);
-            const rawText = result.text.trim();
+            let rawText = result.text.trim();
 
-            if (!rawText) {
-                UI.status.innerText = "Heard nothing.";
+            // HALLUCINATION FILTER: Whisper-Tiny often outputs these on silence
+            const hallucinations = ['[Music]', '[BLANK_AUDIO]', '[Silence]', '(silence)', '[music]', 'Computed'];
+            hallucinations.forEach(h => {
+                if (rawText.includes(h)) {
+                    rawText = rawText.replace(h, '').trim();
+                }
+            });
+
+            // If empty after cleaning context, stop
+            if (!rawText || rawText.length < 2) {
+                UI.status.innerText = "Heard nothing (Silence)";
+                UI.output.innerText = "...";
                 return;
             }
 
