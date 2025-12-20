@@ -1,11 +1,14 @@
 @echo off
+echo 🔪 CTX-OS: Ensuring clean environment...
+taskkill /F /IM msedge.exe /T 2>nul
+timeout /t 2 /nobreak >nul
+
 echo Starting Microsoft Edge with UNLOCKED WebGPU Flags...
 echo This configuration is optimized for Snapdragon X Elite.
 echo.
 echo Flags applied:
 echo - enable-unsafe-webgpu (Force GPU access)
 echo - enable-dawn-features=allow_unsafe_apis (Unlock larger buffers)
-echo - enable-features=Vulkan [REMOVED] (Defaulting to D3D12 for stability)
 echo - disable-gpu-watchdog (Prevent TDR timeouts)
 echo.
 
