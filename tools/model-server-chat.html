@@ -374,10 +374,10 @@
                         Profile:</label>
                     <select id="hw-profile" class="form-control"
                         style="width: 100%; padding: 5px; background: #333; color: white; border: 1px solid #555; margin-bottom: 10px;">
-                        <option value="lite" selected>🔋 Lite (Snapdragon / Integrated / Mobile)</option>
-                        <option value="mid">💻 Mid-Tier (8GB VRAM / Older Gaming Laptops)</option>
-                        <option value="high">🚀 High-Perf (16GB VRAM / RTX 4090 Laptop)</option>
-                        <option value="ultra">⚡ Ultra (24GB+ VRAM / Desktop Workstation)</option>
+                        <option value="lite">🔋 Lite (Mobile / Snapdragon) - 2k Context, Safe & Fast</option>
+                        <option value="mid" selected>💻 Mid (8GB VRAM) - 4k Context, Balanced</option>
+                        <option value="high">🚀 High (16GB VRAM) - 16k Context, Max Speed</option>
+                        <option value="ultra">⚡ Ultra (24GB+ VRAM) - 32k Context, Unleashed</option>
                     </select>
                     <select id="model-select" disabled
                         style="width: 100%; padding: 5px; background: #333; color: white; border: 1px solid #555;">
@@ -388,15 +388,19 @@
                             <option value="mlc-ai/Mistral-7B-Instruct-v0.2-q4f16_1-MLC">Mistral-7B-v0.2</option>
                         </optgroup>
                         <optgroup label="Snapdragon Optimized (Fast & Safe)">
-                            <option value="mlc-ai/Qwen3-4B-q4f16_1-MLC">Qwen3-4B (Highly Versatile)</option>
-                            <option value="mlc-ai/Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama-3.2-1B (Recommended)</option>
-                            <option value="mlc-ai/Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-1.5B (Fastest)</option>
-                            <option value="mlc-ai/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-Coder-1.5B</option>
+                            <option value="mlc-ai/Qwen2.5-3B-Instruct-q4f16_1-MLC">Qwen2.5-3B (Recommended)</option>
+                            <option value="mlc-ai/Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama-3.2-1B (Fastest)</option>
+                            <option value="mlc-ai/Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-1.5B (Ultra Fast)</option>
+                            <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-1.5B-q4f16_1-MLC">DeepSeek-R1-Distill-1.5B
+                                (Reflex)</option>
                         </optgroup>
                         <optgroup label="New / High Power">
+                            <option value="mlc-ai/Qwen2.5-7B-Instruct-q4f16_1-MLC">Qwen2.5-7B (Standard)</option>
                             <option value="mlc-ai/Qwen2.5-14B-Instruct-q4f16_1-MLC">Qwen2.5-14B (Powerful)</option>
-                            <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC">DeepSeek-R1-7B (Qwen)
-                            </option>
+                            <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC">DeepSeek-R1-Distill-7B
+                                (Reasoning)</option>
+                            <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-14B-q4f16_1-MLC">DeepSeek-R1-Distill-14B
+                                (Reasoning)</option>
                             <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-14B-q4f16_1-MLC">DeepSeek-R1-14B (Qwen)
                             </option>
                             <option value="mlc-ai/DeepSeek-V2-Lite-Chat-q4f16_1-MLC">DeepSeek-V2-Lite (Experimental)
@@ -724,46 +728,90 @@
             }
 
             // 1. The "Reflex": Fast, programmatic search
-            // Finds obvious keywords immediately (e.g., "Blueberry-Omega")
             async retrieveInitialContext(userText) {
                 ui.log("🔍 Reflex: Scanning for keywords...", "info");
 
-                // Extract words > 3 chars as rough keywords, excluding common stops
-                const rawWords = userText.match(/\b\w{3,}\b/g) || [];
-                const stopWords = new Set(['the', 'and', 'was', 'for', 'are', 'with', 'what', 'when', 'where', 'who', 'how', 'why', 'that', 'this']);
-                const keywords = rawWords.filter(w => !stopWords.has(w.toLowerCase()));
+                // IMPROVED KEYWORD EXTRACTION
+                // 1. Prserve hyphenated words (Blueberry-Omega)
+                // 2. Filter common stops
+                const rawWords = userText.match(/[a-zA-Z0-9_\-]+/g) || [];
+                const stopWords = new Set([
+                    'the', 'and', 'was', 'for', 'are', 'with', 'what', 'when', 'where', 'who', 'how', 'why', 'that', 'this',
+                    'can', 'you', 'know', 'about', 'from', 'have', 'has', 'had', 'not', 'but', 'all'
+                ]);
 
-                if (keywords.length === 0) return "";
+                // Filter and ensure length > 2
+                const keywords = rawWords.filter(w => w.length > 2 && !stopWords.has(w.toLowerCase()));
 
-                // Construct simple OR query for CozoDB
-                // We use 'str_includes' for substring matching
-                const conditions = keywords.map(w => `str_includes(content, '${w}')`).join(' or ');
+                if (keywords.length === 0) {
+                    ui.log("Reflex: No significant keywords found.", "warn");
+                    return "";
+                }
+
+                ui.log(`🔍 Reflex Keywords: [${keywords.join(', ')}]`, "info");
+
+                // Construct robust OR query for CozoDB
+                // Use regex_matches with case-insensitive flag (?i)
+                const conditions = keywords.map(w => `regex_matches(content, '(?i)${w}')`).join(' or ');
+
+                // Query: Select ID, Content from memory where content contains keywords (case-insensitive)
                 const query = `?[id, content, timestamp] := *memory{id, content, timestamp}, ${conditions}`;
 
+                ui.log(`🔍 Exectuing DB Query: ${query}`, "debug");
+
                 try {
-                    const result = await this.db.run(query);
-                    // ui.log(`DEBUG: DB Result: ${JSON.stringify(result)}`, "debug");
+                    // MUST pass empty params string "{}" to prevent WASM crash
+                    const result = await this.db.run(query, "{}");
+                    ui.log(`DEBUG: RAW DB Result Type: ${typeof result}`, "debug");
+
+                    // Manually inspect result before passing to matcher
+                    if (result && typeof result === 'object') {
+                        // Check specifically for 'rows' property safety
+                        if ('rows' in result) {
+                            if (!Array.isArray(result.rows)) {
+                                ui.log(`DEBUG: result.rows exists but is NOT an array! It is: ${typeof result.rows}`, "error");
+                            } else {
+                                // ui.log(`DEBUG: result.rows is an array of length ${result.rows.length}`, "debug");
+                            }
+                        } else {
+                            // ui.log("DEBUG: result has no 'rows' property.", "debug");
+                        }
+                    } else {
+                        ui.log(`DEBUG: result is not an object. Is it null? ${result === null}`, "warn");
+                    }
 
                     let parsed = null;
                     try {
                         parsed = ResponsePattern.match(result);
                     } catch (parseErr) {
-                        // Ignore parsing errors
+                        ui.log(`Reflex Parse Error: ${parseErr.message}`, "warn");
                     }
 
-                    // SAFE CHECK: Ensure rows array exists before checking length
-                    if (parsed && parsed.rows && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
-                        ui.log(`🔍 Reflex found ${parsed.rows.length} matches for keywords: [${keywords.join(', ')}]`, "success");
-                        // Format as a "Retrieved Memories" block
-                        // Row format: [id, content, timestamp]
-                        return parsed.rows.slice(0, 10).map(row =>
+                    // ROBUST CHECK with granular logging
+                    if (!parsed) {
+                        // ui.log("Reflex: Parsed result is null.", "debug");
+                        return "";
+                    }
+
+                    if (parsed.error) {
+                        ui.log(`Reflex DB returned error: ${parsed.error}`, "warn");
+                        return "";
+                    }
+
+                    if (parsed.rows && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+                        ui.log(`✅ Reflex found ${parsed.rows.length} matches.`, "success");
+                        const memoryBlock = parsed.rows.slice(0, 10).map(row =>
                             `- [Memory]: ${row[1]}`
                         ).join('\n');
+                        return memoryBlock;
+                    } else {
+                        // Graceful match failure
+                        ui.log("Reflex: No matching memories found in DB keyword search.", "warn");
+                        return "";
                     }
                 } catch (e) {
-                    if (!e.message.includes("length")) {
-                        ui.log(`Reflex search error: ${e.message}`, "warn");
-                    }
+                    ui.log(`Reflex logic crashed: ${e.message}`, "error");
+                    console.error("Reflex Crash Stack:", e);
                 }
                 return "";
             }
@@ -981,7 +1029,7 @@ If context is insufficient, say so clearly.`;
                     modelLib = libBase + `Qwen2.5-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
                 } else if (lowerId.includes('qwen3-4b')) {
                     modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`; // Fallback map
-                } else if (lowerId.includes('qwen2.5-coder-1.5b') || lowerId.includes('qwen2.5-1.5b') || lowerId.includes('qwen2-1.5b')) {
+                } else if (lowerId.includes('qwen2.5-coder-1.5b') || lowerId.includes('qwen2.5-1.5b') || lowerId.includes('qwen2-1.5b') || lowerId.includes('deepseek-r1-distill-qwen-1.5b')) {
                     modelLib = libBase + `Qwen2-1.5B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
                 } else if (lowerId.includes('gemma-2-9b')) {
                     modelLib = libBase + `gemma-2-9b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
@@ -1041,31 +1089,31 @@ If context is insufficient, say so clearly.`;
                 let appConfigOverlay = {};
 
                 if (hwProfile === 'lite') {
-                    ui.log("🔋 Loading Lite Profile (Snapdragon): Nuclear Mode (Chunk=32, Context=512)", "warn");
+                    ui.log("🔋 Loading Lite Profile (Should be used for Snapdragon/Mobile): Chunk=32, Context=2048", "warn");
                     appConfigOverlay = {
-                        prefillChunkSize: 32,     // STRICTEST safety
-                        contextWindowSize: 512,   // MINIMUM viable context
-                        slidingWindowSize: 512,
+                        prefillChunkSize: 32,     // STRICTEST safety for mobile/NPU drivers
+                        contextWindowSize: 2048,  // Safe context size
+                        slidingWindowSize: 2048,
                         useIndexedDBCache: true
                     };
                 } else if (hwProfile === 'mid') {
-                    ui.log("💻 Loading Mid-Tier Profile (8GB VRAM): Balanced (Chunk=256, Context=4096)", "info");
+                    ui.log("💻 Loading Mid-Tier Profile (8GB VRAM): Chunk=256, Context=4096", "info");
                     appConfigOverlay = {
-                        prefillChunkSize: 256,    // Moderate safety for older GPUs
+                        prefillChunkSize: 256,    // Balanced chunking
                         contextWindowSize: 4096,  // Standard context
-                        slidingWindowSize: undefined, // Standard
-                        useIndexedDBCache: true
-                    };
-                } else if (hwProfile === 'high') {
-                    ui.log("🚀 Loading High-Perf Profile (16GB VRAM): Fast (Chunk=Max, Context=16k)", "info");
-                    appConfigOverlay = {
-                        prefillChunkSize: -1,     // Max throughput
-                        contextWindowSize: 16384, // High context
                         slidingWindowSize: undefined,
                         useIndexedDBCache: true
                     };
-                } else { // 'ultra' or default
-                    ui.log("⚡ Loading Ultra Profile (24GB+ VRAM): Unleashed (Chunk=Max, Context=32k+)", "info");
+                } else if (hwProfile === 'high') {
+                    ui.log("🚀 Loading High-Perf Profile (16GB VRAM): Chunk=Max, Context=16384", "info");
+                    appConfigOverlay = {
+                        prefillChunkSize: -1,     // Max throughput
+                        contextWindowSize: 16384, // Large context
+                        slidingWindowSize: undefined,
+                        useIndexedDBCache: true
+                    };
+                } else { // 'ultra'
+                    ui.log("⚡ Loading Ultra Profile (24GB+ VRAM): Chunk=Max, Context=32768", "info");
                     appConfigOverlay = {
                         prefillChunkSize: -1,
                         contextWindowSize: 32768, // Massive context
@@ -1074,6 +1122,14 @@ If context is insufficient, say so clearly.`;
                     };
                 }
                 const snapdragonId = "snapdragon-" + simpleId;
+
+                // DeepSeek-R1-Distill Specific Override
+                let convOverride = {};
+                if (lowerId.includes('deepseek-r1-distill')) {
+                    ui.log("⚙️ Applying 'qwen2' Chat Template Override for compatibility...", "info");
+                    convOverride = { "conv_template": "qwen2" };
+                }
+
                 const appConfig = {
                     "useIndexedDBCache": appConfigOverlay.useIndexedDBCache,
                     "requiredLimits": { "maxStorageBufferBindingSize": maxBuffer }, // Double tap
@@ -1083,12 +1139,10 @@ If context is insufficient, say so clearly.`;
                             "model_id": snapdragonId,
                             "model_lib": modelLib,
                             "vram_required_MB": vramVal,
-                            "low_resource_required": true,
-                            "required_features": ["shader-f16"],
-                            "context_window_size": appConfigOverlay.contextWindowSize,
-                            "sliding_window_size": appConfigOverlay.slidingWindowSize,
-                            "prefill_chunk_size": appConfigOverlay.prefillChunkSize,
-                            "buffer_size_required_bytes": maxBuffer // <--- THE OVERRIDE
+                            "low_resource_required": false,
+                            "context_window_size": appConfigOverlay.contextWindowSize, // Dynamic Context
+                            // Only apply override if exists
+                            ...(Object.keys(convOverride).length > 0 ? { "conv_config": convOverride } : {})
                         },
                         {
                             "model": "https://huggingface.co/mlc-ai/" + simpleId + "/resolve/main/",
@@ -1100,10 +1154,13 @@ If context is insufficient, say so clearly.`;
                             "context_window_size": appConfigOverlay.contextWindowSize,
                             "sliding_window_size": appConfigOverlay.slidingWindowSize,
                             "prefill_chunk_size": appConfigOverlay.prefillChunkSize,
-                            "buffer_size_required_bytes": maxBuffer // <--- THE OVERRIDE
+                            "buffer_size_required_bytes": maxBuffer,
+                            // Apply override here too
+                            ...(Object.keys(convOverride).length > 0 ? { "conv_config": convOverride } : {})
                         }
                     ]
                 };
+
                 ui.log(`🚀 Using Snapdragon Override: ${snapdragonId}`, "info");
 
 
@@ -1138,10 +1195,25 @@ If context is insufficient, say so clearly.`;
 
                     ui.log(`Attempting to load Reasoning Engine...`, "info");
 
-                    // Use snapdragonId and our PRE-CREATED device
-                    engine = await webllm.CreateMLCEngine(snapdragonId, {
+                    // LOGIC CHANGE: For High-End Desktop (High/Ultra), avoid manual device creation hacks.
+                    // Let WebLLM manage the device standardly.
+                    // Only use the "Snapdragon" workaround for Lite/Mid profiles or mobile.
+
+                    let targetModelId = simpleId;
+                    let targetDevice = undefined;
+
+                    if (hwProfile === 'lite' || hwProfile === 'mid') {
+                        targetModelId = snapdragonId;
+                        targetDevice = device; // Use our manually created device with specific limits
+                        ui.log(`📱 Using Mobile/Optimized Path (${targetModelId})`, "info");
+                    } else {
+                        ui.log(`🖥️ Using Standard Desktop Path (${targetModelId})`, "info");
+                        // For High/Ultra, we trust WebLLM's default device creation
+                    }
+
+                    engine = await webllm.CreateMLCEngine(targetModelId, {
                         appConfig,
-                        device, // <--- THE FIX: Bypass WebLLM's internal device request
+                        device: targetDevice,
                         initProgressCallback: (report) => {
                             ui.updateProgress(0.5 + (report.progress * 0.4), report.text);
                         }

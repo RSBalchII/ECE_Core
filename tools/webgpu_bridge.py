@@ -417,8 +417,68 @@ async def embeddings(request: Request):
 
     return JSONResponse(content=response_msg["result"])
 
+import secrets
+import random
+import mimetypes
+
+# --- Authentication & Config ---
+AUTH_TOKEN = os.getenv("BRIDGE_TOKEN")
+if not AUTH_TOKEN:
+    AUTH_TOKEN = secrets.token_urlsafe(16) # Generate secure token if not set
+
+# Middleware for Auth
+@app.middleware("http")
+async def verify_token(request: Request, call_next):
+    # Allow OPTIONS (CORS preflight) and the mobile UI page itself
+    if request.method == "OPTIONS" or request.url.path in ["/mobile", "/favicon.ico", "/logs"]:
+        return await call_next(request)
+    
+    # Allow local loopback without token (optional, but convenient for localhost dev)
+    # client_host = request.client.host
+    # if client_host == "127.0.0.1" or client_host == "localhost":
+    #     return await call_next(request)
+
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer ") or auth_header.split(" ")[1] != AUTH_TOKEN:
+        # Return 401 but allows 403 for specific logic. 
+        # Using JSON response to keep it clean.
+        return JSONResponse(status_code=401, content={"error": "Unauthorized. Invalid Token."})
+
+    return await call_next(request)
+
+@app.get("/mobile")
+async def serve_mobile_app():
+    """Serves the lightweight mobile chat interface."""
+    file_path = "mobile-chat.html"
+    # If not in current dir, check tools/
+    if not os.path.exists(file_path):
+        file_path = "tools/mobile-chat.html"
+    
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    else:
+        return HTMLResponse(content="<h1>Mobile App Not Found</h1><p>Ensure mobile-chat.html exists.</p>", status_code=404)
+
+from fastapi.responses import HTMLResponse
+
 if __name__ == "__main__":
     host = os.getenv("BRIDGE_HOST", "0.0.0.0")
-    port = int(os.getenv("BRIDGE_PORT", "8080"))
-    print(f"🌉 WebGPU Bridge starting on {host}:{port}...")
+    
+    # Obfuscated / Random Port Logic
+    default_port = os.getenv("BRIDGE_PORT")
+    if default_port:
+        port = int(default_port)
+    else:
+        # Pick a random port in the dynamic/private range to obscure services
+        port = random.randint(9000, 9999)
+
+    print("\n" + "="*60)
+    print(f"🔒 SECURE BRIDGE STARTING")
+    print(f"   Host: {host}")
+    print(f"   Port: {port}")
+    print(f"   🔑 TOKEN: {AUTH_TOKEN}")
+    print(f"   📱 Mobile URL: http://{host}:{port}/mobile")
+    print("="*60 + "\n")
+    
     uvicorn.run(app, host=host, port=port)
