@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
 """
-Project Root Reader: Aggregates content from allowed directories only.
+Root Reader: Aggregates content from relevant project files for orchestration.
 
-Updated to reflect the new project structure:
-- Root: README.md, CHANGELOG.md
-- Backend/: ECE Core (Python)
-- Anchor-Chat/: New TUI (Python)
-- Extension/: Browser Extension (JS/HTML/CSS)
-- Specs/: Documentation
+This script scans the project directory and combines the content of source code,
+configuration, and documentation files into a single text file (combined_text.txt).
 
-Excludes archived folders and generic boilerplate.
+It respects the current project structure:
+- Root level scripts and docs
+- tools/: Sovereign Core (JS/HTML/CSS)
+- specs/: System Specifications
+- scripts/: CI/Utility scripts
 """
 import argparse
 import os
-
-from typing import Iterable, List, Tuple
-
+from typing import List, Tuple
 
 def find_project_root(start_path: str | None = None) -> str:
     """
-    Locate project root by looking for indicators like .git, pyproject.toml, README.md
+    Locate project root by looking for indicators like .git, package.json, README.md
     """
     if start_path is None:
         start_path = os.path.abspath(__file__)
@@ -28,142 +26,114 @@ def find_project_root(start_path: str | None = None) -> str:
     if os.path.isfile(path):
         path = os.path.dirname(path)
 
-    root_indicators = (".git", "pyproject.toml", "package.json", "README.md")
+    root_indicators = (".git", "package.json", "README.md")
     while True:
         if any(os.path.exists(os.path.join(path, ind)) for ind in root_indicators):
             return path
         parent = os.path.dirname(path)
         if parent == path:
-            # reached filesystem root, fall back to cwd
             return os.getcwd()
         path = parent
 
-
 def get_allowed_files(project_root: str) -> List[Tuple[str, str]]:
     """
-    Returns list of (file_path, section_name) for all allowed files according to documentation policy.
+    Returns list of (file_path, section_name) for all relevant project files.
     """
     allowed_files = []
     
-    # Root level allowed files
-    root_files = [
-        ("README.md", "ROOT_PROJECT"),
-        ("CHANGELOG.md", "ROOT_PROJECT"),
-    ]
-    for filename, section in root_files:
-        full_path = os.path.join(project_root, filename)
-        if os.path.exists(full_path):
-            allowed_files.append((full_path, section))
+    # Extensions we care about
+    code_exts = {'.py', '.js', '.ts', '.html', '.css', '.json', '.md', '.bat', '.ps1', '.sh', '.yaml', '.yml'}
     
-    # Root specs/ directory
-    root_specs_dir = os.path.join(project_root, "specs")
-    if os.path.exists(root_specs_dir):
-        for f in os.listdir(root_specs_dir):
-            if f.endswith(".md"):
-                allowed_files.append((os.path.join(root_specs_dir, f), "ROOT_SPECS"))
+    # Directories to completely ignore
+    ignored_dirs = {'.git', '.venv', 'browser_data', 'archive', '__pycache__', 'node_modules', '.github'}
     
-    # Backend (ECE Core)
-    backend_dir = os.path.join(project_root, "backend")
-    if os.path.exists(backend_dir):
-        # Backend Root Files (launchers, config, readme)
-        for f in os.listdir(backend_dir):
-            if f in ["README.md", "config.yaml", "requirements.txt"] or (f.endswith(".py") and not f.startswith("test_")):
-                 allowed_files.append((os.path.join(backend_dir, f), "BACKEND_ROOT"))
+    # Files to ignore
+    ignored_files = {
+        'package-lock.json', 
+        'combined_text.txt', 
+        'cozo_lib_wasm_bg.wasm',
+        'combined_memory.json',
+        'cozo_import_memory.json'
+    }
 
-        # Backend Source
-        src_dir = os.path.join(backend_dir, "src")
-        if os.path.exists(src_dir):
-            for root, dirs, files in os.walk(src_dir):
-                dirs[:] = [d for d in dirs if not d.startswith('.') and d != '__pycache__']
-                for f in files:
-                    if f.endswith('.py') and not f.startswith('test_'):
-                        allowed_files.append((os.path.join(root, f), "BACKEND_SRC"))
-    
-        # Backend specs/
-        backend_specs_dir = os.path.join(backend_dir, "specs")
-        if os.path.exists(backend_specs_dir):
-            for f in os.listdir(backend_specs_dir):
-                if f.endswith(".md"):
-                    allowed_files.append((os.path.join(backend_specs_dir, f), "BACKEND_SPECS"))
-    
-    # Anchor Chat (New TUI)
-    anchor_chat_dir = os.path.join(project_root, "anchor-chat")
-    if os.path.exists(anchor_chat_dir):
-        for root, dirs, files in os.walk(anchor_chat_dir):
-            dirs[:] = [d for d in dirs if not d.startswith('.') and d != '__pycache__']
-            for f in files:
-                if f.endswith(('.py', '.txt', '.md')):
-                    allowed_files.append((os.path.join(root, f), "ANCHOR_CHAT"))
+    for root, dirs, files in os.walk(project_root):
+        # Filter directories in-place to avoid walking into ignored ones
+        dirs[:] = [d for d in dirs if d not in ignored_dirs and not d.startswith('.')]
+        
+        rel_root = os.path.relpath(root, project_root)
+        section = "ROOT" if rel_root == "." else rel_root.replace(os.sep, "_").upper()
 
-    # Extension (Browser)
-    extension_dir = os.path.join(project_root, "extension")
-    if os.path.exists(extension_dir):
-        for root, dirs, files in os.walk(extension_dir):
-            dirs[:] = [d for d in dirs if not d.startswith('.')]
-            for f in files:
-                if f.endswith(('.js', '.html', '.json', '.css', '.md')):
-                    allowed_files.append((os.path.join(root, f), "EXTENSION"))
-    
+        for f in files:
+            if f in ignored_files:
+                continue
+            
+            ext = os.path.splitext(f)[1].lower()
+            if ext in code_exts:
+                full_path = os.path.join(root, f)
+                allowed_files.append((full_path, section))
+                
     return allowed_files
-
 
 def create_project_corpus(
     output_file: str | None = None,
-    include_custom_code: bool = True,
     dry_run: bool = False,
 ):
     """
-    Aggregates content from allowed project files according to documentation policy
+    Aggregates content from project files into a single corpus.
     """
     project_root = find_project_root()
     output_file = output_file or os.path.join(project_root, "combined_text.txt")
 
     print(f"Project Root Detected: {project_root}")
-    print("Reading from allowed directories according to documentation policy...")
-
     allowed_files = get_allowed_files(project_root)
 
     if not allowed_files:
-        print(f"No allowed files found in '{project_root}'.")
+        print(f"No relevant files found in '{project_root}'.")
         return
 
-    print(f"Found {len(allowed_files)} allowed files to process.")
+    print(f"Found {len(allowed_files)} files to process.")
 
     if dry_run:
         print(f"Dry run enabled — would process {len(allowed_files)} files:")
         for file_path, section in allowed_files:
-            print(f"  - {file_path} ({section})")
+            print(f"  - {os.path.relpath(file_path, project_root)} ({section})")
         return
 
     with open(output_file, "w", encoding="utf-8") as outfile:
+        # Add a file map at the very top for the orchestrator
+        outfile.write("=== PROJECT FILE MAP ===\n")
         for file_path, section in allowed_files:
-            print(f"Processing '{file_path}' in section {section}...")
+            rel_path = os.path.relpath(file_path, project_root)
+            outfile.write(f"- {rel_path} ({section})\n")
+        outfile.write("========================\n\n")
+
+        for file_path, section in allowed_files:
+            rel_path = os.path.relpath(file_path, project_root)
+            print(f"Processing '{rel_path}'...")
             try:
                 with open(file_path, "rb") as raw_file:
                     raw_data = raw_file.read()
                 if not raw_data:
                     continue
-                if not raw_data:
-                    continue
                 
-                # Standard library fallback: Try UTF-8, then fallback to replacing errors
                 try:
                     decoded_content = raw_data.decode("utf-8")
                 except UnicodeDecodeError:
                     decoded_content = raw_data.decode("utf-8", errors="replace")
 
-                outfile.write(f"--- START OF FILE: {file_path} (Section: {section}) ---\n\n")
-                outfile.write(decoded_content + "\n\n")
-                outfile.write(f"--- END OF FILE: {file_path} ---\n\n")
+                outfile.write(f"--- START OF FILE: {rel_path} ---\n")
+                outfile.write(decoded_content)
+                if not decoded_content.endswith('\n'):
+                    outfile.write('\n')
+                outfile.write(f"--- END OF FILE: {rel_path}---\n\n")
 
             except Exception as e:
-                print(f"An unexpected error occurred with file '{file_path}': {e}")
+                print(f"Error processing '{rel_path}': {e}")
 
-    print(f"\nCorpus aggregation complete. All allowed content saved to '{output_file}'.")
-
+    print(f"\nAggregation complete. Corpus saved to '{output_file}'.")
 
 def _parse_cli() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Aggregate content from allowed project directories only.")
+    p = argparse.ArgumentParser(description="Aggregate project code and docs for orchestration.")
     p.add_argument(
         "--out",
         "-o",
@@ -177,10 +147,8 @@ def _parse_cli() -> argparse.Namespace:
     )
     return p.parse_args()
 
-
 if __name__ == "__main__":
     args = _parse_cli()
-    
     create_project_corpus(
         output_file=args.out,
         dry_run=args.dry_run,

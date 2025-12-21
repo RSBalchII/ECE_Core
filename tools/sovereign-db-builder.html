@@ -4,17 +4,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Coda Sovereign Memory Builder (CozoDB + WASM)</title>
+    <title>Root Memory Builder</title>
     <style>
         :root {
             --bg: #1e1e1e;
             --text: #e0e0e0;
-            --accent: #0078d4;
-            --success: #28a745;
+            --accent: #00ff88;
+            --danger: #ff4444;
+            --warn: #ffc107;
+            --surface: #252526;
         }
 
         body {
-            font-family: sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             background: var(--bg);
             color: var(--text);
             padding: 20px;
@@ -25,6 +27,9 @@
         h1 {
             border-bottom: 1px solid #333;
             padding-bottom: 10px;
+            color: var(--accent);
+            font-weight: 300;
+            letter-spacing: 1px;
         }
 
         .drop-zone {
@@ -33,13 +38,14 @@
             text-align: center;
             margin: 20px 0;
             border-radius: 8px;
-            transition: border-color 0.3s;
+            transition: all 0.3s;
             cursor: pointer;
+            background: #111;
         }
 
         .drop-zone:hover {
             border-color: var(--accent);
-            background: #252526;
+            background: var(--surface);
         }
 
         .log-area {
@@ -48,26 +54,40 @@
             padding: 10px;
             height: 300px;
             overflow-y: auto;
-            font-family: monospace;
-            font-size: 0.9rem;
+            font-family: 'Consolas', monospace;
+            font-size: 0.85rem;
             color: #aaa;
+            border-radius: 4px;
         }
 
         button {
-            background: var(--accent);
+            background: #333;
             color: white;
-            border: none;
+            border: 1px solid #555;
             padding: 10px 20px;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 1rem;
+            font-size: 0.9rem;
             margin-right: 10px;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            border-color: var(--accent);
+            color: var(--accent);
         }
 
         button:disabled {
-            background: #444;
+            background: #222;
+            color: #555;
+            border-color: #333;
             cursor: not-allowed;
         }
+        
+        button.primary { background: var(--accent); color: #000; border: none; }
+        button.primary:hover { background: #00cc6a; }
+        button.danger { background: var(--danger); border-color: var(--danger); }
+        button.danger:hover { background: #cc0000; }
 
         .stat-box {
             display: flex;
@@ -76,861 +96,376 @@
         }
 
         .stat {
-            background: #2d2d2d;
-            padding: 10px;
-            border-radius: 4px;
+            background: var(--surface);
+            padding: 15px;
+            border-radius: 6px;
             flex: 1;
             text-align: center;
+            border: 1px solid #333;
         }
 
         .stat-val {
             font-size: 1.5rem;
             font-weight: bold;
             display: block;
+            margin-bottom: 5px;
         }
+        
+        .stat-label { font-size: 0.8rem; color: #888; text-transform: uppercase; }
+        
+        textarea {
+            width: 100%;
+            height: 60px;
+            background: #111;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            padding: 10px;
+            border-radius: 4px;
+            resize: vertical;
+            margin-bottom: 10px;
+            font-family: inherit;
+        }
+        textarea:focus { outline: none; border-color: var(--accent); }
     </style>
 </head>
 
 <body>
 
-    <h1>🧠 Sovereign Memory Builder</h1>
-    <p>Ingest your session logs into a persistent, browser-based CozoDB Graph.</p>
+    <h1>🌱 Root Memory Builder</h1>
+    <p>Ingest session logs into your local Root Graph.</p>
 
     <div class="stat-box">
-        <div class="stat"><span id="db-status" class="stat-val" style="color: #ff6b6b">Offline</span>Status</div>
-        <div class="stat"><span id="mem-count" class="stat-val">0</span>Memories</div>
-        <div class="stat"><span id="vec-status" class="stat-val">Loading...</span>Embedder</div>
+        <div class="stat">
+            <span id="db-status" class="stat-val" style="color: #ff6b6b">Offline</span>
+            <span class="stat-label">Status</span>
+        </div>
+        <div class="stat">
+            <span id="mem-count" class="stat-val">0</span>
+            <span class="stat-label">Memories</span>
+        </div>
+        <div class="stat">
+            <span id="vec-status" class="stat-val">Loading...</span>
+            <span class="stat-label">Embedder</span>
+        </div>
     </div>
 
     <div class="drop-zone" id="drop-zone">
-        Drag & Drop <code>combined_memory.json</code>, code files, or logs here<br>
-        <small>Supports JSON, MD, TXT, PY, JS, HTML, etc.</small>
+        Drag & Drop <code>combined_memory.json</code>, logs, or text files here<br>
+        <small style="color: #666">JSON, MD, TXT, PY, JS, HTML</small>
     </div>
     <input type="file" id="file-input" multiple style="display:none">
 
     <!-- Quick Add Section -->
-    <div style="margin: 20px 0; padding: 15px; border: 1px solid #444; background: #252526; border-radius: 8px;">
-        <h3 style="margin-top: 0; color: #fff;">📝 Quick Add Memory</h3>
-        <textarea id="quick-mem-content" placeholder="Type a memory here (e.g. 'The secret code is Blueberry-Omega')..."
-            style="width: 100%; height: 60px; background: #1e1e1e; color: #e0e0e0; border: 1px solid #555; padding: 8px; border-radius: 4px; resize: vertical; margin-bottom: 10px;"></textarea>
+    <div style="margin: 20px 0; padding: 20px; border: 1px solid #333; background: var(--surface); border-radius: 8px;">
+        <h3 style="margin-top: 0; font-weight: 300;">📝 Quick Add</h3>
+        <textarea id="quick-mem-content" placeholder="Type a memory here (e.g. 'Project X password is...')"></textarea>
         <div style="text-align: right;">
-            <button id="quick-add-btn" style="background: #28a745;">Add to Graph</button>
+            <button id="quick-add-btn" class="primary">Add to Graph</button>
         </div>
     </div>
 
-    <div style="margin-bottom: 10px;">
-        <button id="auto-import-btn" style="background: #17a2b8;" disabled
-            title="Primary ingestion from combined_memory.json">Auto-Import</button>
-        <button id="export-db-btn" style="background: #ffc107;" disabled
-            title="Export with embeddings for portability">Export DB (JSON)</button>
-        <button id="reset-btn" style="background: #dc3545" disabled title="Reset entire database">Nuke Database</button>
-        <button id="query-btn" disabled title="Run test query on memories">Test Query</button>
-        <button id="copy-logs-btn" style="background: #333; border: 1px solid #555;">📋 Copy Logs</button>
+    <div style="margin-bottom: 10px; display: flex; gap: 10px; flex-wrap: wrap;">
+        <button id="auto-import-btn" disabled title="Import from ./cozo_import_memory.json">Auto-Import</button>
+        <button id="export-db-btn" disabled>Export JSON</button>
+        <button id="query-btn" disabled>Test Query</button>
+        <div style="flex-grow: 1"></div>
+        <button id="reset-btn" class="danger" disabled>Nuke Database</button>
     </div>
 
     <div class="log-area" id="logs"></div>
 
     <script type="module">
-        import initCozo, { CozoDb } from './cozo_lib_wasm.js';
-        import { flushPendingWrites, loadAllFromIndexedDb, writeToIndexedDb, closeDatabase, clearIndexedDbStore } from './indexeddb.js';
+        import { SovereignLogger, initCozo, createStore } from './modules/sovereign.js';
+        import { loadAllFromIndexedDb, closeDatabase, clearIndexedDbStore, flushPendingWrites } from './indexeddb.js';
         import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0';
-        // pako for gzip/zlib decode attempts
-        import * as pako from 'https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.esm.mjs';
 
-        // Skip local model checks for speed
         env.allowLocalModels = false;
 
-        let db;
-        let embedder;
-        const logs = document.getElementById('logs');
-        document.getElementById('copy-logs-btn').addEventListener('click', () => {
-            const text = logs.innerText;
-            navigator.clipboard.writeText(text).then(() => {
-                const btn = document.getElementById('copy-logs-btn');
-                const original = btn.textContent;
-                btn.textContent = "✅ Copied!";
-                setTimeout(() => btn.textContent = original, 2000);
-            }).catch(err => log(`Failed to copy logs: ${err}`, 'error'));
-        });
-        const statusEl = document.getElementById('db-status');
-        const memCountEl = document.getElementById('mem-count');
-        const vecStatusEl = document.getElementById('vec-status');
+        // --- 0. KERNEL SETUP ---
+        const logger = new SovereignLogger('Root-Builder');
+        
+        // Wrap logger to output to DOM as well
+        const originalInfo = logger.info.bind(logger);
+        logger.info = (msg) => { originalInfo(msg); appendLog(msg, 'info'); };
+        
+        const originalWarn = logger.warn.bind(logger);
+        logger.warn = (msg) => { originalWarn(msg); appendLog(msg, 'warn'); };
+        
+        const originalError = logger.error.bind(logger);
+        logger.error = (msg) => { originalError(msg); appendLog(msg, 'error'); };
+        
+        const originalSuccess = logger.success.bind(logger);
+        logger.success = (msg) => { originalSuccess(msg); appendLog(msg, 'success'); };
 
-        const codaChannel = new BroadcastChannel('coda_logs');
-        function log(msg, type = 'info') {
+        function appendLog(msg, type) {
+            const logs = document.getElementById('logs');
             const line = document.createElement('div');
             const time = new Date().toLocaleTimeString();
             line.textContent = `[${time}] ${msg}`;
             if (type === 'error') line.style.color = '#ff6b6b';
-            if (type === 'success') line.style.color = '#28a745';
+            if (type === 'success') line.style.color = '#00ff88';
+            if (type === 'warn') line.style.color = '#ffc107';
             logs.appendChild(line);
             logs.scrollTop = logs.scrollHeight;
-            // Also broadcast mission-control message so log-viewer and other tabs can show it
+        }
+
+        const { state, subscribe } = createStore({
+            dbStatus: 'Offline',
+            dbColor: '#ff6b6b',
+            memCount: 0,
+            embedderStatus: 'Loading...',
+            embedderColor: '#ffc107',
+            isReady: false
+        });
+
+        // UI Bindings
+        subscribe((prop, val) => {
+            if (prop === 'dbStatus') {
+                const el = document.getElementById('db-status');
+                el.innerText = val;
+                el.style.color = state.dbColor;
+            }
+            if (prop === 'memCount') document.getElementById('mem-count').innerText = val;
+            if (prop === 'embedderStatus') {
+                const el = document.getElementById('vec-status');
+                el.innerText = val;
+                el.style.color = state.embedderColor;
+            }
+            if (prop === 'isReady' && val === true) {
+                document.getElementById('auto-import-btn').disabled = false;
+                document.getElementById('export-db-btn').disabled = false;
+                document.getElementById('reset-btn').disabled = false;
+                document.getElementById('query-btn').disabled = false;
+            }
+        });
+
+        let db;
+        let embedder;
+        let CozoDbClass;
+
+        // --- 1. INITIALIZATION ---
+        async function init() {
             try {
-                codaChannel.postMessage({ source: 'Sovereign-DB', time: new Date().toISOString(), type, message: msg });
+                logger.info("Initializing Root Kernel...");
+                
+                // Load Cozo WASM via Kernel
+                CozoDbClass = await initCozo('./cozo_lib_wasm_bg.wasm');
+
+                // Probe IndexedDB (Recovery Logic)
+                try {
+                    const [keys, items] = await loadAllFromIndexedDb('coda_memory', 'cozo_store', () => { });
+                    logger.info(`Storage Probe: Found ${keys.length} items in persistence layer.`);
+                    closeDatabase(); // Important: Release lock
+                    
+                    // Try Persistent Load
+                    try {
+                        const dbPromise = CozoDbClass.new_from_indexed_db('coda_memory', 'cozo_store', () => {});
+                        // Timeout protection
+                        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('DB Load Timeout')), 5000));
+                        db = await Promise.race([dbPromise, timeoutPromise]);
+                        
+                        state.dbStatus = "Active (Persistent)";
+                        state.dbColor = "#00ff88";
+                        logger.success("Root Graph Online (Persistent).");
+                    } catch (e) {
+                        logger.warn(`Persistence load failed: ${e.message}. Clearing corruption...`);
+                        await clearIndexedDbStore('coda_memory', 'cozo_store');
+                        // Fallback to In-Memory
+                        db = CozoDbClass.new();
+                        state.dbStatus = "Active (Memory-Only)";
+                        state.dbColor = "#ffc107";
+                        logger.warn("Fallback to In-Memory DB. Data will not be saved.");
+                    }
+
+                } catch (e) {
+                    logger.warn("Storage probe failed. Creating fresh in-memory DB.");
+                    db = CozoDbClass.new();
+                    state.dbStatus = "Active (Memory-Only)";
+                    state.dbColor = "#ffc107";
+                }
+
+                // Global Exposure for Debugging
+                window.db = db;
+                window.runQuery = safeRun;
+
+                // Load Embedder
+                pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2').then(pipe => {
+                    embedder = pipe;
+                    state.embedderStatus = "Ready";
+                    state.embedderColor = "#00ff88";
+                    logger.success("Neural Embedder Loaded.");
+                }).catch(e => {
+                    state.embedderStatus = "Error";
+                    state.embedderColor = "#ff4444";
+                    logger.error(`Embedder failed: ${e.message}`);
+                });
+
+                // Schema Sync
+                await ensureSchema();
+                await updateStats();
+                state.isReady = true;
+
             } catch (e) {
-                console.warn('Broadcast post failed:', e.message);
+                logger.error(`CRITICAL FAILURE: ${e.message}`);
             }
         }
 
         async function safeRun(query, params = "{}") {
-            if (!db) throw new Error("Database not initialized");
-            let res = await db.run(query, params);
-
-            // If result is a string, parse it
+            if (!db) throw new Error("DB offline");
+            const res = await db.run(query, params);
+            let parsed = res;
             if (typeof res === 'string') {
-                try { res = JSON.parse(res); } catch (e) {
-                    console.warn("Failed to parse CozoDB result string:", res);
-                }
+                try { parsed = JSON.parse(res); } catch (e) { }
             }
-
-            if (res && res.ok === false) {
-                const errMsg = res.message || "Unknown CozoDB error";
-                // Debug logging for parser errors
-                if (res.code === 'parser::no_entry') {
-                    console.error("PARSER NO ENTRY DEBUG:", {
-                        query: query,
-                        queryLen: query.length,
-                        firstChar: query.charCodeAt(0),
-                        paramsLen: params.length
-                    });
-                    log(`DEBUG: Parser failed. Query len: ${query.length}, Content: "${query.replace(/\n/g, '\\n')}"`, 'error');
-                }
-                throw new Error(`${errMsg} (${res.code || 'no_code'})`);
-            }
-            return res;
+            if (parsed && parsed.ok === false) throw new Error(parsed.message);
+            return parsed;
         }
 
-        async function verifyMemoryRelation() {
+        async function ensureSchema() {
             try {
-                // Direct probe: query a specific relation. If it doesn't exist, it throws relation_not_found
                 await safeRun("?[id] := *memory{id} :limit 1", "{}");
-                return true;
             } catch (e) {
-                // If checking fails, we assume it might be missing or broken
-                return false;
-            }
-        }
-
-        async function checkStorageQuota() {
-            if (navigator.storage && navigator.storage.estimate) {
-                const { quota, usage } = await navigator.storage.estimate();
-                const usedMB = (usage / (1024 * 1024)).toFixed(2);
-                const totalMB = (quota / (1024 * 1024)).toFixed(2);
-                const pct = ((usage / quota) * 100).toFixed(2);
-                log(`Storage Check: ${usedMB}MB / ${totalMB}MB used (${pct}%).`, pct > 80 ? 'warn' : 'info');
-                if (pct > 95) log('CRITICAL: Storage quota nearly full. Persistence will fail!', 'error');
-            }
-        }
-
-        // --- 1. Initialization ---
-        async function init() {
-            try {
-                await checkStorageQuota();
-                log("Initializing CozoDB (WASM)... (Ensure NO other CozoDB tabs like Main Console are open!)");
-                await initCozo('./cozo_lib_wasm_bg.wasm');
-
-                // Probe IndexedDB before attempting to let WASM load from it (that call can panic on malformed blobs).
-                try {
-                    const [keys, items] = await loadAllFromIndexedDb('coda_memory', 'cozo_store', () => { });
-                    log(`IndexedDB probe found ${keys.length} entries in 'cozo_store'.`, 'info');
-
-                    // CRITICAL: Close the probe connection so CozoDB WASM can open its own exclusive connection without hanging
-                    closeDatabase();
-
-
-                    // Always try to load from IndexedDB first (Persistence Mode)
-                    try {
-                        log("Attempting to create CozoDB from IndexedDB...", 'info');
-
-                        // Add a timeout wrapper to prevent hanging on corrupted data
-                        const dbPromise = CozoDb.new_from_indexed_db('coda_memory', 'cozo_store', () => { });
-                        const timeoutPromise = new Promise((_, reject) =>
-                            setTimeout(() => reject(new Error('IndexedDB load timeout - possible corruption')), 5000)
-                        );
-
-                        db = await Promise.race([dbPromise, timeoutPromise]);
-
-                        if (!db) {
-                            throw new Error('CozoDB returned null instance');
-                        }
-
-                        window.db = db;
-                        window.createSchema = createSchema;
-                        window.export_relations = (data) => db.export_relations(data);
-                        window.import_relations = (data) => db.import_relations(data);
-                        window.runQuery = (q, params = "{}") => safeRun(q, params);
-
-                        statusEl.textContent = "Active";
-                        statusEl.style.color = "#28a745";
-                        log("CozoDB Online (OPFS Storage).", "success");
-                        log("Debug: CozoDB instance exposed as window.db; helpers: window.createSchema, window.runQuery, window.export_relations, window.import_relations", 'debug');
-                    } catch (initErr) {
-                        log(`Automatic load_from_indexed_db failed: ${initErr && initErr.message ? initErr.message : String(initErr)}`, 'error');
-                        console.error('CozoDB automatic load error:', initErr);
-
-                        // If we get a Uint8Array conversion error, the data is corrupted
-                        if (initErr.message && initErr.message.includes('Uint8Array')) {
-                            log('IndexedDB appears to contain corrupted data. Clearing and starting fresh...', 'warn');
-
-                            // Try to clear the corrupted data
-                            try {
-                                await clearIndexedDbStore('coda_memory', 'cozo_store');
-                                log('Cleared corrupted IndexedDB store', 'info');
-                            } catch (clearErr) {
-                                log(`Failed to clear IndexedDB: ${clearErr.message}`, 'warn');
-                            }
-                        }
-
-                        // fall through to create in-memory DB below
+                logger.warn("Schema missing. Creating Root Graph schema...");
+                await safeRun(`
+                    :create memory {
+                        id: String =>
+                        timestamp: Int,
+                        role: String,
+                        content: String,
+                        source: String,
+                        embedding: <F32; 384>
                     }
-
-                    if (!db) {
-                        try {
-                            log('Creating fallback in-memory CozoDB instance due to IndexedDB load failure...', 'warn');
-                            db = CozoDb.new();
-
-                            if (!db) {
-                                throw new Error('CozoDb.new() returned null');
-                            }
-
-                            window.db = db;
-                            window.createSchema = createSchema;
-                            window.export_relations = (data) => db.export_relations(data);
-                            window.import_relations = (data) => db.import_relations(data);
-                            window.runQuery = (q, params = "{}") => safeRun(q, params);
-                            statusEl.textContent = "Active (in-memory)";
-                            statusEl.style.color = "#ffc107";
-                            log('Created fallback in-memory CozoDB instance. Data will not persist between sessions.', 'info');
-
-                            // Test the database is working
-                            try {
-                                const testResult = await safeRun('?[x] := x=42', '{}');
-                                log(`Database test successful: ${JSON.stringify(testResult)}`, 'debug');
-                            } catch (testErr) {
-                                log(`Database test failed: ${testErr.message}`, 'warn');
-                            }
-
-                        } catch (fallbackErr) {
-                            log(`Failed to create fallback in-memory DB: ${fallbackErr.message}`, 'error');
-                            statusEl.textContent = "Failed";
-                            statusEl.style.color = "#dc3545";
-                        }
-                    }
-                } catch (probeErr) {
-                    // If probing the store itself fails, just create the in-memory fallback
-                    log(`Failed to probe IndexedDB store for entries: ${probeErr.message}`, 'warn');
-                    try {
-                        log('Creating fallback in-memory CozoDB instance...', 'info');
-                        db = CozoDb.new();
-
-                        if (!db) {
-                            throw new Error('CozoDb.new() returned null');
-                        }
-
-                        window.db = db;
-                        window.createSchema = createSchema;
-                        window.export_relations = (data) => db.export_relations(data);
-                        window.import_relations = (data) => db.import_relations(data);
-                        window.runQuery = (q, params = "{}") => safeRun(q, params);
-                        statusEl.textContent = "Active (in-memory)";
-                        statusEl.style.color = "#ffc107";
-                        log('Created fallback in-memory CozoDB instance. Data will not persist between sessions.', 'info');
-
-                        // Test the database is working
-                        try {
-                            const testResult = await safeRun('?[x] := x=42', '{}');
-                            log(`Database test successful: ${JSON.stringify(testResult)}`, 'debug');
-                        } catch (testErr) {
-                            log(`Database test failed: ${testErr.message}`, 'warn');
-                        }
-
-                    } catch (fallbackErr) {
-                        log(`Failed to create fallback in-memory DB: ${fallbackErr.message}`, 'error');
-                        statusEl.textContent = "Failed";
-                        statusEl.style.color = "#dc3545";
-                    }
-                }
-
-                // Check for a pending stored relations payload saved earlier and offer to apply it
-                try {
-                    const pending = localStorage.getItem('sov_pending_force_relations');
-                    if (pending) {
-                        log('Found pending stored relations payload in localStorage. You can Apply it now from the UI or allow automatic apply prompt.', 'info');
-                        if (confirm('A pending stored relations payload was found in localStorage. Apply it to the DB now?')) {
-                            try {
-                                log('Applying pending stored relations payload now...', 'info');
-                                const res = db.import_relations(pending);
-                                log(`import_relations returned: ${res}`, 'info');
-                                try { await flushPendingWrites(30000); } catch (ff) { log(`Flush warning: ${ff.message}`, 'warn'); }
-                                await updateStats();
-                                try { const cnt = await safeRun(`?[count(id)] := *memory{id}`, "{}"); log(`DB count after applying pending payload: ${cnt.rows && cnt.rows[0] ? cnt.rows[0][0] : 'unknown'}`, 'success'); } catch (e) { log(`Post-apply count check failed: ${e.message}`, 'warn'); }
-                                localStorage.removeItem('sov_pending_force_relations');
-                                log('Applied pending stored relations payload and removed it from localStorage.', 'success');
-                            } catch (autoErr) {
-                                log(`Automatic apply failed: ${autoErr.message}`, 'error');
-                            }
-                        } else {
-                            log('Pending stored relations payload retained in localStorage for manual application.', 'info');
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Pending payload check failed:', e.message);
-                }
-
-                // Start Embedder Load (Non-blocking)
-                log("Loading Embedding Model (all-MiniLM-L6-v2) in background...");
-                pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2').then(pipe => {
-                    embedder = pipe;
-                    vecStatusEl.textContent = "Ready";
-                    vecStatusEl.style.color = "#28a745";
-                    log("Embedder Ready.", "success");
-                }).catch(embErr => {
-                    log(`Embedder Load Warning: ${embErr.message}`, "warn");
-                    vecStatusEl.textContent = "Error";
-                    vecStatusEl.style.color = "#dc3545";
-                });
-
-                // Final Schema Sync
-                try {
-                    const exists = await verifyMemoryRelation();
-                    if (!exists) {
-                        log("Memory relation missing. Creating schema...", "warn");
-                        await createSchema();
-                    } else {
-                        log("Schema Verified.", "success");
-                    }
-                    await updateStats();
-
-                    // Enable UI (Always enable if we get this far)
-                    document.getElementById('auto-import-btn').disabled = false;
-                    document.getElementById('export-db-btn').disabled = false;
-                    document.getElementById('reset-btn').disabled = false;
-                    document.getElementById('query-btn').disabled = false;
-
-                } catch (schemaErr) {
-                    log(`Schema sync failed: ${schemaErr.message}`, 'error');
-                }
-
-                log("Initialization complete.", "success");
-            } catch (e) {
-                log(`Init Error: ${e.message}`, 'error');
-            }
-        }
-
-        // --- 2. Schema Definition (The Brain Structure) ---
-        async function createSchema() {
-            const schemaQuery = `
-            # Core Memory Store: Vector + Content in one
-            :create memory {
-                id: String
-                =>
-                timestamp: Int,    # Unix Epoch (allows time travel) - NOW A VALUE FOR SORTING
-                role: String,      # 'user', 'assistant'
-                content: String,
-                source: String,
-                embedding: <F32; 384> # MiniLM dimension
-            };
-        `;
-            const res = await safeRun(schemaQuery, "{}");
-            if (res && res.ok === false) {
-                throw new Error(`Schema creation failed: ${res.message} (${res.code})`);
-            }
-        }
-
-        // --- 3. Ingestion Logic ---
-        async function handleFiles(files) {
-            if (!embedder || !db) return alert("System not ready!");
-
-            for (const file of files) {
-                log(`Reading ${file.name}...`);
-
-                try {
-                    // 1. Handle JSON (Structured Memory or Sessions)
-                    if (file.name.toLowerCase().endsWith('.json')) {
-                        const text = await file.text();
-                        const json = JSON.parse(text);
-                        let records = [];
-
-                        if (json.relations && Array.isArray(json.relations)) {
-                            // Shape A: CozoDB Relations Dump
-                            const mem = json.relations.find(r => r.name === 'memory') || json.relations[0];
-                            if (mem) {
-                                const rrows = mem.rows || (mem.named_rows && mem.named_rows.rows) || (mem.NamedRows && mem.NamedRows.rows) || [];
-                                const hdr = mem.headers || (mem.named_rows && mem.named_rows.headers) || ['id', 'timestamp', 'role', 'content', 'source', 'embedding'];
-                                records = rrows.map(rowArray => {
-                                    const rec = {};
-                                    hdr.forEach((h, i) => rec[h] = rowArray[i]);
-                                    return rec;
-                                });
-                                log(`Detected Relations format in dropped file. Extracted ${records.length} records.`, 'info');
-                            }
-                        } else if (Array.isArray(json)) {
-                            records = json;
-                        } else if (json.conversations) {
-                            records = json.conversations;
-                        } else {
-                            records = [json];
-                        }
-
-                        log(`Processing ${records.length} records from ${file.name}...`);
-                        await processRecords(records, file.name);
-                    }
-                    // 2. Handle Text Files (Code, Markdown, Logs)
-                    else if (file.type.startsWith('text/') || file.name.match(/\.(md|txt|py|js|ts|tsx|jsx|html|css|scss|bat|ps1|sh|yaml|yml|toml|jsonl|xml|ini|conf|sql|rs|c|cpp|h|java|go|rb|php)$/i)) {
-                        const content = await file.text();
-                        const record = {
-                            role: 'system',
-                            type: 'document',
-                            source: file.name,
-                            timestamp: file.lastModified,
-                            content: content
-                        };
-                        await processRecords([record], file.name);
-                    }
-                    // 3. Handle Images/Media (Future Proofing)
-                    else if (file.type.startsWith('image/')) {
-                        log(`[Future] Image detected: ${file.name}. Multimodal embedding not yet active.`, 'warning');
-                    }
-                    else {
-                        log(`Skipping unsupported file type: ${file.name} (${file.type})`, 'warning');
-                    }
-
-                } catch (e) {
-                    log(`Error processing ${file.name}: ${e.message}`, 'error');
-                }
-            }
-            await updateStats();
-        }
-
-        const SOV_BATCH_SIZE = 100; // increased batch size to speed up ingestion (was 5)
-
-        const helper = async (json) => {
-            // Normalize rows
-            let rawRows = [];
-            if (Array.isArray(json)) rawRows = json;
-            else if (json && json.relations && Array.isArray(json.relations)) {
-                const mem = json.relations.find(r => r.name === 'memory') || json.relations[0];
-                const rrows = mem.rows || (mem.named_rows && mem.named_rows.rows) || (mem.NamedRows && mem.NamedRows.rows) || [];
-                if (rrows.length && typeof rrows[0] === 'object' && !Array.isArray(rrows[0])) rawRows = rrows;
-                else {
-                    const hdr = mem.headers && mem.headers.length ? mem.headers : ['id', 'timestamp', 'role', 'content', 'source', 'embedding'];
-                    rawRows = rrows.map(ar => {
-                        const a = Array.isArray(ar) ? ar.slice() : [];
-                        while (a.length < hdr.length) a.push(null);
-                        const obj = {};
-                        hdr.forEach((h, i) => obj[h] = a[i]);
-                        return obj;
-                    });
-                }
-            } else {
-                return log('Auto-rehydrate: Unrecognized JSON shape; expected array or {relations: [...]}.', 'error');
-            }
-
-            const canonicalRows = rawRows.map(rec => {
-                const ts = rec.timestamp ? (isNaN(Number(rec.timestamp)) ? Date.now() : Number(rec.timestamp)) : Date.now();
-                const id = rec.id || rec.uid || `${ts}-${Math.random().toString(36).substr(2, 9)}`;
-                const role = rec.role || rec.type || 'system';
-                let content = rec.content || rec.response_content || rec.message || '';
-                if (typeof content !== 'string') content = JSON.stringify(content).slice(0, 200000);
-                if (content.length > 20000) content = content.slice(0, 20000) + '...[TRUNCATED]';
-                return [id, ts, role, content, rec.source || 'file', rec.embedding || []];
-            });
-
-            // Run insertion (reuse same conservative per-row batch logic)
-            const q = `:put memory { id, timestamp, role, content, source, embedding }`;
-            const batchSize = Math.max(1, Math.min(SOV_BATCH_SIZE, 50));
-            let inserted = 0;
-            for (let i = 0; i < canonicalRows.length; i += batchSize) {
-                const chunk = canonicalRows.slice(i, i + batchSize);
-                for (let j = 0; j < chunk.length; j++) {
-                    const r = chunk[j];
-                    const dataObj = { id: [r[0]], timestamp: [r[1]], role: [r[2]], content: [r[3]], source: [r[4]], embedding: [r[5]] };
-                    try { await safeRun(q, JSON.stringify(dataObj)); inserted++; } catch (e) { log(`Auto insert failed at ${i + j}: ${e.message}`, 'error'); }
-                }
-                try { await flushPendingWrites(30000); } catch (ff) { log(`Flush warning: ${ff.message}`, 'warn'); }
-                log(`Auto Rehydrate: inserted ${inserted}/${canonicalRows.length} so far...`, 'info');
-            }
-            try { await flushPendingWrites(30000); } catch (ff) { log(`Final flush warning: ${ff.message}`, 'warn'); }
-            await updateStats();
-            try { const cnt = await safeRun(`?[count(id)] := *memory{id}`, "{}"); log(`Auto Rehydrate final DB count: ${cnt && cnt.rows && cnt.rows[0] ? cnt.rows[0][0] : 'unknown'}`, cnt && cnt.rows && cnt.rows[0] && cnt.rows[0][0] ? 'success' : 'warn'); } catch (e) { log(`Final count check failed: ${e.message}`, 'warn'); }
-        };
-
-        async function processRecords(records, sourceFilename) {
-            // Save a trimmed local backup of records so we can recover if persistence fails
-            try {
-                const trimmed = Array.isArray(records) ? records.slice(0, 10) : [records];
-                localStorage.setItem('sov_local_backup', JSON.stringify(trimmed));
-                log('Saved minimal local backup (10 records) to localStorage.', 'info');
-            } catch (e) {
-                log(`localStorage backup failed: ${e.message}`, 'warn');
-            }
-
-            let batch = [];
-            for (const record of records) {
-                // TIME TRAVEL FIX: Use the record's timestamp, not now()
-                let ts = Date.now();
-                if (record.timestamp) {
-                    ts = new Date(record.timestamp).getTime();
-                } else if (record.created_at) {
-                    ts = new Date(record.created_at).getTime();
-                }
-
-                // Content extraction
-                let content = record.content || record.response_content || record.message || "";
-                let role = record.role || record.type || "unknown";
-                let source = record.source || sourceFilename;
-
-                if (!content) continue;
-
-                // Truncate content to prevent WASM OOM (keep first 20KB)
-                if (content.length > 20000) {
-                    content = content.substring(0, 20000) + "...[TRUNCATED]";
-                }
-
-                // Generate Vector (or reuse existing)
-                let embedding = [];
-                if (record.embedding && Array.isArray(record.embedding) && record.embedding.length > 0) {
-                    embedding = record.embedding;
-                } else {
-                    const output = await embedder(content, { pooling: 'mean', normalize: true });
-                    embedding = Array.from(output.data);
-                }
-
-                // Create ID
-                const id = `${ts}-${Math.random().toString(36).substr(2, 9)}`;
-
-                batch.push([id, ts, role, content, source, embedding]);
-
-                if (batch.length >= SOV_BATCH_SIZE) {
-                    await insertBatch(batch);
-                    batch = [];
-                }
-            }
-            if (batch.length > 0) await insertBatch(batch);
-            // Final flush and stats update to ensure persistence
-            try {
-                await flushPendingWrites(30000);
-                log('Final flush complete.', 'info');
-            } catch (ff) {
-                log(`Final flush timeout: ${ff.message}`, 'warn');
-            }
-            await updateStats();
-            log(`Finished processing batch from ${sourceFilename}`, "success");
-        }
-
-        async function insertBatch(rows) {
-            // Datalog insert
-            const q = `?[id, timestamp, role, content, source, embedding] <- $data :put memory { id, timestamp, role, content, source, embedding }`;
-            try {
-                const paramObj = {
-                    data: rows
-                };
-
-                log(`Inserting batch of ${rows.length} records...`, 'info');
-                const res = await safeRun(q, JSON.stringify(paramObj));
-
-                log(`✅ Batch inserted: ${rows.length} records`, 'success');
-                // Ensure writes have been flushed to IndexedDB before proceeding
-                try {
-                    await flushPendingWrites(30000);
-                    log('Writes flushed to IndexedDB.', 'info');
-                } catch (fw) {
-                    log(`Flush pending writes timed out: ${fw.message}`, 'warn');
-                }
-
-                // Diagnostic: log current DB count after this batch insert
-                try {
-                    const cnt = await safeRun(`?[count(id)] := *memory{id}`, "{}");
-                    if (cnt && cnt.rows && cnt.rows[0]) {
-                        log(`DB count after batch insert: ${cnt.rows[0][0]}`, 'info');
-                    }
-                } catch (cErr) {
-                    log(`Post-insert count check failed: ${cErr.message}`, 'warn');
-                }
-            } catch (e) {
-                log(`Insert error: ${e.message}`, 'error');
-                console.error(e);
+                `, "{}");
+                logger.success("Schema Created.");
             }
         }
 
         async function updateStats() {
             try {
                 const res = await safeRun(`?[count(id)] := *memory{id}`, "{}");
-                if (res && res.rows && res.rows.length > 0) {
-                    memCountEl.textContent = res.rows[0][0];
-                } else {
-                    memCountEl.textContent = "0";
-                }
-            } catch (e) {
-                console.warn("Stats update warning:", e.message);
-                memCountEl.textContent = "0";
-            }
+                if (res.rows && res.rows.length) state.memCount = res.rows[0][0];
+            } catch (e) { }
         }
 
-        // --- 4. Event Listeners ---
+        // --- 2. INGESTION LOGIC ---
+        const SOV_BATCH_SIZE = 50;
+
+        async function handleFiles(files) {
+            if (!embedder || !db) return logger.error("System not ready.");
+            for (const file of files) {
+                logger.info(`Reading ${file.name}...`);
+                try {
+                    const text = await file.text();
+                    let records = [];
+                    
+                    if (file.name.endsWith('.json')) {
+                        const json = JSON.parse(text);
+                        if (Array.isArray(json)) records = json;
+                        else if (json.conversations) records = json.conversations;
+                        else if (json.relations) {
+                             // Extract rows logic simplified
+                             const mem = json.relations.find(r => r.name === 'memory') || json.relations[0];
+                             if (mem) {
+                                 const hdr = mem.headers || ['id','timestamp','role','content','source','embedding'];
+                                 records = (mem.rows || []).map(r => {
+                                     const obj = {};
+                                     hdr.forEach((h,i) => obj[h] = r[i]);
+                                     return obj;
+                                 });
+                             }
+                        }
+                    } else {
+                        // Text file
+                        records = [{
+                            role: 'system',
+                            source: file.name,
+                            timestamp: file.lastModified,
+                            content: text
+                        }];
+                    }
+                    
+                    await processRecords(records, file.name);
+                } catch (e) {
+                    logger.error(`Failed ${file.name}: ${e.message}`);
+                }
+            }
+            await updateStats();
+        }
+
+        async function processRecords(records, sourceName) {
+            let batch = [];
+            for (const rec of records) {
+                let content = rec.content || rec.message || "";
+                if (!content) continue;
+                if (content.length > 20000) content = content.substring(0, 20000) + "...[TRUNCATED]";
+
+                let embedding = rec.embedding || [];
+                if (!embedding.length) {
+                    const out = await embedder(content, { pooling: 'mean', normalize: true });
+                    embedding = Array.from(out.data);
+                }
+
+                const ts = rec.timestamp ? new Date(rec.timestamp).getTime() : Date.now();
+                const id = `${ts}-${Math.random().toString(36).substr(2,9)}`;
+                
+                batch.push([id, ts, rec.role || 'unknown', content, rec.source || sourceName, embedding]);
+
+                if (batch.length >= SOV_BATCH_SIZE) {
+                    await insertBatch(batch);
+                    batch = [];
+                }
+            }
+            if (batch.length) await insertBatch(batch);
+            try { await flushPendingWrites(); } catch (e) {}
+            logger.success(`Imported ${records.length} items from ${sourceName}`);
+        }
+
+        async function insertBatch(rows) {
+            const q = `?[id, ts, role, content, src, vec] <- $data :put memory { id, timestamp: ts, role, content, source: src, embedding: vec }`;
+            await safeRun(q, JSON.stringify({ data: rows }));
+        }
+
+        // --- 3. EVENT LISTENERS ---
         document.getElementById('drop-zone').addEventListener('click', () => document.getElementById('file-input').click());
         document.getElementById('file-input').addEventListener('change', (e) => handleFiles(e.target.files));
+        
+        document.getElementById('drop-zone').addEventListener('dragover', (e) => { e.preventDefault(); e.target.style.borderColor = '#00ff88'; });
+        document.getElementById('drop-zone').addEventListener('drop', (e) => { e.preventDefault(); e.target.style.borderColor = '#444'; handleFiles(e.dataTransfer.files); });
 
-        // Quick Add Listener
-        const quickAddBtn = document.getElementById('quick-add-btn');
-        if (quickAddBtn) {
-            quickAddBtn.addEventListener('click', async () => {
-                const txtArea = document.getElementById('quick-mem-content');
-                const content = txtArea.value.trim();
-                if (!content) return alert("Please type some content first.");
-
-                if (!embedder || !db) return alert("System initializing... please wait.");
-
-                // Create a single record
-                const record = {
-                    role: 'manual',
-                    type: 'manual_entry',
-                    source: 'user_input',
-                    timestamp: Date.now(),
-                    content: content
-                };
-
-                log(`Processing manual entry...`);
-                await processRecords([record], 'manual_input');
-                txtArea.value = ""; // Clear input
-                log("Manual entry added successfully.", "success");
-            });
-        }
-
-        document.getElementById('drop-zone').addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.target.style.borderColor = '#0078d4';
-        });
-        document.getElementById('drop-zone').addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.target.style.borderColor = '#444';
-            handleFiles(e.dataTransfer.files);
-        });
-
-        document.getElementById('query-btn').addEventListener('click', async () => {
-            // Self-healing: Verify schema exists before query
-            const isOk = await verifyMemoryRelation();
-            if (!isOk) log("Relation repair attempted. Retrying query...", "info");
-
-            // Test "Graph-R1" Logic: Find recent memories (probe if timestamp is available before sorting)
-            try {
-                // Probe for timestamp presence in at least one row
-                const tsProbe = await safeRun(`?[ts] := *memory{timestamp: ts} :limit 1`, "{}");
-                const hasTimestamp = tsProbe && tsProbe.rows && tsProbe.rows.length > 0 && tsProbe.rows[0][0] !== null && tsProbe.rows[0][0] !== undefined;
-
-                const qSort = `
-                ?[timestamp, role, source, content] := 
-                    *memory{timestamp, role, source, content}
-                :sort -timestamp
-                :limit 5
-            `;
-
-                const qNoTs = `
-                ?[role, source, content] := 
-                    *memory{role, source, content}
-                :limit 5
-            `;
-
-                if (!hasTimestamp) log('Timestamp not present in samples; running unsorted query.', 'info');
-                const q = hasTimestamp ? qSort : qNoTs;
-
-                const res = await safeRun(q, "{}");
-                if (res && res.rows) {
-                    // Post-process rows to create snippets
-                    const processedRows = res.rows.map(row => {
-                        // Row format: [timestamp, role, source, content] or [role, source, content]
-                        let dateStr = "N/A";
-                        let rest = row;
-
-                        // Check if first col is a timestamp (number)
-                        if (typeof row[0] === 'number') {
-                            const ts = row[0];
-                            dateStr = new Date(ts).toLocaleString();
-                            rest = row.slice(1);
-                        }
-
-                        // rest is now [role, source, content]
-                        const contentIdx = rest.length - 1;
-                        const content = rest[contentIdx];
-                        const snippet = content.length > 50 ? content.substring(0, 50) + "..." : content;
-
-                        const newRow = [dateStr, ...rest];
-                        newRow[newRow.length - 1] = snippet;
-                        return newRow;
-                    });
-                    log(`Recent Memories: ${JSON.stringify(processedRows, null, 2)}`, 'success');
-                } else {
-                    log(`Query returned no rows or unexpected format.`, 'warn');
-                    try {
-                        const inspectQ = `?[id, timestamp, role, content] := *memory{id, timestamp, role, content} :limit 5`;
-                        const insp = await safeRun(inspectQ, "{}");
-                        if (insp && insp.rows && insp.rows.length > 0) {
-                            log(`Inspect Sample Rows: ${JSON.stringify(insp.rows, null, 2)}`, 'info');
-                        } else {
-                            log('Inspect returned no rows. Relation may be missing or DB empty.', 'warn');
-                            // Try recreating schema just in case
-                            await createSchema();
-                            const insp2 = await safeRun(inspectQ, "{}");
-                            if (insp2 && insp2.rows && insp2.rows.length > 0) {
-                                log(`Inspect after repair: ${JSON.stringify(insp2.rows, null, 2)}`, 'info');
-                            } else {
-                                log('Inspect after repair returned no rows. DB likely empty.', 'warn');
-                            }
-                        }
-                    } catch (ie) {
-                        log(`Inspect Query Error: ${ie.message}`, 'error');
-                    }
-                }
-                // Refresh stats
-                await updateStats();
-            } catch (e) {
-                log(`Query Error: ${e.message}`, 'error');
-                // If sort_key_not_found is present, run a simple inspect query to show sample rows
-                if (e.message && e.message.includes("Sort key 'timestamp' not found")) {
-                    try {
-                        const inspectQ = `?[id, timestamp, role, content] := *memory{timestamp, role, content} :limit 5`;
-                        const inspectRes = await safeRun(inspectQ, "{}");
-                        if (inspectRes && inspectRes.rows) {
-                            log(`Inspect Sample Rows: ${JSON.stringify(inspectRes.rows, null, 2)}`, 'info');
-                        } else {
-                            log(`Inspect returned no rows.`, 'warn');
-                        }
-                    } catch (ie) {
-                        log(`Inspect Query Error: ${ie.message}`, 'error');
-                    }
-                }
-            }
+        document.getElementById('quick-add-btn').addEventListener('click', async () => {
+             const val = document.getElementById('quick-mem-content').value.trim();
+             if (!val) return;
+             await processRecords([{ role: 'manual', content: val, source: 'user_input' }], 'QuickAdd');
+             document.getElementById('quick-mem-content').value = "";
+             await updateStats();
         });
 
         document.getElementById('reset-btn').addEventListener('click', async () => {
-            if (confirm('NUKE DATABASE? This will wipe all memories permanently from both WASM and IndexedDB. Cannot be undone.')) {
-                try {
-                    // 1. Clear WASM (if active)
-                    if (db) {
-                        try {
-                            await safeRun('::nuke', '{}');
-                            await createSchema();
-                        } catch (e) {
-                            log('WASM nuke failed (maybe inactive), proceeding to IDB wipe...', 'warn');
-                        }
-                    }
-
-                    // 2. Force Clear IndexedDB (The Real Nuke)
-                    await clearIndexedDbStore('coda_memory', 'cozo_store');
-                    log('IndexedDB "coda_memory/cozo_store" has been forcefully cleared.', 'success');
-
-                    await updateStats();
-                    log('Database nuked. memories: 0', 'success');
-
-                    // Optional: Reload page to ensure clean WASM state
-                    if (confirm('Database cleared. Reload page to restart WASM with a clean slate?')) {
-                        location.reload();
-                    }
-
-                } catch (e) {
-                    log(`Nuke failed: ${e.message}`, 'error');
-                }
+            if (confirm("NUKE DATABASE? This destroys all data.")) {
+                await clearIndexedDbStore('coda_memory', 'cozo_store');
+                location.reload();
             }
         });
-
-        // --- Export DB ---
-        document.getElementById('export-db-btn').addEventListener('click', async () => {
-            // Self-healing: Verify schema exists before export
-            await verifyMemoryRelation();
-
-            // Updated Export: Includes Embeddings for full portability
-            const exportQ = `
-            ?[id, timestamp, role, content, source, embedding] := *memory{id, timestamp, role, content, source, embedding}
-        `;
+        
+        document.getElementById('query-btn').addEventListener('click', async () => {
             try {
-                const res = await safeRun(exportQ, "{}");
-                if (res && res.headers && res.rows) {
-                    const exportData = {
-                        relations: [
-                            {
-                                name: 'memory',
-                                headers: res.headers,
-                                rows: res.rows
-                            }
-                        ]
-                    };
-                    const jsonStr = JSON.stringify(exportData, null, 2);
-                    const blob = new Blob([jsonStr], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `sovereign_db_export_full_${Date.now()}.json`;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    log(`Exported ${res.rows.length} rows (w/ embeddings) to JSON.`, 'success');
-                } else {
-                    log('Export query returned no data.', 'warn');
-                }
-            } catch (e) {
-                log(`Export Error: ${e.message}`, 'error');
-            }
+                const res = await safeRun("?[ts, content] := *memory{timestamp: ts, content} :sort -ts :limit 5");
+                if (res.rows) logger.info("Recent:\n" + res.rows.map(r => `${new Date(r[0]).toLocaleTimeString()}: ${r[1].substring(0,50)}...`).join('\n'));
+                else logger.warn("No rows returned.");
+            } catch (e) { logger.error(e.message); }
         });
 
-        // --- Auto-Import (Combined Memory) ---
         document.getElementById('auto-import-btn').addEventListener('click', async () => {
-            log('Fetching canonical import file: ./cozo_import_memory.json', 'info');
             try {
-                const resp = await fetch('./cozo_import_memory.json');
-                if (!resp.ok) throw new Error(`Fetch failed: ${resp.status} (ensure file is in same directory)`);
-
-                const txt = await resp.text();
-                let json;
-                try { json = JSON.parse(txt); } catch (e) { throw new Error('Invalid JSON in import file'); }
-
-                log(`Loaded JSON. Detecting shape...`, 'info');
-                let records = [];
-
-                // Shape A: CozoDB Relations Dump { relations: [ { name: 'memory', rows: [...] } ] }
-                if (json.relations && Array.isArray(json.relations)) {
-                    const mem = json.relations.find(r => r.name === 'memory') || json.relations[0];
-                    if (mem) {
-                        const rrows = mem.rows || (mem.named_rows && mem.named_rows.rows) || (mem.NamedRows && mem.NamedRows.rows) || [];
-                        const hdr = mem.headers || (mem.named_rows && mem.named_rows.headers) || ['id', 'timestamp', 'role', 'content', 'source', 'embedding'];
-
-                        // Map rows to objects for processRecords
-                        records = rrows.map(rowArray => {
-                            const rec = {};
-                            hdr.forEach((h, i) => rec[h] = rowArray[i]);
-                            return rec;
-                        });
-                        log(`Detected Relations format. Extracted ${records.length} records.`, 'info');
-                    }
-                }
-                // Shape B: Context-Engine Conversations { conversations: [...] }
-                else if (json.conversations && Array.isArray(json.conversations)) {
-                    records = json.conversations;
-                    log(`Detected Conversation format. Found ${records.length} records.`, 'info');
-                }
-                // Shape C: Raw Array of Objects
-                else if (Array.isArray(json)) {
-                    records = json;
-                    log(`Detected Raw Array format. Found ${records.length} records.`, 'info');
-                }
-                else {
-                    throw new Error("Unrecognized JSON structure.");
-                }
-
-                if (records.length === 0) return log('No records found to import.', 'warn');
-
-                // Use the smart processRecords (which now respects existing embeddings)
-                await processRecords(records, 'cozo_import_memory.json');
-
-                await updateStats();
-                log('Auto-import flow completed.', 'success');
-            } catch (e) {
-                log(`Auto-import Error: ${e.message}`, 'error');
-            }
+                const res = await fetch('./cozo_import_memory.json');
+                const json = await res.json();
+                let recs = Array.isArray(json) ? json : (json.conversations || []);
+                if (recs.length) await processRecords(recs, 'auto-import');
+                else logger.warn("No records found in auto-import file.");
+            } catch (e) { logger.error(e.message); }
         });
 
         init();
     </script>
 </body>
-
 </html>

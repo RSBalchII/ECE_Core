@@ -39,8 +39,19 @@ try {
     $env:BRIDGE_PORT = $Port
     $env:BRIDGE_HOST = "0.0.0.0"
     
-    Write-Host "🚀 Launching Bridge on Port $Port..." -ForegroundColor Cyan
-    python tools/webgpu_bridge.py
+    # Check if webgpu_bridge.py is in the same dir as script, or in tools/
+    $BridgeScript = Join-Path $PSScriptRoot "webgpu_bridge.py"
+    if (-not (Test-Path $BridgeScript)) {
+        $BridgeScript = Join-Path $PSScriptRoot "tools\webgpu_bridge.py"
+    }
+    
+    if (-not (Test-Path $BridgeScript)) {
+        Write-Error "Could not find webgpu_bridge.py in $PSScriptRoot or $PSScriptRoot\tools"
+        exit 1
+    }
+
+    Write-Host "🚀 Launching Bridge ($BridgeScript) on Port $Port..." -ForegroundColor Cyan
+    python $BridgeScript
 
 } catch {
     Write-Error "An error occurred: $_"

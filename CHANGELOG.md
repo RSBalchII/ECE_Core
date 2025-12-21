@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+- **Root Mic (Audio Input)**: Renamed `sovereign-mic.html` to `root-mic.html` and added "Summarize & Clarify" feature using the local Qwen2.5 model.
+- **Long-Form Transcription**: Fixed Whisper pipeline to support recordings >30s using chunking and striding.
 - **CozoDB Corruption Recovery**: Enhanced error handling for IndexedDB corruption with automatic fallback to in-memory database, manual recovery button, and timeout protection against hanging WASM calls.
 - **Bulk CozoDB Import Tool**: Added `tools/prepare_cozo_import.py` to transform `combined_memory.json` into the canonical `relations` payload (`cozo_import_memory.json`) for atomic bulk imports into CozoDB.
 - **Import Safety & Verification**: Added recommended import procedure and a post-import verification + backup step to avoid Schema Detachment.

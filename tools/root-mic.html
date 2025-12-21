@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Root Mic 🎙️</title>
+    <style>
+        :root {
+            --bg-color: #0f0f11;
+            --surface-color: #1a1a1d;
+            --primary-color: #00ff88;
+            --accent-color: #00ccff;
+            --text-color: #eeeeee;
+            --danger-color: #ff4444;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            text-align: center;
+            width: 100%;
+            max-width: 500px;
+            padding: 20px;
+        }
+
+        h1 {
+            font-weight: 300;
+            letter-spacing: 2px;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            font-size: 1.5rem;
+            color: var(--accent-color);
+            text-shadow: 0 0 10px rgba(0, 204, 255, 0.3);
+        }
+
+        #mic-btn {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #444, #222);
+            border: 4px solid #333;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5), 0 0 0 4px var(--bg-color);
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 30px;
+            position: relative;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #mic-btn::after {
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            right: -10px;
+            bottom: -10px;
+            border-radius: 50%;
+            border: 2px solid var(--primary-color);
+            opacity: 0;
+            transform: scale(0.8);
+            transition: all 0.3s;
+        }
+
+        #mic-btn:hover {
+            transform: scale(1.05);
+            background: radial-gradient(circle at 30% 30%, #555, #333);
+        }
+
+        #mic-btn.active {
+            background: radial-gradient(circle at 30% 30%, #ff5555, #aa0000);
+            box-shadow: 0 0 30px rgba(255, 68, 68, 0.6);
+            border-color: #ff4444;
+            transform: scale(0.95);
+        }
+
+        #mic-btn.active::after {
+            animation: pulse 1.5s infinite;
+            opacity: 1;
+        }
+
+        #mic-icon {
+            font-size: 64px;
+            color: #888;
+            transition: color 0.3s;
+        }
+
+        #mic-btn.active #mic-icon {
+            color: white;
+        }
+
+        #clarify-btn {
+            background: transparent;
+            color: var(--accent-color);
+            border: 1px solid var(--accent-color);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #clarify-btn:hover:not(:disabled) {
+            background: rgba(0, 204, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        #clarify-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            border-color: #555;
+            color: #555;
+        }
+
+        #status {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            height: 1.5em;
+            color: #888;
+        }
+
+        .visualizer {
+            width: 100%;
+            height: 60px;
+            background: var(--surface-color);
+            border-radius: 12px;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #333;
+        }
+
+        .bar-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            gap: 2px;
+        }
+
+        .bar {
+            width: 4px;
+            background: var(--primary-color);
+            border-radius: 2px;
+            height: 4px;
+            transition: height 0.1s ease;
+        }
+
+        #output {
+            background: var(--surface-color);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid #333;
+            min-height: 100px;
+            text-align: left;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            color: #ccc;
+            position: relative;
+            overflow-y: auto;
+            max-height: 200px;
+        }
+
+        #copy-toast {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: var(--primary-color);
+            color: #000;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.3s;
+            pointer-events: none;
+        }
+
+        #copy-toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        footer {
+            margin-top: 40px;
+            font-size: 0.7rem;
+            color: #444;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+                border-color: var(--danger-color);
+            }
+
+            100% {
+                transform: scale(1.5);
+                opacity: 0;
+                border-color: var(--danger-color);
+            }
+        }
+
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+
+        .loader {
+            width: 48px;
+            height: 48px;
+            border: 5px solid #FFF;
+            border-bottom-color: var(--primary-color);
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+        }
+
+        .progress-text {
+            margin-top: 20px;
+            font-family: monospace;
+            color: var(--primary-color);
+        }
+
+        @keyframes rotation {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay">
+        <span class="loader"></span>
+        <div id="loading-text" class="progress-text">Initializing Neural Engines...</div>
+    </div>
+    <div id="copy-toast">Copied to Clipboard!</div>
+    <div class="container">
+        <h1>Root Mic 🎙️</h1>
+        <div class="visualizer"><div class="bar-container" id="bars"></div></div>
+        <button id="mic-btn"><div id="mic-icon">🎙️</div></button>
+        <button id="clarify-btn" disabled>Summarize & Clarify</button>
+        <div id="status">Ready</div>
+        <div id="output">...</div>
+        <footer>Running Locally: Whisper-Tiny (Audio) + Qwen2.5-1.5B (Text)</footer>
+    </div>
+
+    <script type="module">
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.14.0';
+        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+        
+        // THE NEW KERNEL
+        import { SovereignLogger, createStore, getWebGPUConfig } from './modules/sovereign.js';
+
+        const logger = new SovereignLogger('Root-Mic');
+        
+        // Reactive Store
+        const { state, subscribe } = createStore({
+            status: 'Ready',
+            output: '...',
+            isLoading: true,
+            loadingText: 'Initializing Neural Engines...',
+            isRecording: false
+        });
+
+        // UI Bindings
+        subscribe((prop, val) => {
+            if (prop === 'status') document.getElementById('status').innerText = val;
+            if (prop === 'output') {
+                document.getElementById('output').innerText = val;
+                // Enable clarify button if there is text (and not just placeholder/loading)
+                const btn = document.getElementById('clarify-btn');
+                if (val && val !== '...' && val.length > 10) {
+                    btn.disabled = false;
+                } else {
+                    btn.disabled = true;
+                }
+            }
+            if (prop === 'loadingText') document.getElementById('loading-text').innerText = val;
+            if (prop === 'isLoading') {
+                const ol = document.getElementById('loading-overlay');
+                ol.style.opacity = val ? '1' : '0';
+                setTimeout(() => ol.style.display = val ? 'flex' : 'none', 500);
+            }
+            if (prop === 'isRecording') {
+                const btn = document.getElementById('mic-btn');
+                if (val) btn.classList.add('active'); else btn.classList.remove('active');
+            }
+        });
+
+        let whisperer = null;
+        let llmEngine = null;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let audioContext = null;
+        let analyser = null;
+        let dataArray = null;
+        let animationId = null;
+        let silenceStart = 0;
+
+        async function init() {
+            try {
+                // 1. Whisper Init
+                state.loadingText = "Step 1/2: Downloading Whisper (Ears)...";
+                env.allowLocalModels = false;
+                whisperer = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en', { device: 'wasm' });
+                logger.success("Whisper Loaded");
+
+                // 2. LLM Init (Using Kernel)
+                state.loadingText = "Step 2/2: Config Qwen2.5 (Brain)...";
+                await initLLM();
+
+                state.isLoading = false;
+                initVisualizer();
+                logger.success("Root Mic Online");
+            } catch (e) {
+                logger.error(e.message);
+                state.loadingText = `Error: ${e.message}`;
+            }
+        }
+
+        // Clarify Logic
+        document.getElementById('clarify-btn').addEventListener('click', async () => {
+            if (!state.output || state.output === '...' || state.output.length < 5) return;
+            
+            const originalText = state.output;
+            state.status = "Summarizing...";
+            state.output = originalText + "\n\n[Thinking...]";
+
+            try {
+                const reply = await llmEngine.chat.completions.create({
+                    messages: [
+                        { role: "system", content: "You are a helpful assistant. Provide a concise summary and clarification of the user's text. Focus on the core meaning and intent." },
+                        { role: "user", content: `Please summarize and clarify this text:\n\n"${originalText}"` }
+                    ],
+                    temperature: 0.5,
+                    max_tokens: 512,
+                });
+
+                const summary = reply.choices[0].message.content;
+                state.output = summary; // Replace output with summary
+                state.status = "Clarified";
+                
+                if (document.hasFocus()) {
+                    navigator.clipboard.writeText(summary);
+                    const t = document.getElementById('copy-toast');
+                    t.innerText = "Summary Copied!";
+                    t.classList.add('show');
+                    setTimeout(() => { 
+                        t.classList.remove('show');
+                        t.innerText = "Copied to Clipboard!";
+                    }, 2000);
+                }
+
+            } catch (e) {
+                logger.error("Clarify failed: " + e.message);
+                state.status = "Error";
+                state.output = originalText; // Revert
+            }
+        });
+
+        async function initLLM() {
+            const modelId = "mlc-ai/Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
+            const snapdragonId = "snapdragon-mic-qwen";
+
+            // KERNEL CALL: Get safe GPU config
+            const gpuConfig = await getWebGPUConfig('lite');
+            
+            if (gpuConfig.isConstrained) {
+                logger.warn(`Clamping Buffer to ${Math.round(gpuConfig.maxBufferSize/1024/1024)}MB for Mobile/XPS compatibility.`);
+            }
+
+            // Create device explicitly with limits
+            const device = await gpuConfig.adapter.requestDevice(gpuConfig.deviceConfig);
+
+            const appConfig = {
+                model_list: [{
+                    model: "https://huggingface.co/" + modelId + "/resolve/main/",
+                    model_id: snapdragonId,
+                    model_lib: "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2-1.5B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm",
+                    vram_required_MB: 2000,
+                    low_resource_required: true,
+                    buffer_size_required_bytes: gpuConfig.maxBufferSize
+                }]
+            };
+
+            llmEngine = await webllm.CreateMLCEngine(snapdragonId, {
+                appConfig,
+                device, 
+                initProgressCallback: (report) => {
+                    state.loadingText = `Loading Brain: ${Math.round(report.progress * 100)}%`;
+                }
+            });
+        }
+
+        function initVisualizer() {
+            const container = document.getElementById('bars');
+            for (let i = 0; i < 30; i++) {
+                const bar = document.createElement('div');
+                bar.className = 'bar';
+                container.appendChild(bar);
+            }
+        }
+
+        // Recording Logic
+        document.getElementById('mic-btn').addEventListener('click', async () => {
+            if (!state.isRecording) startRecording(); else stopRecording();
+        });
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                mediaRecorder.onstop = processAudio;
+
+                // Visualizer
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const source = audioContext.createMediaStreamSource(stream);
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 64;
+                source.connect(analyser);
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+                animateVisualizer();
+
+                mediaRecorder.start();
+                state.isRecording = true;
+                silenceStart = Date.now();
+                state.status = "Listening...";
+                state.output = "...";
+            } catch (e) { alert(e.message); }
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+            state.isRecording = false;
+            state.status = "Processing...";
+            cancelAnimationFrame(animationId);
+            if (audioContext) audioContext.close();
+            document.querySelectorAll('.bar').forEach(b => b.style.height = '4px');
+        }
+
+        function animateVisualizer() {
+            if (!state.isRecording) return;
+            animationId = requestAnimationFrame(animateVisualizer);
+            analyser.getByteFrequencyData(dataArray);
+            const bars = document.querySelectorAll('.bar');
+            let maxVol = 0;
+            for (let i = 0; i < bars.length; i++) {
+                const val = dataArray[i];
+                if (val > maxVol) maxVol = val;
+                bars[i].style.height = `${Math.max(4, (val / 255) * 50)}px`;
+            }
+            if (maxVol > 10) silenceStart = Date.now();
+            else if (Date.now() - silenceStart > 3000) state.status = "⚠️ No Audio?";
+        }
+
+        async function processAudio() {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' }); // Default browser format
+
+            // 1. Decode to System Sample Rate (e.g., 48000Hz)
+            const audioCtx = new AudioContext();
+            const arrayBuffer = await audioBlob.arrayBuffer();
+            const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+            // 2. Resample to 16000Hz (Required by Whisper)
+            const targetRate = 16000;
+            const offlineCtx = new OfflineAudioContext(1, decodedBuffer.duration * targetRate, targetRate);
+            const source = offlineCtx.createBufferSource();
+            source.buffer = decodedBuffer;
+            source.connect(offlineCtx.destination);
+            source.start(0);
+            
+            const resampledBuffer = await offlineCtx.startRendering();
+            let audioData = resampledBuffer.getChannelData(0);
+
+            // NORMALIZE / AMPLIFY with Noise Gate
+            let peak = 0;
+            for (let i = 0; i < audioData.length; i++) {
+                const val = Math.abs(audioData[i]);
+                if (val > peak) peak = val;
+            }
+
+            // Cap amplification to avoid boosting silence/hiss into "Applause"
+            // If peak is TOO low (silence), don't amplify at all.
+            let ampFactor = 1.0;
+            if (peak > 0.01 && peak < 0.5) {
+                ampFactor = Math.min(0.5 / peak, 5.0); // Max 5x boost
+                for (let i = 0; i < audioData.length; i++) {
+                    audioData[i] = audioData[i] * ampFactor;
+                }
+            } else if (peak <= 0.01) {
+                // Too quiet, likely silence. Don't send to Whisper or send silence.
+                state.status = "Too quiet (Ignored)";
+                return;
+            }
+
+            state.status = "Transcribing...";
+            
+            // Enable chunking for long-form audio (>30s)
+            const result = await whisperer(audioData, { 
+                language: 'english',
+                chunk_length_s: 30,
+                stride_length_s: 5
+            });
+            let rawText = result.text.trim();
+            
+            // Hallucination Filter (Aggressive)
+            const hallucinations = [
+                '[Music]', '[BLANK_AUDIO]', 'Computed', '*sigh*', '*breathing*', 
+                'Applause', 'Thank you', 'Subtitles', 'Amara.org', 'Copyright', 
+                '©', 'Caption', 'Sovereign' 
+            ];
+            
+            hallucinations.forEach(h => { 
+                // Case-insensitive check
+                const regex = new RegExp(h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+                rawText = rawText.replace(regex, '').trim();
+            });
+
+            // Filter single punctuation or very short junk
+            if (/^[.,?!;:]+$/.test(rawText) || rawText.length < 2) rawText = "";
+
+            if (!rawText || rawText.length < 1) {
+                state.status = "Heard nothing";
+                return;
+            }
+
+            state.output = `Raw: "${rawText}"\n\nCleaning...`;
+            state.status = "Refining...";
+
+            const reply = await llmEngine.chat.completions.create({
+                messages: [
+                    { role: "system", content: "You are a verbatim transcription corrector. Your ONLY task is to fix grammar, spelling, and punctuation. Do NOT answer questions. Do NOT add commentary. Output ONLY the corrected text." },
+                    { role: "user", content: `Correct this text: "${rawText}"` }
+                ],
+                temperature: 0.3,
+                max_tokens: 512,
+            });
+
+            const cleanText = reply.choices[0].message.content;
+            state.output = cleanText;
+            state.status = "Ready";
+            
+            // Auto Copy (Handle focus requirement)
+            if (document.hasFocus()) {
+                navigator.clipboard.writeText(cleanText).then(() => {
+                    const t = document.getElementById('copy-toast');
+                    t.classList.add('show');
+                    setTimeout(() => t.classList.remove('show'), 2000);
+                }).catch(err => {
+                    console.warn("Clipboard write failed (focus lost?):", err);
+                });
+            } else {
+                console.warn("Clipboard write skipped: Document not focused.");
+                state.output += "\n(Copy skipped - Click to copy)";
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>

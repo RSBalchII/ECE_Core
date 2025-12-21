@@ -1,25 +1,29 @@
-# Sovereign Coda Roadmap (V2)
+# Root Coda Roadmap (V2.0)
 
-**Status:** Execution Phase (Browser-Native Pivot)
-**Focus:** Stability, Model Expansion, Context Injection.
+**Status:** Root Architecture Deployed
+**Focus:** Expansion, Agentic Capabilities, Multimodal.
 
 ## Phase 1: Foundation (Completed)
 - [x] Pivot to WebLLM/WebGPU stack.
 - [x] Implement CozoDB (WASM) for memory.
 - [x] Create core HTML tools (`model-server-chat`, `sovereign-db-builder`, `log-viewer`).
 
-## Phase 2: Stabilization (Current)
+## Phase 2: Stabilization (Completed)
 - [x] Fix Model Loading (Quota/VRAM config).
 - [x] Add 14B Model Support (Qwen2.5, DeepSeek-R1).
-- [x] UI Modernization (Collapsible, Resizable).
-- [x] Clean Dependencies (Remove Python backend, fix scripts).
-- [x] **Snapdragon Optimization**: Implemented Buffer Override (256MB) and Portable Profiles.
+- [x] **Snapdragon Optimization**: Implemented Buffer Override (256MB).
 
-## Phase 3: Context Injection (Next)
-- [ ] **Context Injection Debugging**: Ensure loaded context is actually used by the model.
-- [ ] **Extension Integration**: Re-verify Chrome Extension bridge.
-- [ ] **Hybrid RAG**: Optimize vector + graph retrieval.
+## Phase 2.5: Root Refactor (Completed)
+- [x] **Kernel Implementation**: Created `sovereign.js` (Unified Logger, State, Hardware).
+- [x] **The Ears**: Refactored `sovereign-mic.html` to Root Architecture.
+- [x] **The Stomach**: Refactored `sovereign-db-builder.html` to Root Architecture.
+- [x] **The Brain**: Refactored `model-server-chat.html` to Root Architecture (Graph-R1 preservation).
 
-## Phase 4: Expansion
+## Phase 3: Expansion (Current)
 - [ ] **Agentic Capabilities**: Re-introduce Verifier/Distiller logic in JS.
-- [/] **Mobile Optimization**: Iterate on `model-server-chat.html` mobile UX.
+- [ ] **Mobile Optimization**: Polish mobile UX for `model-server-chat.html`.
+- [ ] **Hybrid RAG**: Optimize vector + graph retrieval weighting.
+
+## Phase 4: Federation
+- [ ] **Device Sync**: Sync IndexedDB across devices (Peer-to-Peer).
+- [ ] **Local-First Cloud**: Optional encrypted backup.

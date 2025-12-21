@@ -1,0 +1,6 @@
+browser_data/
+.git/
+.venv/
+node_modules/
+dist/
+build/

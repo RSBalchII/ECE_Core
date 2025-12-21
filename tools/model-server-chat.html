@@ -4,14 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Coda Sovereign Console (Graph-R1)</title>
+    <title>Root Coda Console</title>
     <style>
         * {
             box-sizing: border-box;
         }
 
         body {
-            background: #1e1e1e;
+            background: #0f0f11;
             color: #ccc;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
@@ -32,13 +32,12 @@
             /* Default width */
             min-width: 200px;
             max-width: 80%;
-            background: #1e1e1e;
+            background: #151517;
             color: #d4d4d4;
             display: flex;
             flex-direction: column;
             border-right: 1px solid #333;
             transition: width 0.1s ease;
-            /* smooth resize stop */
         }
 
         /* Resize Handle */
@@ -52,17 +51,16 @@
 
         #resizer:hover,
         #resizer.resizing {
-            background: #0078d4;
+            background: #00ff88;
         }
 
         #main {
             flex: 1;
             display: flex;
             flex-direction: column;
-            background: #2d2d2d;
+            background: #1e1e1e;
             position: relative;
             min-width: 0;
-            /* Prevent flex overflow */
         }
 
         /* --- Collapsible Details --- */
@@ -78,7 +76,6 @@
             user-select: none;
             background: #252526;
             list-style: none;
-            /* Hide default triangle */
         }
 
         summary::-webkit-details-marker {
@@ -103,29 +100,7 @@
             gap: 8px;
         }
 
-        /* --- Mobile Responsive --- */
-        @media (max-width: 768px) {
-            #container {
-                flex-direction: column;
-            }
-
-            #sidebar {
-                width: 100% !important;
-                /* Force full width */
-                height: auto;
-                max-height: 40vh;
-                /* Limit height on mobile */
-                overflow-y: auto;
-                border-right: none;
-                border-bottom: 2px solid #333;
-            }
-
-            #resizer {
-                display: none;
-                /* No horizontal resize on mobile */
-            }
-        }
-
+        /* --- Chat Box --- */
         #chat-box {
             flex: 1;
             overflow-y: auto;
@@ -156,7 +131,7 @@
         }
 
         .user {
-            background: #0078d4;
+            background: #005f3b; /* Root Green-ish */
             color: white;
             align-self: flex-end;
             margin-left: auto;
@@ -164,17 +139,18 @@
 
         .assistant {
             background: #2d2d2d;
-            border-left: 3px solid #0078d4;
+            border-left: 3px solid #00ff88;
         }
 
         .msg details {
             margin-top: 10px;
             font-size: 0.85rem;
             opacity: 0.7;
+            border: none;
         }
 
         .msg pre {
-            background: #1e1e1e;
+            background: #151515;
             padding: 8px;
             border-radius: 4px;
             overflow-x: auto;
@@ -201,7 +177,7 @@
 
         #progress {
             height: 100%;
-            background: #0078d4;
+            background: #00ff88;
             width: 0%;
             transition: width 0.2s;
         }
@@ -209,11 +185,11 @@
         #status-log {
             flex: 1;
             overflow-y: auto;
-            font-family: 'Courier New', monospace;
+            font-family: 'Consolas', monospace;
             font-size: 0.75rem;
             margin-top: 10px;
             padding: 8px;
-            background: #1a1a1a;
+            background: #0f0f0f;
             border-radius: 4px;
             border: 1px solid #333;
         }
@@ -223,21 +199,10 @@
             padding: 2px 0;
         }
 
-        .info {
-            color: #888;
-        }
-
-        .warn {
-            color: #d7ba7d;
-        }
-
-        .error {
-            color: #f48771;
-        }
-
-        .success {
-            color: #89d185;
-        }
+        .info { color: #888; }
+        .warn { color: #ffc107; }
+        .error { color: #ff4444; }
+        .success { color: #00ff88; }
 
         #input-area {
             display: flex;
@@ -258,107 +223,47 @@
 
         textarea:focus {
             outline: none;
-            border-color: #0078d4;
+            border-color: #00ff88;
         }
 
         button {
             padding: 8px 20px;
-            background: #0078d4;
+            background: #2d2d2d;
             color: white;
-            border: none;
+            border: 1px solid #444;
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
             align-self: flex-end;
+            transition: all 0.2s;
         }
 
         button:hover {
-            background: #1084d7;
-        }
-
-        .msg.assistant {
-            background: #2d2d2d;
-            align-self: flex-start;
-        }
-
-        .msg.system {
-            background: #3c3c3c;
-            align-self: center;
-            font-style: italic;
-            font-size: 11px;
-        }
-
-        /* Old details/summary styles, replaced by new ones above */
-        /*
-        details {
-            margin-top: 5px;
-            background: #252526;
-            border: 1px solid #444;
-            border-radius: 4px;
-            font-size: 11px;
-            overflow: hidden;
-        }
-
-        summary {
-            padding: 5px 10px;
-            cursor: pointer;
-            list-style: none;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            opacity: 0.8;
-            font-weight: bold;
-        }
-
-        summary:hover {
-            opacity: 1;
-            background: #2a2a2b;
-        }
-
-        summary::before {
-            content: '▶';
-            font-size: 8px;
-            transition: transform 0.2s;
-        }
-
-        details[open] summary::before {
-            transform: rotate(90deg);
-        }
-        */
-
-        details pre {
-            margin: 0;
-            padding: 10px;
-            background: #1e1e1e;
-            white-space: pre-wrap;
-            word-break: break-all;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .streaming {
-            border-right: 2px solid var(--accent);
-            animation: blink 0.7s infinite;
-        }
-
-        @keyframes blink {
-            50% {
-                border-color: transparent;
-            }
+            border-color: #00ff88;
+            color: #00ff88;
         }
 
         button:disabled {
-            background: #555;
+            background: #222;
+            border-color: #333;
+            color: #555;
             cursor: not-allowed;
         }
+
+        .streaming {
+            border-right: 2px solid #00ff88;
+            animation: blink 0.7s infinite;
+        }
+
+        @keyframes blink { 50% { border-color: transparent; } }
     </style>
 </head>
 
 <body>
     <div id="container">
         <div id="sidebar">
-            <div style="padding: 10px; font-weight: bold; font-size: 16px; border-bottom: 1px solid #444;">
-                ⚡ Sovereign Coda
+            <div style="padding: 10px; font-weight: bold; font-size: 16px; border-bottom: 1px solid #444; color: #00ff88;">
+                ⚡ ROOT CODA
             </div>
             <small id="status-text" style="padding: 0 10px;">Initializing...</small>
             <div id="progress-bar" style="margin: 8px 10px 15px 10px;">
@@ -369,92 +274,48 @@
             <details open>
                 <summary>Model Selection</summary>
                 <div class="panel-content">
-                    <label for="hw-profile"
-                        style="display:block; font-size: 11px; color: #ccc; margin-bottom: 4px;">Hardware
-                        Profile:</label>
-                    <select id="hw-profile" class="form-control"
-                        style="width: 100%; padding: 5px; background: #333; color: white; border: 1px solid #555; margin-bottom: 10px;">
-                        <option value="lite">🔋 Lite (Mobile / Snapdragon) - 2k Context, Safe & Fast</option>
-                        <option value="mid" selected>💻 Mid (8GB VRAM) - 4k Context, Balanced</option>
-                        <option value="high">🚀 High (16GB VRAM) - 16k Context, Max Speed</option>
-                        <option value="ultra">⚡ Ultra (24GB+ VRAM) - 32k Context, Unleashed</option>
+                    <label for="hw-profile" style="display:block; font-size: 11px; color: #ccc; margin-bottom: 4px;">Hardware Profile:</label>
+                    <select id="hw-profile" class="form-control" style="width: 100%; padding: 5px; background: #333; color: white; border: 1px solid #555; margin-bottom: 10px;">
+                        <option value="lite">🔋 Lite (Mobile / Snapdragon) - 2k Context</option>
+                        <option value="mid" selected>💻 Mid (8GB VRAM) - 4k Context</option>
+                        <option value="high">🚀 High (16GB VRAM) - 16k Context</option>
+                        <option value="ultra">⚡ Ultra (24GB+ VRAM) - 32k Context</option>
                     </select>
-                    <select id="model-select" disabled
-                        style="width: 100%; padding: 5px; background: #333; color: white; border: 1px solid #555;">
+                    <select id="model-select" disabled style="width: 100%; padding: 5px; background: #333; color: white; border: 1px solid #555;">
                         <option value="" disabled selected>-- Select a Model --</option>
-                        <optgroup label="Official MLC (Verified)">
-                            <option value="mlc-ai/Qwen2-7B-Instruct-q4f16_1-MLC">Qwen2-7B (Standard)</option>
-                            <option value="mlc-ai/Llama-3-8B-Instruct-q4f16_1-MLC">Llama-3-8B</option>
-                            <option value="mlc-ai/Mistral-7B-Instruct-v0.2-q4f16_1-MLC">Mistral-7B-v0.2</option>
-                        </optgroup>
-                        <optgroup label="Snapdragon Optimized (Fast & Safe)">
-                            <option value="mlc-ai/Qwen2.5-3B-Instruct-q4f16_1-MLC">Qwen2.5-3B (Recommended)</option>
-                            <option value="mlc-ai/Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama-3.2-1B (Fastest)</option>
-                            <option value="mlc-ai/Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-1.5B (Ultra Fast)</option>
-                            <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-1.5B-q4f16_1-MLC">DeepSeek-R1-Distill-1.5B
-                                (Reflex)</option>
-                        </optgroup>
-                        <optgroup label="New / High Power">
-                            <option value="mlc-ai/Qwen2.5-7B-Instruct-q4f16_1-MLC">Qwen2.5-7B (Standard)</option>
+                        <optgroup label="Root Verified">
+                            <option value="mlc-ai/Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-1.5B (Fastest)</option>
+                            <option value="mlc-ai/Qwen2.5-3B-Instruct-q4f16_1-MLC">Qwen2.5-3B (Balanced)</option>
+                            <option value="mlc-ai/Qwen2.5-7B-Instruct-q4f16_1-MLC">Qwen2.5-7B (Strong)</option>
                             <option value="mlc-ai/Qwen2.5-14B-Instruct-q4f16_1-MLC">Qwen2.5-14B (Powerful)</option>
-                            <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC">DeepSeek-R1-Distill-7B
-                                (Reasoning)</option>
-                            <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-14B-q4f16_1-MLC">DeepSeek-R1-Distill-14B
-                                (Reasoning)</option>
-                            <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-14B-q4f16_1-MLC">DeepSeek-R1-14B (Qwen)
-                            </option>
-                            <option value="mlc-ai/DeepSeek-V2-Lite-Chat-q4f16_1-MLC">DeepSeek-V2-Lite (Experimental)
-                            </option>
-                            <option value="mlc-ai/Hermes-3-Llama-3.2-3B-q4f16_1-MLC">Hermes-3-Llama-3.2-3B</option>
                         </optgroup>
-                        <optgroup label="Experimental / Legacy">
-                            <option value="mlc-ai/OpenHermes-2.5-Mistral-7B-q4f16_1-MLC">OpenHermes-2.5-Mistral-7B
-                            </option>
-                            <option value="mlc-ai/NeuralHermes-2.5-Mistral-7B-q3f16_1-MLC">NeuralHermes-2.5-Mistral-7B
-                                (q3)</option>
-                            <option value="mlc-ai/Qwen2-7B-Instruct-q4f16_1-MLC">Qwen2-7B</option>
-                            <option value="mlc-ai/Llama-3.1-8B-Instruct-q4f32_1-MLC">Llama-3.1-8B</option>
-                            <option value="mlc-ai/gemma-2-9b-it-q4f16_1-MLC">Gemma-2-9B</option>
-                            <option value="mlc-ai/gemma-2-2b-it-q4f16_1-MLC">Gemma-2-2B</option>
-                            <!-- Custom input handled via logic -->
+                        <optgroup label="DeepSeek / Reasoning">
+                            <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-1.5B-q4f16_1-MLC">DeepSeek-R1-Distill-1.5B</option>
+                            <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC">DeepSeek-R1-Distill-7B</option>
+                            <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-14B-q4f16_1-MLC">DeepSeek-R1-Distill-14B</option>
                         </optgroup>
-                        <optgroup label="Specialized">
-                            <option value="mlc-ai/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC">Qwen2.5-Coder-1.5B</option>
-                            <option value="mlc-ai/Phi-3.5-vision-instruct-q4f16_1-MLC">Phi-3.5-vision</option>
+                        <optgroup label="Llama / Mistral">
+                            <option value="mlc-ai/Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama-3.2-3B</option>
+                            <option value="mlc-ai/Mistral-7B-Instruct-v0.2-q4f16_1-MLC">Mistral-7B</option>
                         </optgroup>
                         <option value="custom">-- Custom --</option>
                     </select>
-                    <input id="custom-model-input" type="text" placeholder="Custom model ID"
-                        style="width: 100%; padding: 5px; font-size: 11px;" disabled />
-                    <button id="load-model-btn" disabled
-                        style="width: 100%; padding: 6px; background: #0078d4; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">Load
-                        Model</button>
+                    <input id="custom-model-input" type="text" placeholder="Custom model ID" style="width: 100%; padding: 5px; font-size: 11px;" disabled />
+                    <button id="load-model-btn" disabled style="width: 100%; padding: 6px; margin-top:5px; font-size: 11px;">Load Model</button>
                 </div>
             </details>
 
-            <!-- COLLAPSIBLE: Controls & Quota -->
+            <!-- COLLAPSIBLE: Controls -->
             <details>
                 <summary>System Controls</summary>
                 <div class="panel-content">
-                    <div
-                        style="background: #222; padding: 4px; margin-bottom: 4px; border: 1px solid #444; border-radius: 4px;">
+                    <div style="background: #222; padding: 4px; margin-bottom: 4px; border: 1px solid #444; border-radius: 4px;">
                         <input type="checkbox" id="enable-bridge-toggle" onchange="toggleBridge(this.checked)">
-                        <label for="enable-bridge-toggle" style="font-size: 11px; cursor: pointer;">Enable Wave Terminal
-                            Bridge (ws:8080)</label>
-                        <div id="bridge-status" style="font-size: 10px; color: #666; margin-left: 20px;">Disconnected
-                        </div>
+                        <label for="enable-bridge-toggle" style="font-size: 11px; cursor: pointer;">Enable Wave Bridge (ws:8080)</label>
+                        <div id="bridge-status" style="font-size: 10px; color: #666; margin-left: 20px;">Disconnected</div>
                     </div>
-                    <button id="attempt-indexeddb-load-btn"
-                        style="width: 100%; padding: 6px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">Attempt
-                        Load IndexedDB</button>
-                    <button id="clear-cache-btn"
-                        style="width: 100%; padding: 6px; background: #a43131; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">⚠️
-                        Delete All Model Cache</button>
-                    <button id="debug-gpu-btn"
-                        style="width: 100%; padding: 6px; background: #555; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; margin-top: 5px;">
-                        ❓ Debug GPU Status
-                    </button>
-                    <small style="display:block;color:#aaa;">Use if WASM panicked or Quota Exceeded.</small>
+                    <button id="clear-cache-btn" style="width: 100%; padding: 6px; background: #a43131; border:none; margin-top:5px; font-size: 11px;">⚠️ Delete Model Cache</button>
+                    <button id="debug-gpu-btn" style="width: 100%; padding: 6px; background: #555; border:none; margin-top: 5px; font-size: 11px;">❓ Debug GPU</button>
                 </div>
             </details>
 
@@ -462,29 +323,21 @@
             <details open style="flex: 1; display: flex; flex-direction: column;">
                 <summary>System Logs</summary>
                 <div class="panel-content" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-                    <button id="copy-logs-btn"
-                        style="width: 100%; padding: 4px; background: #333; color: #ccc; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-size: 10px;">📋
-                        Copy Logs</button>
-                    <div id="status-log"
-                        style="flex: 1; overflow-y: auto; border-top: 1px solid #444; margin-top: 5px; min-height: 100px;">
-                    </div>
+                    <button id="copy-logs-btn" style="width: 100%; padding: 4px; background: #333; font-size: 10px;">📋 Copy Logs</button>
+                    <div id="status-log"></div>
                 </div>
             </details>
         </div>
 
-        <!-- RESIZE HANDLE -->
         <div id="resizer"></div>
-
-
 
         <div id="main">
             <!-- Split view for Chat and Context -->
             <div style="flex: 1; display: flex; height: 100%; overflow: hidden;">
                 <!-- Chat Column -->
                 <div style="flex: 1; display: flex; flex-direction: column; border-right: 1px solid #333;">
-                    <div style="padding: 10px; background: #252526; font-weight: bold; border-bottom: 1px solid #333;">
-                        💬 Chat Stream</div>
-                    <div id="chat-box" style="flex: 1; overflow-y: auto; padding-right: 10px;"></div>
+                    <div style="padding: 10px; background: #252526; font-weight: bold; border-bottom: 1px solid #333;">💬 Chat Stream</div>
+                    <div id="chat-box"></div>
                     <div id="input-area" style="padding: 10px; border-top: 1px solid #333;">
                         <textarea id="input" disabled placeholder="Waiting for Engine..."></textarea>
                         <button id="send-btn" disabled>Send</button>
@@ -492,13 +345,10 @@
                 </div>
 
                 <!-- Context Column -->
-                <div style="width: 40%; display: flex; flex-direction: column; background: #222;">
-                    <div style="padding: 10px; background: #252526; font-weight: bold; border-bottom: 1px solid #333;">
-                        🧠 Context / Memory</div>
-                    <div id="context-box"
-                        style="flex: 1; overflow-y: auto; padding: 10px; font-family: monospace; font-size: 12px; white-space: pre-wrap; color: #aaa;">
-                        <div style="text-align: center; margin-top: 50px; color: #555;">(Memory retrievals will appear
-                            here)</div>
+                <div style="width: 40%; display: flex; flex-direction: column; background: #151515;">
+                    <div style="padding: 10px; background: #252526; font-weight: bold; border-bottom: 1px solid #333;">🧠 Root Memory</div>
+                    <div id="context-box" style="flex: 1; overflow-y: auto; padding: 10px; font-family: monospace; font-size: 12px; white-space: pre-wrap; color: #aaa;">
+                        <div style="text-align: center; margin-top: 50px; color: #555;">(Active retrievals will appear here)</div>
                     </div>
                 </div>
             </div>
@@ -507,7 +357,8 @@
 
     <script type="module">
         // --- IMPORTS ---
-        import initCozo, { CozoDb } from './cozo_lib_wasm.js';
+        import { SovereignLogger, createStore, getWebGPUConfig, initCozo } from './modules/sovereign.js';
+        import { CozoDb } from './cozo_lib_wasm.js'; 
         import { loadAllFromIndexedDb, writeToIndexedDb } from './indexeddb.js';
         import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0';
         import * as webllm from "https://esm.run/@mlc-ai/web-llm";
@@ -515,47 +366,41 @@
 
         env.allowLocalModels = false;
 
-        // --- GLOBAL STATE ---
-        let db;
-        let embedder;
-        let engine;
-        let contextManager;
-        let selectedModelId = null;
+        // --- ROOT KERNEL SETUP ---
+        const logger = new SovereignLogger('Root-Console');
+        
+        const { state, subscribe } = createStore({
+            status: "Initializing...",
+            progress: 0,
+            activeModel: null
+        });
 
-        // --- BROADCAST CHANNEL FOR LOG-VIEWER ---
-        const logChannel = new BroadcastChannel('sovereign-logs');
-        // Additional mission-control channel (low-latency JSON messages)
-        const codaChannel = new BroadcastChannel('coda_logs');
-
-        // Helper to forward system/chat logs to mission-control channel
-        function postCoda(msg, meta = {}) {
-            try {
-                codaChannel.postMessage(Object.assign({ source: 'Sovereign-Console', time: new Date().toISOString(), message: msg }, meta));
-            } catch (e) {
-                console.warn('coda post failed', e.message);
-            }
-        }
-
-        // --- UI HELPERS ---
+        // Bridge legacy UI logging to Sovereign Logger
         const ui = {
             log: (msg, type = 'info') => {
-                const el = document.getElementById('status-log');
-                const div = document.createElement('div');
-                div.className = type;
-                div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-                div.style.fontSize = '11px';
-                div.style.padding = '2px';
-                div.style.borderBottom = '1px solid #222';
-                el.insertBefore(div, el.firstChild);
-                if (el.children.length > 100) el.removeChild(el.lastChild);
+                // Bridge to Kernel Logger
+                if (type === 'debug') type = 'info'; 
+                if (logger[type]) logger[type](msg); else logger.info(msg);
 
-                // Send to log-viewer (legacy channel)
-                logChannel.postMessage({ source: 'system', msg, type, time: new Date().toLocaleTimeString() });
-                // Also post to Coda Mission Control channel for unified view
-                try {
-                    codaChannel.postMessage({ source: 'Sovereign-Console', message: msg, type, timestamp: new Date().toISOString() });
-                } catch (e) {
-                    console.warn('codaChannel post failed', e);
+                // Update on-screen log
+                const el = document.getElementById('status-log');
+                if(el) {
+                    const div = document.createElement('div');
+                    div.className = type;
+                    div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+                    div.style.fontSize = '11px'; 
+                    div.style.padding = '2px';
+                    div.style.borderBottom = '1px solid #222';
+                    el.insertBefore(div, el.firstChild);
+                    if (el.children.length > 100) el.removeChild(el.lastChild);
+                }
+            },
+            updateProgress: (pct, text) => {
+                const bar = document.getElementById('progress');
+                if(bar) bar.style.width = (pct * 100) + "%";
+                if (text) {
+                    const el = document.getElementById('status-text');
+                    if(el) el.innerText = text;
                 }
             },
             append: (role, text, meta = null) => {
@@ -578,7 +423,6 @@
                 box.appendChild(div);
                 box.scrollTop = box.scrollHeight;
 
-                // Return a handle for updating this message
                 return {
                     div,
                     update: (newText, isMarkdown = true) => {
@@ -586,7 +430,6 @@
                         box.scrollTop = box.scrollHeight;
                     },
                     appendText: (chunk) => {
-                        // For simple non-streaming render updates
                         if (div.innerText.endsWith("...")) div.innerText = div.innerText.slice(0, -3);
                         div.innerText += chunk;
                         box.scrollTop = box.scrollHeight;
@@ -602,7 +445,7 @@
 
                 const h4 = document.createElement('div');
                 h4.style.fontWeight = 'bold';
-                h4.style.color = '#0078d4';
+                h4.style.color = '#00ff88';
                 h4.style.marginBottom = '5px';
                 h4.textContent = `[${new Date().toLocaleTimeString()}] ${title}`;
 
@@ -614,360 +457,154 @@
                 div.appendChild(p);
                 box.appendChild(div);
                 box.scrollTop = box.scrollHeight;
-            },
-            appendReasoning: (label) => {
-                const box = document.getElementById('chat-box');
-                const details = document.createElement('details');
-                details.open = true;
-                const summary = document.createElement('summary');
-                summary.textContent = `📋 ${label}`;
-                const pre = document.createElement('pre');
-                pre.className = "streaming";
-                details.appendChild(summary);
-                details.appendChild(pre);
-                box.appendChild(details);
-                box.scrollTop = box.scrollHeight;
-
-                let content = "";
-                return {
-                    details,
-                    pre,
-                    update: (chunk) => {
-                        content += chunk;
-                        pre.textContent = content;
-                        box.scrollTop = box.scrollHeight;
-                    },
-                    finish: (finalText) => {
-                        if (finalText) pre.textContent = finalText;
-                        pre.className = "";
-                        details.open = false; // Collapse on finish
-                    }
-                };
-            },
-            updateProgress: (pct, text) => {
-                document.getElementById('progress').style.width = (pct * 100) + "%";
-                if (text) document.getElementById('status-text').innerText = text;
             }
         };
+
+        // --- GLOBAL STATE ---
+        let db;
+        let embedder;
+        let engine;
+        let contextManager;
+        let selectedModelId = null;
 
         // --- UTILS: Response Pattern Matcher ---
         class ResponsePattern {
             static match(response) {
                 let data = response;
-                // Parse if string
                 if (typeof response === 'string') {
                     try {
                         const clean = response.replace(/```json/g, '').replace(/```/g, '').trim();
-                        if (clean.startsWith('{')) {
-                            data = JSON.parse(clean);
-                        }
+                        if (clean.startsWith('{')) data = JSON.parse(clean);
                     } catch (e) { }
                 }
-
-                // 1. Database Result (rows array)
-                if (data?.rows && Array.isArray(data.rows)) {
-                    return {
-                        type: 'DB_RESULT',
-                        rows: data.rows, // Use parsed data
-                        count: data.rows.length
-                    };
-                }
-
-                // 1.b Database Result (ok: true with rows inside?) - Handle specific Cozo return shapes if needed
-
-                // 2. Search Plan (LLM JSON)
-                if (data?.query && typeof data.query === 'string' && data?.hypothesis) {
-                    return {
-                        type: 'SEARCH_PLAN',
-                        query: data.query,
-                        hypothesis: data.hypothesis,
-                        confidence: typeof data.confidence === 'number' ? data.confidence : 0.5
-                    };
-                }
-
-                // 3. Error
-                if (data?.error || (typeof response === 'string' && response.toLowerCase().includes('error:'))) {
-                    return {
-                        type: 'ERROR',
-                        error: data?.error || response
-                    };
-                }
-
-                // 3.b Cozo Error
-                if (data?.ok === false && data?.message) {
-                    return {
-                        type: 'ERROR',
-                        error: data.message
-                    };
-                }
-
-                // 4. LLM Chat Response
-                if (data?.choices && Array.isArray(data.choices) && data.choices.length > 0) {
-                    const content = data.choices[0]?.message?.content || data.choices[0]?.text || '';
-                    return {
-                        type: 'LLM_RESPONSE',
-                        text: content
-                    };
-                }
-
-                // 5. Default / Raw Text
-                return {
-                    type: 'RAW_TEXT',
-                    text: typeof response === 'string' ? response : JSON.stringify(response)
-                };
+                if (data?.rows && Array.isArray(data.rows)) return { type: 'DB_RESULT', rows: data.rows, count: data.rows.length };
+                if (data?.error || (typeof response === 'string' && response.toLowerCase().includes('error:'))) return { type: 'ERROR', error: data?.error || response };
+                if (data?.ok === false && data?.message) return { type: 'ERROR', error: data.message };
+                return { type: 'RAW_TEXT', text: typeof response === 'string' ? response : JSON.stringify(response) };
             }
         }
 
-        // --- LOGIC: Context Manager (The "Context OS") ---
+        // --- LOGIC: Context Manager (SFS) ---
         class ContextManager {
             constructor(engine, db) {
                 this.engine = engine;
                 this.db = db;
                 this.maxIterations = 3;
-                this.history = []; // Debug trace
             }
 
-            // 1. The "Reflex": Fast, programmatic search
             async retrieveInitialContext(userText) {
                 ui.log("🔍 Reflex: Scanning for keywords...", "info");
-
-                // IMPROVED KEYWORD EXTRACTION
-                // 1. Prserve hyphenated words (Blueberry-Omega)
-                // 2. Filter common stops
                 const rawWords = userText.match(/[a-zA-Z0-9_\-]+/g) || [];
-                const stopWords = new Set([
-                    'the', 'and', 'was', 'for', 'are', 'with', 'what', 'when', 'where', 'who', 'how', 'why', 'that', 'this',
-                    'can', 'you', 'know', 'about', 'from', 'have', 'has', 'had', 'not', 'but', 'all',
-                    'doing', 'going',
-                    // Context safety stops
-                    'recall', 'remember', 'think', 'thought', 'should', 'would', 'could'
-                ]);
+                const stopWords = new Set(['the', 'and', 'is', 'in', 'at', 'of', 'on', 'for', 'to', 'it', 'this', 'that', 'with', 'what', 'who', 'how', 'why', 'when', 'where', 'did', 'does', 'do', 'can', 'could', 'would', 'should', 'will', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'a', 'an']);
+                const keywords = rawWords.map(w => w.replace(/^[-_]+|[-_]+$/g, '')).filter(w => w.length > 2 && !stopWords.has(w.toLowerCase()));
 
-                // Filter and ensure length > 2
-                const keywords = rawWords.filter(w => w.length > 2 && !stopWords.has(w.toLowerCase()));
+                if (keywords.length === 0) return "";
+                ui.log(`Reflex Keywords: [${keywords.join(', ')}]`, "info");
 
-                if (keywords.length === 0) {
-                    ui.log("Reflex: No significant keywords found.", "warn");
-                    return "";
-                }
-
-                ui.log(`🔍 Reflex Keywords: [${keywords.join(', ')}]`, "info");
-
-                // Construct robust OR query for CozoDB
-                // Use regex_matches with case-insensitive flag (?i)
                 const conditions = keywords.map(w => `regex_matches(content, '(?i)${w}')`).join(' or ');
-
-                // Query: Select ID, Content from memory where content contains keywords (case-insensitive)
-                const query = `?[id, content, timestamp] := *memory{id, content, timestamp}, ${conditions} :limit 10`;
-
-                ui.log(`🔍 Exectuing DB Query: ${query}`, "debug");
+                const query = `?[id, content, timestamp] := *memory{id, content, timestamp}, ${conditions} :sort -timestamp :limit 10`;
 
                 try {
-                    // MUST pass empty params string "{}" to prevent WASM crash
                     const result = await this.db.run(query, "{}");
-                    ui.log(`DEBUG: RAW DB Result Type: ${typeof result}`, "debug");
+                    const parsed = ResponsePattern.match(result);
 
-                    // Manually inspect result before passing to matcher
-                    if (result && typeof result === 'object') {
-                        // Check specifically for 'rows' property safety
-                        if ('rows' in result) {
-                            if (!Array.isArray(result.rows)) {
-                                ui.log(`DEBUG: result.rows exists but is NOT an array! It is: ${typeof result.rows}`, "error");
-                            } else {
-                                // ui.log(`DEBUG: result.rows is an array of length ${result.rows.length}`, "debug");
-                            }
-                        } else {
-                            // ui.log("DEBUG: result has no 'rows' property.", "debug");
-                        }
-                    } else {
-                        ui.log(`DEBUG: result is not an object. Is it null? ${result === null}`, "warn");
-                    }
-
-                    let parsed = null;
-                    try {
-                        parsed = ResponsePattern.match(result);
-                    } catch (parseErr) {
-                        ui.log(`Reflex Parse Error: ${parseErr.message}`, "warn");
-                    }
-
-                    // ROBUST CHECK with granular logging
-                    if (!parsed) {
-                        // ui.log("Reflex: Parsed result is null.", "debug");
-                        return "";
-                    }
-
-                    if (parsed.error) {
-                        ui.log(`Reflex DB returned error: ${parsed.error}`, "warn");
-                        return "";
-                    }
-
+                    if (!parsed || parsed.error) return "";
                     if (parsed.rows && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
                         ui.log(`✅ Reflex found ${parsed.rows.length} matches.`, "success");
-                        // --- SEMANTIC FILE SYSTEM (SFS) TRANSFORMATION ---
                         const items = parsed.rows.slice(0, 10);
                         const paths = [];
                         const clues = items.map((row, index) => {
                             const id = index + 1;
                             const rawContent = row[1];
                             const timestamp = row[2] || "Unknown Date";
-
-                            // 1. Virtual Path Generation
-                            let path = `/knowledge/general/doc_${id}`;
-                            if (rawContent.includes('"type": "Sybil"')) {
-                                path = `/memories/sessions/chat_log_${id}`;
-                            } else if (timestamp !== "Unknown Date") {
-                                // Try to parse year/month
-                                try {
-                                    const date = new Date(timestamp);
-                                    if (!isNaN(date)) {
-                                        path = `/memories/dated/${date.getFullYear()}/${date.getMonth() + 1}/doc_${id}`;
-                                    }
-                                } catch (e) { }
+                            let title = "doc_" + id;
+                            if (rawContent && rawContent.length > 0) {
+                                const safeTitle = rawContent.substring(0, 30).replace(/[^a-zA-Z0-9 ]/g, '').trim().replace(/\s+/g, '_').toLowerCase();
+                                if (safeTitle.length > 3) title = safeTitle;
                             }
-
+                            const path = `/knowledge/general/${title}`;
                             paths.push(path);
-
-                            // 2. Clue Formatting (Snippet Constraint)
-                            // Truncate to 200 chars for extreme token safety while providing "Scent"
                             let snippet = rawContent.substring(0, 250).replace(/\n/g, ' ');
                             if (rawContent.length > 250) snippet += "...";
-
                             return `[CLUE #${id}] [Path: ${path}] [Date: ${timestamp}]\nSnippet: "${snippet}"`;
                         });
 
-                        // 3. Reality Map Generation (Directory Tree)
-                        // Simple ASCII tree for context
-                        const treeLines = ["[REALITY MAP (Active Mounts)]"];
-                        const uniqueDirs = new Set();
-                        paths.forEach(p => {
-                            const parts = p.split('/');
-                            // e.g. /memories/sessions/chat_log_1 -> /memories/sessions
-                            if (parts.length > 3) uniqueDirs.add(`/${parts[1]}/${parts[2]}/`);
-                            else uniqueDirs.add(`/${parts[1]}/`);
-                        });
-
-                        // Add dirs
-                        uniqueDirs.forEach(d => treeLines.push(d));
-                        // Add files (simplified visualization)
-                        paths.forEach(p => {
-                            const parts = p.split('/');
-                            const file = parts[parts.length - 1];
-                            const dir = p.substring(0, p.lastIndexOf('/') + 1);
-                            // Only show file if we listed the dir? For now just simple list
-                        });
-
-                        // actually, let's just list the full paths for clarity in V1 of SFS
                         const treeMap = `[CURRENT REALITY MAP]\n` + paths.map(p => `- ${p}`).join('\n');
-
-                        // Final Assembly
-                        const sfsBlock = `${treeMap}\n\n[CONTEXT CLUES]\n${clues.join('\n\n')}`;
-                        return sfsBlock;
-
-                    } else {
-                        // Graceful match failure
-                        ui.log("Reflex: No matching memories found in DB keyword search.", "warn");
-                        return "";
+                        return `${treeMap}\n\n[CONTEXT CLUES]\n${clues.join('\n\n')}`;
                     }
                 } catch (e) {
-                    ui.log(`Reflex logic crashed: ${e.message}`, "error");
-                    console.error("Reflex Crash Stack:", e);
+                    ui.log(`Reflex Crash: ${e.message}`, "error");
                 }
                 return "";
             }
 
-            // 2. The "Virtual Markdown" Builder
-            // Assembles the "God Prompt" that the model sees as its reality
             buildVirtualPrompt(systemPrompt, retrievedMemories, chatHistory, userText) {
+                const physicsInstruction = `
+### COGNITIVE PROTOCOL:
+1. **TRUST THE CLUES:** You are operating in a "Sovereign" environment. The [CONTEXT CLUES] provided are the Ground Truth.
+2. **MINIMIZE ENTROPY:** If a Clue contains the answer, OUTPUT IT DIRECTLY. Do not generate "filler".
+3. **PATH OF LEAST ACTION:** The most efficient answer is the correct one.
+`;
                 return `
---- SYSTEM OS ---
-${systemPrompt}
+### BACKGROUND INFORMATION
+${retrievedMemories ? retrievedMemories : "No specific context available."} 
 
---- 🧠 LONG-TERM MEMORY (Reflex Retrieval) ---
-${retrievedMemories ? retrievedMemories : "No specific memories found yet (Model may request more)."}
-
---- 📜 RECENT CHAT CONTEXT ---
+### CHAT HISTORY
 ${chatHistory.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n')}
 
---- 👤 CURRENT USER INPUT ---
+### INSTRUCTION
+${systemPrompt}
+${physicsInstruction}
+Based on the Background Information above, answer the following question.
+
+### USER QUESTION
 ${userText}
 `;
             }
 
-            // 3. The R1 Loop Wrapper
-            // Allows the model to ask for MORE info if Reflex wasn't enough
             async executeR1Loop(userText, history) {
-                this.history = [];
                 let iteration = 0;
-
-                // Step A: Reflex Search (Immediate)
                 let currentContext = await this.retrieveInitialContext(userText);
-                if (currentContext) {
-                    ui.appendContext("Reflex Retrieval", currentContext);
-                }
+                if (currentContext) ui.appendContext("Reflex Retrieval", currentContext);
 
                 while (iteration < this.maxIterations) {
                     iteration++;
-
-                    // Build the "God Prompt"
                     const fullPrompt = this.buildVirtualPrompt(
-                        "You are Sovereign Coda, an Agent operating within a Semantic Virtual File System (SFS). Use the [REALITY MAP] to locate information and [CONTEXT CLUES] to answer. If a Clue is insufficient, reference the Clue ID. Do not hallucinate files not present in the Map.",
+                        "You are Root Coda, a Sovereign Agent.\n" +
+                        "PROTOCOL: Trust clues. Answer directly. No refusals.",
                         currentContext,
-                        history.slice(-5), // Last 5 turns 
+                        history.slice(-5),
                         userText
                     );
 
-                    ui.log(`🧠 R1 Thinking (Iteration ${iteration})...`, "info");
-
+                    ui.log(`🧠 Reasoning (Iter ${iteration})...`, "info");
                     let reply = "";
                     try {
-                        // Call Model (Non-streaming for logic check)
                         const response = await this.engine.chat.completions.create({
                             messages: [{ role: "user", content: fullPrompt }],
-                            temperature: 0.1, // Precision needed
-                            max_tokens: 100 // REDUCED FROM 500 to save VRAM on Snapdragon
+                            temperature: 0.1,
+                            max_tokens: 100
                         });
-
                         reply = response.choices[0].message.content.trim();
                     } catch (genErr) {
-                        ui.log(`💥 Engine Crash: ${genErr.message}`, "error");
-                        if (genErr.message.includes("Instance reference") || genErr.message.includes("disposed")) {
-                            alert("GPU CRASHED (D3D12).\n\nPlease CLOSE this window and run 'launch-edge-vulkan.bat' to use the Vulkan backend.");
-                            return { context: currentContext, finalAnswer: "⚠️ System Crash: GPU Driver lost. Please run `launch-edge-vulkan.bat`." };
-                        }
-                        throw genErr;
+                         if (genErr.message.includes("disposed")) return { context: currentContext, finalAnswer: "⚠️ System Crash: GPU Driver lost." };
+                         throw genErr;
                     }
 
-                    // Check if Model is asking for help (The Wrapper Logic)
                     if (reply.includes("NEED_CONTEXT:")) {
                         const searchTerm = reply.split("NEED_CONTEXT:")[1].trim();
-                        ui.log(`🤖 Model requested semantic search: "${searchTerm}"`, "warn");
-
-                        // Perform Semantic Search (simulated via keyword reflex for now, can be vector later)
+                        ui.log(`🤖 Requested search: "${searchTerm}"`, "warn");
                         const extraData = await this.retrieveInitialContext(searchTerm);
-
                         if (extraData) {
-                            currentContext += `\n--- Additional Context (${searchTerm}) ---\n${extraData}`;
+                            currentContext += `\n--- Additional (${searchTerm}) ---\n${extraData}`;
                             ui.appendContext(`Requested: ${searchTerm}`, extraData);
-                            ui.log(`✅ Found additional context for "${searchTerm}"`, "success");
-                        } else {
-                            currentContext += `\n--- Additional Context (${searchTerm}) ---\n(No results found)`;
-                            ui.log(`❌ No data found for "${searchTerm}"`, "warn");
                         }
-
-                        continue; // Loop again with new data
+                        continue; 
                     }
-
-                    // If no request, this is the final answer (or close to it)
-                    // We return the Context and the Reply (if it acts as the answer)
-                    // But typically handleSend wants to stream the FINAL answer. 
-                    // To keep compatible with handleSend logic, we return the accumulated context.
                     return { context: currentContext, finalAnswer: reply };
                 }
-
                 return { context: currentContext, finalAnswer: null };
             }
-
-            // TODO: ingestAndCompress(largeText) implementation for 20k->1k distillation
         }
 
         // --- HANDLERS ---
@@ -983,35 +620,16 @@ ${userText}
             ui.append("user", text);
 
             try {
-                // 1. Run Context Manager (Reflex + R1 Loop)
                 const { context, finalAnswer } = await contextManager.executeR1Loop(text, []);
+                if (finalAnswer && finalAnswer.includes("System Crash")) return ui.log("🛑 Execution halted (GPU Crash).", "error");
 
-                // CHECK FOR CRASH
-                if (finalAnswer && finalAnswer.includes("System Crash")) {
-                    ui.log("🛑 Execution halted due to GPU Crash.", "error");
-                    return; // Stop here, do not try to synthesize
-                }
-
-                // 2. Final Synthesis with Streaming
-                ui.log("🧪 Synthesizing final answer...", "warn");
-
-                const sysPrompt = `You are a helpful assistant with access to retrieved context from the user's memory system.
-
-Use the following context to answer the user's question. Be specific and cite the memory when relevant.
-
-CONTEXT:
-${context || "(No relevant context found)"}
-
-If context is insufficient, say so clearly.`;
-
+                ui.log("🧪 Synthesizing...", "warn");
+                const sysPrompt = `You are a helpful assistant with access to retrieved context. Use it to answer the user's question.\n\nCONTEXT:\n${context || "(No relevant context)"}`;
                 const msgHandle = ui.append("assistant", "");
 
                 const stream = await engine.chat.completions.create({
-                    messages: [
-                        { role: "system", content: sysPrompt },
-                        { role: "user", content: text }
-                    ],
-                    max_tokens: 500,
+                    messages: [ { role: "system", content: sysPrompt }, { role: "user", content: text } ],
+                    max_tokens: 1024,
                     temperature: 0.7,
                     stream: true
                 });
@@ -1022,12 +640,11 @@ If context is insufficient, say so clearly.`;
                     fullAnswer += delta;
                     msgHandle.update(fullAnswer);
                 }
-
                 ui.log("✅ Response generated.", "success");
 
             } catch (e) {
                 ui.log(`Error: ${e.message}`, "error");
-                ui.append("system", `Error: ${e.message}`);
+                ui.append("assistant", `**Error:** ${e.message}`);
             } finally {
                 input.disabled = false;
                 document.getElementById('send-btn').disabled = false;
@@ -1035,289 +652,112 @@ If context is insufficient, say so clearly.`;
             }
         }
 
-        // --- MAIN INIT ---
         async function loadModel() {
             const select = document.getElementById('model-select');
             const customInput = document.getElementById('custom-model-input');
             const modelInput = select.value === 'custom' ? customInput.value : select.value;
-
             if (!modelInput) return alert("Please select a model.");
 
-            // Standardize IDs
-            const simpleId = modelInput.split('/').pop();
-            selectedModelId = simpleId;
-
-            document.getElementById('model-select').disabled = true;
-            document.getElementById('custom-model-input').disabled = true;
+            selectedModelId = modelInput.split('/').pop();
             document.getElementById('load-model-btn').disabled = true;
+
             try {
-                ui.log(`Loading Reasoning Engine (${simpleId})...`, "info");
-
-                // --- Robust Model Library Mapping (from legacy) ---
-                let modelLib = null;
-                const lowerId = simpleId.toLowerCase();
-                const libBase = "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/";
-
-                let qTag = "q4f16_1";
-                if (lowerId.includes("q4f32_1")) qTag = "q4f32_1";
-                else if (lowerId.includes("q4f16_0")) qTag = "q4f16_0";
-                else if (lowerId.includes("q8f16_0")) qTag = "q8f16_0";
-                else if (lowerId.includes("q0f32")) qTag = "q0f32";
-                else if (lowerId.includes("q0f16")) qTag = "q0f16";
-                else if (lowerId.includes("q3f16_1")) {
-                    // WARNING: There is no specific q3f16_1 WASM for Mistral v0.3 in v0_2_80.
-                    // We fallback to using the q4f16_1 WASM which covers the same architecture.
-                    qTag = "q4f16_1";
-                }
-
-                if (lowerId.includes('llama-3.2-3b')) {
-                    modelLib = libBase + `Llama-3.2-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                } else if (lowerId.includes('llama-3.2-1b')) {
-                    modelLib = libBase + `Llama-3.2-1B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                } else if (lowerId.includes('llama-3.1-8b')) {
-                    // Fallback to Llama-3-8B-Instruct if 3.1 specific WASM is missing in v0_2_80
-                    modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                } else if (lowerId.includes('phi-3.5-mini')) {
-                    modelLib = libBase + `Phi-3.5-mini-instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                } else if (lowerId.includes('phi-3.5-vision')) {
-                    modelLib = libBase + `Phi-3.5-vision-instruct-${qTag}-ctx4k_cs2k-webgpu.wasm`;
-                } else if (lowerId.includes('qwen2.5-7b')) {
-                    // Use Qwen2 as safe fallback for Qwen2.5 if specific WASM missing
-                    modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                } else if (lowerId.includes('qwen2.5-3b')) {
-                    modelLib = libBase + `Qwen2.5-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                } else if (lowerId.includes('qwen3-4b')) {
-                    modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`; // Fallback map
-                } else if (lowerId.includes('qwen2.5-coder-1.5b') || lowerId.includes('qwen2.5-1.5b') || lowerId.includes('qwen2-1.5b') || lowerId.includes('deepseek-r1-distill-qwen-1.5b')) {
-                    modelLib = libBase + `Qwen2-1.5B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                } else if (lowerId.includes('gemma-2-9b')) {
-                    modelLib = libBase + `gemma-2-9b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                } else if (lowerId.includes('gemma-2-2b')) {
-                    modelLib = libBase + `gemma-2-2b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                } else if (lowerId.includes('mistral') || lowerId.includes('hermes')) {
-                    // Hermes/Mistral Logic
-                    if (lowerId.includes('hermes-3-llama-3.2-3b')) {
-                        modelLib = libBase + `Llama-3.2-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                    } else {
-                        // VERIFIED: Use v0.3 WASM for all 7B Hermes/Mistral variants
-                        modelLib = libBase + `Mistral-7B-Instruct-v0.3-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                    }
-                }
-
-                if (lowerId.includes('deepseek-r1-distill-llama')) {
-                    // Use Llama-3-8B library for architecture compatibility
-                    modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                } else if (lowerId.includes('deepseek-r1') || lowerId.includes('qwen')) {
-                    // Switch back to Qwen2-7B library (Verified Existing)
-                    if (!modelLib) modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                }
-
-                // FINAL FALLBACK: Prevent null crash
-                if (!modelLib) {
-                    ui.log("⚠️ No specific WASM driver found. Defaulting to Qwen2-7B driver.", "warn");
-                    modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                }
-
-                // NOTE: For Mistral/Hermes, we omit specific modelLib mapping to let WebLLM defaults try to resolve,
-                // or rely on previous Mistral mapping if valid. If explicit mapping failed 404, better to try default.
-
-                ui.log(`Wait for it... Resolving Model Lib: ${modelLib}`, "warn");
-
-                // Dynamic VRAM Calculation
-                let vramVal = 2000; // default for small models (increased stability)
-                if (lowerId.includes('72b')) vramVal = 48000;
-                else if (lowerId.includes('32b')) vramVal = 24000;
-                else if (lowerId.includes('14b')) vramVal = 12000;
-                else if (lowerId.includes('8b') || lowerId.includes('9b')) vramVal = 8000;
-                else if (lowerId.includes('7b')) vramVal = 6000;
-                else if (lowerId.includes('3b') || lowerId.includes('4b')) vramVal = 4000;
-
-                ui.log(`Configuring VRAM Requirement: ${vramVal}MB`, "info");
-
-                // Construct Config with BOTH IDs to ensure lookup succeeds for primary OR fallback
-
-                // --- WebGPU Probe (Move up to inform config) ---
-                let maxBuffer = 128 * 1024 * 1024;
-                try {
-                    const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }) || await navigator.gpu.requestAdapter();
-                    if (adapter) maxBuffer = adapter.limits.maxStorageBufferBindingSize;
-                } catch (e) { }
-                ui.log(`Configuring WebGPU Buffer: ${Math.round(maxBuffer / 1024 / 1024)}MB`, "info");
-
+                ui.log(`Initializing Engine (${selectedModelId})...`, "info");
+                
+                // --- KERNEL: Hardware Config ---
                 const hwProfile = document.getElementById('hw-profile').value;
-                let appConfigOverlay = {};
-
-                if (hwProfile === 'lite') {
-                    ui.log("🔋 Loading Lite Profile (Should be used for Snapdragon/Mobile): Chunk=32, Context=2048", "warn");
-                    appConfigOverlay = {
-                        prefillChunkSize: 32,     // STRICTEST safety for mobile/NPU drivers
-                        contextWindowSize: 2048,  // Safe context size
-                        slidingWindowSize: 2048,
-                        useIndexedDBCache: true
-                    };
-                } else if (hwProfile === 'mid') {
-                    ui.log("💻 Loading Mid-Tier Profile (8GB VRAM): Chunk=256, Context=4096", "info");
-                    appConfigOverlay = {
-                        prefillChunkSize: 256,    // Balanced chunking
-                        contextWindowSize: 4096,  // Standard context
-                        slidingWindowSize: undefined,
-                        useIndexedDBCache: true
-                    };
-                } else if (hwProfile === 'high') {
-                    ui.log("🚀 Loading High-Perf Profile (16GB VRAM): Chunk=Max, Context=16384", "info");
-                    appConfigOverlay = {
-                        prefillChunkSize: -1,     // Max throughput
-                        contextWindowSize: 16384, // Large context
-                        slidingWindowSize: undefined,
-                        useIndexedDBCache: true
-                    };
-                } else { // 'ultra'
-                    ui.log("⚡ Loading Ultra Profile (24GB+ VRAM): Chunk=Max, Context=32768", "info");
-                    appConfigOverlay = {
-                        prefillChunkSize: -1,
-                        contextWindowSize: 32768, // Massive context
-                        slidingWindowSize: undefined,
-                        useIndexedDBCache: true
-                    };
-                }
-                const snapdragonId = "snapdragon-" + simpleId;
-
-                // DeepSeek-R1-Distill Specific Override
-                let convOverride = {};
-                if (lowerId.includes('deepseek-r1-distill')) {
-                    ui.log("⚙️ Applying 'qwen2' Chat Template Override for compatibility...", "info");
-                    convOverride = { "conv_template": "qwen2" };
+                const gpuConfig = await getWebGPUConfig(hwProfile);
+                
+                if (gpuConfig.isConstrained) {
+                     ui.log(`⚠️ Clamping WebGPU buffer to ${Math.round(gpuConfig.maxBufferSize/1024/1024)}MB`, "warn");
+                } else {
+                     ui.log(`✅ GPU Configured: ${Math.round(gpuConfig.maxBufferSize/1024/1024)}MB Buffer`, "success");
                 }
 
-                // SAFETY CLAMP: If the WASM driver is 4k-limited, we MUST clamp context or it will crash.
-                if (modelLib.includes('ctx4k') && appConfigOverlay.contextWindowSize > 4096) {
-                    ui.log(`⚠️ Driver Limit Detected (ctx4k). Clamping context from ${appConfigOverlay.contextWindowSize} to 4096.`, "warn");
-                    appConfigOverlay.contextWindowSize = 4096;
-                }
+                // --- Config Generation ---
+                // (Simplified Logic for cleaner file)
+                const libBase = "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/";
+                let modelLib = null;
+                const lowerId = selectedModelId.toLowerCase();
+                let qTag = "q4f16_1"; // Default
+                
+                // Mapper
+                if (lowerId.includes('llama-3.2-3b')) modelLib = libBase + `Llama-3.2-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                else if (lowerId.includes('qwen2.5-1.5b')) modelLib = libBase + `Qwen2-1.5B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                else if (lowerId.includes('qwen2.5-3b')) modelLib = libBase + `Qwen2.5-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                else if (lowerId.includes('qwen2.5-7b')) modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                else if (lowerId.includes('qwen2.5-14b')) modelLib = libBase + `Qwen2.5-14B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                
+                if (!modelLib) modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`; // Fallback
 
-                const appConfig = {
-                    "useIndexedDBCache": appConfigOverlay.useIndexedDBCache,
-                    "requiredLimits": { "maxStorageBufferBindingSize": maxBuffer }, // Double tap
-                    "model_list": [
-                        {
-                            "model": "https://huggingface.co/" + modelInput + "/resolve/main/",
-                            "model_id": snapdragonId,
-                            "model_lib": modelLib,
-                            "vram_required_MB": vramVal,
-                            "low_resource_required": false,
-                            "context_window_size": appConfigOverlay.contextWindowSize, // Dynamic Context
-                            // Only apply override if exists
-                            ...(Object.keys(convOverride).length > 0 ? { "conv_config": convOverride } : {})
-                        },
-                        {
-                            "model": "https://huggingface.co/mlc-ai/" + simpleId + "/resolve/main/",
-                            "model_id": simpleId,
-                            "model_lib": modelLib,
-                            "vram_required_MB": vramVal,
-                            "low_resource_required": true,
-                            "required_features": ["shader-f16"],
-                            "context_window_size": appConfigOverlay.contextWindowSize,
-                            "sliding_window_size": appConfigOverlay.slidingWindowSize,
-                            "prefill_chunk_size": appConfigOverlay.prefillChunkSize,
-                            "buffer_size_required_bytes": maxBuffer,
-                            // Apply override here too
-                            ...(Object.keys(convOverride).length > 0 ? { "conv_config": convOverride } : {})
-                        }
-                    ]
+                let appConfig = {
+                    useIndexedDBCache: true,
+                    model_list: [{
+                        model: "https://huggingface.co/" + modelInput + "/resolve/main/",
+                        model_id: selectedModelId,
+                        model_lib: modelLib,
+                        vram_required_MB: 2000, 
+                        low_resource_required: true,
+                        buffer_size_required_bytes: gpuConfig.maxBufferSize,
+                    }]
                 };
+                
+                // Create Device
+                const device = await gpuConfig.adapter.requestDevice(gpuConfig.deviceConfig);
+                
+                engine = await webllm.CreateMLCEngine(selectedModelId, {
+                    appConfig,
+                    device, // KERNEL FIX
+                    initProgressCallback: (rep) => ui.updateProgress(rep.progress, rep.text)
+                });
 
-                // ui.log(`🚀 Using Snapdragon Override: ${snapdragonId}`, "info");
-
-
-                // If modelLib is null (e.g. Mistral), we should let CreateMLCEngine handle it or provide a default?
-                // "model_lib": modelLib || (libBase + `Mistral-7B-Instruct-v0.2-${qTag}-sw4k_cs1k-webgpu.wasm`), 
-                // We'll trust the logic: if we didn't map it, assume generic Mistral or let it fail gracefully/fallback.
-                // Actually, best to map OpenHermes to Mistral v0.2 if we can, but we couldn't verify file.
-                // Let's rely on Qwen/Llama mappings being correct.
-
-                try {
-                    // --- WebGPU Optimization: Pre-configure Device ---
-                    let adapter = null;
-                    let device = null;
-
-                    // Only pre-allocate device for Mobile/Lite profiles to respect Snapdragon limits
-                    // For Desktop (High/Ultra), we trust WebLLM's internal management
-                    if (navigator.gpu && (hwProfile === 'lite' || hwProfile === 'mid')) {
-                        adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }) || await navigator.gpu.requestAdapter();
-                        if (adapter) {
-                            const features = [];
-                            if (adapter.features.has("shader-f16")) features.push("shader-f16");
-
-                            // Explicitly request exactly the buffer size the hardware allows
-                            // This prevents WebLLM from requesting 1024MB and triggering the 128MB fallback.
-                            device = await adapter.requestDevice({
-                                requiredFeatures: features,
-                                requiredLimits: {
-                                    maxStorageBufferBindingSize: maxBuffer
-                                }
-                            });
-                            ui.log("✅ WebGPU Device pre-allocated (Snapdragon Optimized)", "success");
-                        }
-                    }
-
-                    ui.log(`Attempting to load Reasoning Engine...`, "info");
-
-                    // LOGIC CHANGE: For High-End Desktop (High/Ultra), avoid manual device creation hacks.
-                    // Let WebLLM manage the device standardly.
-                    // Only use the "Snapdragon" workaround for Lite/Mid profiles or mobile.
-
-                    let targetModelId = simpleId;
-                    let targetDevice = undefined;
-
-                    if (hwProfile === 'lite' || hwProfile === 'mid') {
-                        targetModelId = snapdragonId;
-                        targetDevice = device; // Use our manually created device with specific limits
-                        ui.log(`📱 Using Mobile/Optimized Path (${targetModelId})`, "info");
-                    } else {
-                        ui.log(`🖥️ Using Standard Desktop Path (${targetModelId})`, "info");
-                        // For High/Ultra, we trust WebLLM's default device creation
-                    }
-
-                    engine = await webllm.CreateMLCEngine(targetModelId, {
-                        appConfig,
-                        device: targetDevice,
-                        initProgressCallback: (report) => {
-                            ui.updateProgress(0.5 + (report.progress * 0.4), report.text);
-                        }
-                    });
-
-                } catch (primaryErr) {
-                    if (primaryErr.message.includes("add' on 'Cache'") || primaryErr.message.includes("quota")) {
-                        ui.log("❌ STORAGE QUOTA EXCEEDED! Browser cache is full.", "error");
-                        alert("Your Browser Storage is FULL.\n\nPlease click 'Delete Model Cache' in the System Controls panel, then try again.");
-                        throw primaryErr; // Stop trying fallback, it will fail too
-                    }
-                    ui.log(`Primary load failed (${primaryErr.message}), trying fallback to ${simpleId}...`, "warn");
-
-                    // Fallback: Try creating engine with simpleId
-                    engine = await webllm.CreateMLCEngine(simpleId, {
-                        appConfig,
-                        initProgressCallback: (report) => {
-                            ui.updateProgress(0.5 + (report.progress * 0.4), report.text);
-                        }
-                    });
-                }
-
-                ui.log(`✅ Engine Ready`, "success");
-                ui.updateProgress(1.0, "Ready!");
-
-                // Initialize Context Manager (The Brain)
+                ui.log("🎉 Root Console Online", "success");
                 contextManager = new ContextManager(engine, db);
-
-                // Enable input
                 document.getElementById('input').disabled = false;
                 document.getElementById('send-btn').disabled = false;
                 document.getElementById('input').focus();
+                
+            } catch (e) {
+                ui.log(`Load Failed: ${e.message}`, "error");
+                document.getElementById('load-model-btn').disabled = false;
+            }
+        }
 
-                ui.log("🎉 Sovereign Console Online", "success");
-                ui.append("assistant", `**Welcome to Sovereign Coda Console with ${simpleId}!**\n\nI'm ready to query your memory system using Graph-R1 reasoning. Ask me anything about the memories you've ingested.\n\nExample: \"What happened in July 2025?\"`);
+        async function init() {
+            try {
+                ui.log("🚀 Root Kernel Starting...", "info");
+                
+                // 1. CozoDB
+                await initCozo('./cozo_lib_wasm_bg.wasm');
+                // Recovery Logic
+                try {
+                     const [keys] = await loadAllFromIndexedDb('coda_memory', 'cozo_store', () => {});
+                     if (keys.length > 0) {
+                         db = await CozoDb.new_from_indexed_db('coda_memory', 'cozo_store', () => {});
+                         ui.log("✅ Root Graph Connected (Persistent)", "success");
+                     } else {
+                         db = CozoDb.new(); 
+                         ui.log("✅ Root Graph Created (Memory)", "info");
+                     }
+                } catch(e) {
+                    db = CozoDb.new();
+                    ui.log("⚠️ Fallback to Memory Graph", "warn");
+                }
 
-                // Setup input handlers
+                // 2. Embedder (Optional)
+                ui.updateProgress(0.3, "Loading Embedder...");
+                const embedderPromise = pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { device: 'wasm' });
+                try {
+                    embedder = await Promise.race([embedderPromise, new Promise((_, r) => setTimeout(() => r(new Error("Timeout")), 10000))]);
+                    ui.log("✅ Neural Embedder Ready", "success");
+                } catch(e) { ui.log("⚠️ Embedder Skipped (Timeout)", "warn"); }
+
+                ui.updateProgress(1.0, "Ready");
+                document.getElementById('model-select').disabled = false;
+                document.getElementById('load-model-btn').disabled = false;
+                document.getElementById('load-model-btn').addEventListener('click', loadModel);
+                
+                // Input Handlers
                 document.getElementById('send-btn').addEventListener('click', handleSend);
                 document.getElementById('input').addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' && !e.shiftKey && !document.getElementById('send-btn').disabled) {
@@ -1325,356 +765,37 @@ If context is insufficient, say so clearly.`;
                         handleSend();
                     }
                 });
-            } catch (e) {
-                ui.log(`Model Load Failed: ${e.message}`, "error");
-                document.getElementById('model-select').disabled = false;
-                document.getElementById('custom-model-input').disabled = false;
-                document.getElementById('load-model-btn').disabled = false;
-            }
-        }
-
-        async function init() {
-            try {
-                ui.log("🚀 Sovereign Console Starting...", "info");
-                ui.updateProgress(0.1, "Initializing CozoDB...");
-
-                // Initialize CozoDB
-                await initCozo('./cozo_lib_wasm_bg.wasm');
-                // Probe IndexedDB before attempting an automatic WASM load (malformed blobs can cause WASM panics)
-                try {
-                    const [keys, items] = await loadAllFromIndexedDb('coda_memory', 'cozo_store', () => { });
-                    ui.log(`IndexedDB probe found ${keys.length} entries in 'cozo_store'.`, 'info');
-                    if (keys.length === 0) {
-                        db = await CozoDb.new_from_indexed_db('coda_memory', 'cozo_store', () => { });
-                        ui.log("✅ CozoDB Connected (IndexedDB)", "success");
-                    } else {
-                        // Keys exist. Try to load safe, but catch panic.
-                        try {
-                            ui.log(`Attempting safe IDB load (${keys.length} items)...`, 'info');
-                            db = await CozoDb.new_from_indexed_db('coda_memory', 'cozo_store', () => { });
-                            ui.log("✅ CozoDB Connected (IndexedDB)", "success");
-                        } catch (loadErr) {
-                            ui.log(`Automatic load failed (${loadErr.message}); falling back to empty in-memory DB.`, 'warn');
-                            db = CozoDb.new();
-                            await createSchema();
-                            ui.log('Created FRESH in-memory CozoDB (Schema Initialized). Use Import to restore data.', 'info');
-                        }
-                    }
-                } catch (probeErr) {
-                    ui.log(`IndexedDB probe failed: ${probeErr.message} — creating fallback in-memory DB`, 'warn');
-                    db = CozoDb.new();
-                    await createSchema();
-                }
-                ui.updateProgress(0.3, "Loading Embedder (WASM)...");
-
-                // Initialize Embedder with Timeout (15s)
-                // If this hangs (CDN/Network issue), we skip it so the Console remains usable.
-                const embedderPromise = pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { device: 'wasm' });
-
-                try {
-                    embedder = await Promise.race([
-                        embedderPromise,
-                        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000))
-                    ]);
-                    ui.log("✅ Embedder Ready (all-MiniLM-L6-v2)", "success");
-                } catch (err) {
-                    ui.log(`⚠️ Embedder Init Failed/Timed Out: ${err.message}. Context features disabled.`, "warn");
-                    embedder = null; // System proceeds without Embedder
-                }
-
-                ui.updateProgress(0.5, "Ready for Model Selection...");
-
-                // Enable model selection
-                document.getElementById('model-select').disabled = false;
-                document.getElementById('load-model-btn').disabled = false;
-
-                // Setup model selection handlers
-                document.getElementById('model-select').addEventListener('change', (e) => {
-                    const customInput = document.getElementById('custom-model-input');
-                    if (e.target.value === 'custom') {
-                        customInput.disabled = false;
-                        customInput.focus();
-                    } else {
-                        customInput.disabled = true;
-                    }
-                });
-
+                
+                // Bridge logic...
                 document.getElementById('copy-logs-btn').addEventListener('click', () => {
-                    const logs = document.getElementById('status-log').innerText;
-                    navigator.clipboard.writeText(logs).then(() => {
-                        const btn = document.getElementById('copy-logs-btn');
-                        const original = btn.textContent;
-                        btn.textContent = "✅ Copied!";
-                        setTimeout(() => btn.textContent = original, 2000);
-                    }).catch(err => {
-                        console.error('Failed to copy: ', err);
-                        ui.log('Failed to copy logs to clipboard', 'error');
-                    });
+                     navigator.clipboard.writeText(document.getElementById('status-log').innerText);
                 });
 
-                document.getElementById('load-model-btn').addEventListener('click', loadModel);
-
-                ui.log("⚠️ Select a model and click 'Load Model'", "info");
-
-                document.getElementById('attempt-indexeddb-load-btn').addEventListener('click', async () => {
-                    try {
-                        ui.log('User requested manual IndexedDB load. This may show WASM panics in console but will be handled.', 'info');
-                        const db2 = await CozoDb.new_from_indexed_db('coda_memory', 'cozo_store', () => { });
-                        db = db2;
-                        ui.log('Manual IndexedDB load succeeded.', 'success');
-                    } catch (e) {
-                        ui.log(`Manual IndexedDB load failed (check console for WASM panic): ${e && e.message ? e.message : String(e)}`, 'error');
-                        ui.log('If this happens, inspect and remove any small/corrupt blobs in the Sovereign DB Builder and retry.', 'warn');
-                    }
-                });
-
-            } catch (e) {
-                // Specific handling for WebGPU on Snapdragon/ARM
-                if (e.message.includes("compatible GPU")) {
-                    ui.log(`❌ WebGPU Error: ${e.message}`, "error");
-                    ui.append("system", `
-<div style="border: 2px solid #d7ba7d; background: #2d2d2d; padding: 10px; border-radius: 5px; margin: 10px 0;">
-    <h4 style="margin:0 0 10px 0; color: #d7ba7d;">⚠️ Snapdragon / WebGPU Issue Detected</h4>
-    <p>Your browser is blocking WebGPU access. This is common on Snapdragon X Elite devices.</p>
-    <p><strong>Fix:</strong></p>
-    <ol style="margin-left: 20px;">
-        <li>Open a new tab and go to: <code style="background:#444; padding:2px;">edge://flags/#enable-unsafe-webgpu</code></li>
-        <li>Set it to <strong>Enabled</strong>.</li>
-        <li><strong>Restart the browser</strong> completely.</li>
-    </ol>
-</div>
-`);
-                } else {
-                    ui.append("system", `**Initialization Error**\n\`\`\`\n${e.message}\n${e.stack}\n\`\`\``);
-                }
+            } catch(e) {
+                ui.log(`Init Error: ${e.message}`, "error");
             }
         }
-
-        // --- GLOBAL EVENT LISTENERS (Run immediately) ---
-        const clearBtn = document.getElementById('clear-cache-btn');
-        if (clearBtn) {
-            clearBtn.addEventListener('click', async () => {
-                if (!confirm("Are you sure you want to DELETE all cached model weights? This will require re-downloading models.")) return;
-                try {
-                    // Determine UI logging method
-                    const log = (msg, type) => (typeof ui !== 'undefined' && ui.log) ? ui.log(msg, type) : console.log(msg);
-
-                    log("Deleting model cache...", "warn");
-
-                    // 1. Cache Storage API (Main Weights)
-                    const cacheNames = await caches.keys();
-                    let deleted = 0;
-                    for (const name of cacheNames) {
-                        // WebLLM usually uses "webllm/..." or just user provided names if custom
-                        // We will delete ANYTHING that looks like a model cache to be safe
-                        if (name.includes("webllm") || name.includes("param") || name.includes("wasm")) {
-                            await caches.delete(name);
-                            log(`Deleted cache: ${name}`, "success");
-                            deleted++;
-                        }
-                    }
-
-                    // 2. Clear Transformers.js cache (if used)
-                    if (cacheNames.includes('transformers-cache')) {
-                        await caches.delete('transformers-cache');
-                        log("Deleted transformers-cache", "success");
-                        deleted++;
-                    }
-
-                    if (deleted === 0) {
-                        log("No obvious model caches found. Trying to list all...", "info");
-                        // Desperate mode: list all and ask/delete
-                        for (const name of cacheNames) {
-                            log(`Found generic cache: ${name}`, "warn");
-                            // Uncomment to nuke all: await caches.delete(name);
-                        }
-                    }
-
-                    log(`Cache clear routine finished. (${deleted} caches removed).`, "success");
-                    alert(`Deleted ${deleted} cache(s). Page will now reload.`);
-                    window.location.reload();
-
-                } catch (e) {
-                    console.error(e);
-                    alert(`Error clearing cache: ${e.message}`);
-                }
-
-            });
-        }
-
-        // --- RESIZE HANDLE LOGIC ---
-        const resizer = document.getElementById('resizer');
-        const sidebar = document.getElementById('sidebar');
-        let isResizing = false;
-
-        if (resizer && sidebar) {
-            resizer.addEventListener('mousedown', (e) => {
-                isResizing = true;
-                resizer.classList.add('resizing');
-                document.body.style.cursor = 'col-resize';
-                document.body.style.userSelect = 'none'; // Prevent text selection
-            });
-
-            document.addEventListener('mousemove', (e) => {
-                if (!isResizing) return;
-                // Calculate new width
-                const newWidth = e.clientX;
-                // Constraints (matches CSS min/max)
-                if (newWidth > 200 && newWidth < window.innerWidth * 0.8) {
-                    sidebar.style.width = newWidth + 'px';
-                }
-            });
-
-            document.addEventListener('mouseup', () => {
-                if (isResizing) {
-                    isResizing = false;
-                    resizer.classList.remove('resizing');
-                    document.body.style.cursor = '';
-                    document.body.style.userSelect = '';
-                }
-            });
-        }
-
-        // --- BRIDGE LOGIC (Wave Terminal Integration) ---
+        
+        // --- BRIDGE LOGIC ---
         let bridgeWs = null;
-        let bridgeReconnectTimer = null;
-
-        window.toggleBridge = function (enabled) {
-            const statusEl = document.getElementById('bridge-status');
+        window.toggleBridge = function(enabled) {
             if (enabled) {
-                if (!engine) {
-                    alert("Please load a model first!");
-                    document.getElementById('enable-bridge-toggle').checked = false;
-                    return;
-                }
-                statusEl.textContent = "Connecting...";
-                connectBridge();
-            } else {
-                if (bridgeWs) {
-                    bridgeWs.close();
-                    bridgeWs = null;
-                }
-                clearTimeout(bridgeReconnectTimer);
-                statusEl.textContent = "Disconnected";
-            }
+                if(!engine) { alert("Load model first!"); document.getElementById('enable-bridge-toggle').checked=false; return; }
+                bridgeWs = new WebSocket("ws://localhost:8080/ws/chat");
+                bridgeWs.onopen = () => { document.getElementById('bridge-status').innerText = "🟢 Connected"; ui.log("Bridge Online", "success"); };
+                bridgeWs.onmessage = async (e) => {
+                    const msg = JSON.parse(e.data);
+                    if(msg.type === 'chat') {
+                         ui.log(`Bridge Request: ${msg.id}`, "info");
+                         const completion = await engine.chat.completions.create({ messages: msg.data.messages, stream: true });
+                         for await (const chunk of completion) bridgeWs.send(JSON.stringify({id: msg.id, chunk}));
+                         bridgeWs.send(JSON.stringify({id: msg.id, done: true}));
+                    }
+                };
+            } else if(bridgeWs) { bridgeWs.close(); bridgeWs=null; document.getElementById('bridge-status').innerText = "Disconnected"; }
         };
 
-        function connectBridge() {
-            const statusEl = document.getElementById('bridge-status');
-            const bridgeUrl = "ws://localhost:8080/ws/chat"; // Default bridge port
-
-            ui.log(`🌉 Connecting to Bridge (${bridgeUrl})...`, "info");
-            bridgeWs = new WebSocket(bridgeUrl);
-
-            bridgeWs.onopen = () => {
-                statusEl.textContent = "🟢 Connected";
-                statusEl.style.color = "#0f0";
-                ui.log("✅ Bridge Connected (Ready for Wave Terminal)", "success");
-            };
-
-            bridgeWs.onclose = () => {
-                const toggle = document.getElementById('enable-bridge-toggle');
-                if (toggle && toggle.checked) {
-                    statusEl.textContent = "🔴 Disconnected (Retrying...)";
-                    statusEl.style.color = "#f00";
-                    ui.log("⚠️ Bridge Disconnected. Is 'python webgpu_bridge.py' running? Retrying in 5s...", "warn");
-                    bridgeReconnectTimer = setTimeout(connectBridge, 5000);
-                } else {
-                    statusEl.textContent = "Disconnected";
-                    statusEl.style.color = "#666";
-                }
-            };
-
-            bridgeWs.onmessage = async (event) => {
-                const msg = JSON.parse(event.data);
-                if (msg.type === 'chat') {
-                    handleBridgeChatRequest(msg.id, msg.data);
-                }
-            };
-        }
-
-        document.getElementById('debug-gpu-btn').addEventListener('click', async () => {
-            let msg = "WebGPU Debug Info:\n\n";
-            if (!navigator.gpu) {
-                msg += "❌ navigator.gpu is UNDEFINED. Browser does not support WebGPU or it is disabled.\n";
-            } else {
-                msg += "✅ navigator.gpu exists.\n";
-                try {
-                    const adapter = await navigator.gpu.requestAdapter();
-                    msg += adapter ? `✅ Default Adapter: ${adapter.limits.maxBufferSize}\n` : "❌ Default Adapter: NULL\n";
-                } catch (e) { msg += `❌ Default Adapter Error: ${e.message}\n`; }
-
-                try {
-                    const lowAdapter = await navigator.gpu.requestAdapter({ powerPreference: 'low-power' });
-                    msg += lowAdapter ? `✅ Low-Power Adapter: ${lowAdapter.limits.maxBufferSize}\n` : "❌ Low-Power Adapter: NULL\n";
-                } catch (e) { msg += `❌ Low-Power Adapter Error: ${e.message}\n`; }
-            }
-            alert(msg);
-        });
-
-        async function handleBridgeChatRequest(reqId, data) {
-            ui.log(`📥 Bridge Request: ${reqId.slice(0, 8)}...`, "info");
-            try {
-                // OpenAI Compatibility Mapping
-                let messages = data.messages || [];
-
-                // Sanitize: Ensure System Prompt is FIRST (WebLLM strict requirement)
-                // 1. Extract all system messages
-                const systemMsgs = messages.filter(m => m.role === 'system');
-                const otherMsgs = messages.filter(m => m.role !== 'system');
-
-                // 2. Combine into single system prompt (or take last one if conflict)
-                let finalSystemMsg = null;
-                if (systemMsgs.length > 0) {
-                    // Start with default or first
-                    finalSystemMsg = { role: 'system', content: systemMsgs.map(m => m.content).join("\n\n") };
-                }
-
-                // 3. Reconstruct array
-                const cleanMessages = [];
-                if (finalSystemMsg) cleanMessages.push(finalSystemMsg);
-                cleanMessages.push(...otherMsgs);
-
-                // Force stream to true for bridge efficiency
-                const completion = await engine.chat.completions.create({
-                    messages: cleanMessages,
-                    stream: true,
-                    temperature: data.temperature || 0.7,
-                    max_tokens: data.max_tokens || 4096,
-                    // Respect current profile settings if needed, but usually request overrides
-                });
-
-                for await (const chunk of completion) {
-                    if (bridgeWs && bridgeWs.readyState === WebSocket.OPEN) {
-                        bridgeWs.send(JSON.stringify({
-                            id: reqId,
-                            chunk: chunk
-                        }));
-                    }
-                }
-
-                // Signal done
-                if (bridgeWs && bridgeWs.readyState === WebSocket.OPEN) {
-                    bridgeWs.send(JSON.stringify({
-                        id: reqId,
-                        done: true
-                    }));
-                }
-                ui.log(`📤 Bridge Request Complete.`, "success");
-
-            } catch (e) {
-                ui.log(`❌ Bridge Request Failed: ${e.message}`, "error");
-                if (bridgeWs && bridgeWs.readyState === WebSocket.OPEN) {
-                    bridgeWs.send(JSON.stringify({ id: reqId, error: e.message }));
-                }
-            }
-        }
-
-        // Start when page loads
         window.addEventListener('load', init);
-
     </script>
 </body>
-
 </html>
-```
