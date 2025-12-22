@@ -28,6 +28,11 @@ The Kernel is the standard library for all Root Tools. It enforces consistency a
 ## 2. Memory Layer (CozoDB WASM)
 The Kernel provides a standardized loader: `initCozo(wasmPath)`.
 
+### Data Portability
+- **Lossless Export**: The Root Builder features a "Lossless Export" button.
+- **Mechanism**: Dumps full Cozo relations (including vectors) to a JSON file.
+- **Use Case**: Transfer full "Brain" state between devices or backup.
+
 ### Schema
 ```datalog
 :create memory {
@@ -66,3 +71,11 @@ The `webgpu_bridge.py` acts as a secure relay (websocket <-> http) for external 
 - **Trigger**: User clicks "Summarize & Clarify" after a successful transcription.
 - **Process**: The cleaned transcript is sent back to the Local Kernel (Qwen2.5) with a prompt to "summarize and clarify core meaning."
 - **Output**: The transcript is replaced by the summary, which is automatically copied to the clipboard.
+
+## 5. Parallel Compute (The Worker)
+To prevent UI freezing during heavy inference, the LLM runs in a dedicated Web Worker.
+
+### 5.1 `tools/modules/llm-worker.js`
+- **Role**: Hosts the `MLCEngine` instance.
+- **Communication**: Uses `WebWorkerMLCEngineHandler` to bridge messages between the main thread and the worker.
+- **Benefit**: Ensures the UI remains responsive (scrolling, typing) even while the GPU is crunching tokens.

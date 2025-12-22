@@ -307,8 +307,8 @@
 
                         <optgroup label="✨ SOTA (Latest)">
                             <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC">DeepSeek R1 (7B Distill) [Verified]</option>
-                            <option value="mlc-ai/Qwen3-4B-Instruct-q4f16_1-MLC">Qwen 3 4B (Instruct) [Auth Required]</option>
-                            <option value="mlc-ai/Qwen3-7B-Instruct-q4f16_1-MLC">Qwen 3 7B (Instruct) [Auth Required]</option>
+                            <option value="mlc-ai/Qwen3-4B-q4f16_1-MLC">Qwen 3 4B (Base) [Verified]</option>
+                            <option value="mlc-ai/Qwen3-8B-q4f16_1-MLC">Qwen 3 8B (Base) [Verified]</option>
                             <option value="mlc-ai/Qwen2.5-7B-Instruct-q4f16_1-MLC" selected>Qwen 2.5 7B (Instruct) [Verified]</option>
                             <option value="mlc-ai/Phi-3.5-mini-instruct-q4f16_1-MLC">Phi 3.5 Mini (3.8B)</option>
                         </optgroup>
@@ -411,7 +411,7 @@
         import { CozoDb } from './cozo_lib_wasm.js';
         import { loadAllFromIndexedDb, writeToIndexedDb } from './indexeddb.js';
         import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0';
-        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+        import { CreateWebWorkerMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
         import { marked } from "https://cdn.jsdelivr.net/npm/marked/lib/marked.esm.js";
 
         env.allowLocalModels = false;
@@ -778,8 +778,8 @@ ${userText}
                 // Mapper
                 // SOTA / New
                 if (lowerId.includes('deepseek-r1')) modelLib = libBase + `Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm`;
-                else if (lowerId.includes('qwen3-4b')) modelLib = libBase + `Qwen3-4B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                else if (lowerId.includes('qwen3-7b')) modelLib = libBase + `Qwen3-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                else if (lowerId.includes('qwen3-4b')) modelLib = libBase + `Qwen3-4B-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                else if (lowerId.includes('qwen3-8b')) modelLib = libBase + `Qwen3-8B-${qTag}-ctx4k_cs1k-webgpu.wasm`;
                 else if (lowerId.includes('qwen2.5-7b')) modelLib = libBase + `Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm`;
                 else if (lowerId.includes('phi-3.5-mini')) modelLib = libBase + `Phi-3.5-mini-instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm`;
 
@@ -816,14 +816,18 @@ ${userText}
                     }]
                 };
 
-                // Create Device
-                const device = await gpuConfig.adapter.requestDevice(gpuConfig.deviceConfig);
+                // Create the Worker
+                const worker = new Worker('./modules/llm-worker.js', { type: 'module' });
 
-                engine = await webllm.CreateMLCEngine(selectedModelId, {
-                    appConfig,
-                    device, // KERNEL FIX
-                    initProgressCallback: (rep) => ui.updateProgress(rep.progress, rep.text)
-                });
+                // Initialize Engine via Worker
+                engine = await CreateWebWorkerMLCEngine(
+                    worker,
+                    selectedModelId,
+                    {
+                        appConfig, // Passing the VRAM/Buffer limits we calculated
+                        initProgressCallback: (rep) => ui.updateProgress(rep.progress, rep.text)
+                    }
+                );
 
                 ui.log("🎉 Root Console Online", "success");
                 contextManager = new ContextManager(engine, db);
@@ -870,27 +874,27 @@ ${userText}
                     ui.log("✅ Neural Embedder Ready", "success");
                 } catch (e) { ui.log("⚠️ Embedder Skipped (Timeout)", "warn"); }
 
+            } catch (e) {
+                ui.log(`Init Error: ${e.message}`, "error");
+            } finally {
+                // Ensure controls are unlocked even if init fails (partial functionality)
                 ui.updateProgress(1.0, "Ready");
                 document.getElementById('model-select').disabled = false;
                 document.getElementById('load-model-btn').disabled = false;
                 document.getElementById('load-model-btn').addEventListener('click', loadModel);
 
-                // Input Handlers
-                document.getElementById('send-btn').addEventListener('click', handleSend);
-                document.getElementById('input').addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter' && !e.shiftKey && !document.getElementById('send-btn').disabled) {
-                        e.preventDefault();
-                        handleSend();
-                    }
-                });
-
-                // Bridge logic...
-                document.getElementById('copy-logs-btn').addEventListener('click', () => {
-                    navigator.clipboard.writeText(document.getElementById('status-log').innerText);
-                });
-
-            } catch (e) {
-                ui.log(`Init Error: ${e.message}`, "error");
+                // Input Handlers (idempotent)
+                const sendBtn = document.getElementById('send-btn');
+                const input = document.getElementById('input');
+                if (sendBtn && input) {
+                    sendBtn.onclick = handleSend; // Use property to avoid duplicates
+                    input.onkeydown = (e) => {
+                        if (e.key === 'Enter' && !e.shiftKey && !sendBtn.disabled) {
+                            e.preventDefault();
+                            handleSend();
+                        }
+                    };
+                }
             }
         }
 

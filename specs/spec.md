@@ -19,19 +19,20 @@ The system has evolved into **Root Coda**, a pure [WASM (WebAssembly)](https://w
 - **Engine:** [WebLLM](https://webllm.mlc.ai/) (MLC-AI)
 - **Runtime:** WebGPU (Hardware accelerated)
 - **Models:**
-  - **Lite:** Qwen2.5-1.5B / Llama-3.2-1B (Mobile/Snapdragon)
-  - **Mid:** Qwen2.5-7B / Mistral-7B (8GB VRAM)
-  - **High:** Qwen2.5-14B / DeepSeek-R1 (16GB+ VRAM)
+  - **SOTA (Latest):** Qwen 3 (4B, 8B) / Gemma 3 (1B) / Phi 3.5
+  - **High Performance:** SmolLM2 (1.7B, 360M) / Qwen2.5-3B
+  - **Legacy:** Qwen2.5-14B / DeepSeek-R1 (16GB+ VRAM)
 
 ### 3. The Memory (`cozo-lib-wasm`)
 - **Database:** [CozoDB](https://cozodb.org/) (Datalog/Relational/Graph)
 - **Storage:** IndexedDB / OPFS (Origin Private File System) -> Persistent.
 - **Schema:**
   - `*memory`: Stored relations (content, timestamp, embedding).
+    - **Multisensory (Phase A):** Now includes `mime_type` and `blob_ref` for binary file referencing.
   - `*vectors`: HNSW vector index for semantic search.
 
 ### 4. The Interfaces (Root Tools)
-- **Root Console** (`model-server-chat.html`): The **Brain**. Runs Graph-R1 reasoning loop.
+- **Root Console** (`model-server-chat.html`): The **Brain**. Runs Graph-R1 in a **Web Worker** (`llm-worker.js`) to prevent UI freezing during inference.
 - **Root Builder** (`sovereign-db-builder.html`): The **Stomach**. Ingests files/logs into the Graph.
 - **Root Mic** (`sovereign-mic.html`): The **Ears**. Whisper-Tiny (WASM) + LLM cleanup.
 - **Log Viewer** (`log-viewer.html`): The **Nerves**. System-wide diagnostics.
@@ -48,7 +49,8 @@ graph TD
     Builder -->|Insert| Cozo[CozoDB WASM]
     
     subgraph Browser Kernel
-        Console -->|Inference| WebLLM[WebLLM ServiceWorker]
+        Console -->|Msg| Worker[LLM Worker]
+        Worker -->|Inference| WebGPU
         Console -->|Query| Cozo
         Cozo -->|Persist| IDB[IndexedDB]
     end
@@ -57,7 +59,7 @@ graph TD
 ## Critical Workflows
 
 ### 1. The Reasoning Loop (Graph-R1)
-1. User input triggers **Reflex** (Keyword/Vector search in CozoDB).
+1. User input triggers **Hybrid Reflex** (Vector Embedding + Keyword/Regex search in CozoDB).
 2. **Context Manager** assembles a "Virtual Prompt" with retrieved clues.
 3. LLM executes **R1 Loop**:
    - If answer found: Synthesize.

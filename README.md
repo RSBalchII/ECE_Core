@@ -38,9 +38,9 @@ graph TD
 ```
 
 ### 2. Core Components
-*   **Brain**: `model-server-chat.html` - Runs the Graph-R1 Reasoning Loop.
+*   **Brain**: `model-server-chat.html` - Runs the Graph-R1 Reasoning Loop. Now uses **Hybrid Search** (Vector + Lexical) and supports SOTA models (Qwen 3, Gemma 3).
 *   **Memory**: `CozoDB (WASM)` - Stores relations (`*memory`) and vectors. Persists to browser IndexedDB.
-*   **Stomach**: `sovereign-db-builder.html` - Ingests files (Markdown/JSON) into the graph.
+*   **Stomach**: `sovereign-db-builder.html` - Ingests files into the graph. Now "Multisensory-Ready" (Phase A): accepts images/audio as references.
 
 ---
 

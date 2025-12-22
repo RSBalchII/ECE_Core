@@ -13,11 +13,17 @@
 - [x] **WebGPU Buffer Optimization**: Implemented 256MB override for Adreno GPUs.
 - [x] **Model Profiles**: Added Lite, Mid, High, Ultra profiles.
 - [x] **Crash Prevention**: Context clamping for constrained drivers.
+- [x] **Mobile Optimization**: Service Worker (`llm-worker.js`) for non-blocking inference.
 
 ### Active Development - Expansion
 - [ ] **Agentic Tools**: Port Verifier/Distiller logic to `tools/modules/agents.js`.
 - [ ] **Multimodal**: Add image support to Builder (drag-and-drop embedding).
 - [ ] **Voice Output**: Add TTS to Console.
+
+## Phase 4: The Specialist Array
+- [ ] **Dataset Generation**: Samsung TRM / Distillation.
+- [ ] **Unsloth Training Pipeline**: RTX 4090 based fine-tuning.
+- [ ] **Model Merging**: FrankenMoE construction.
 
 ## Backlog
 - [ ] **Federation Protocol**: P2P sync.

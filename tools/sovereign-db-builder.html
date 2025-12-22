@@ -71,7 +71,7 @@
             margin-right: 10px;
             transition: all 0.2s;
         }
-        
+
         button:hover {
             border-color: var(--accent);
             color: var(--accent);
@@ -83,11 +83,25 @@
             border-color: #333;
             cursor: not-allowed;
         }
-        
-        button.primary { background: var(--accent); color: #000; border: none; }
-        button.primary:hover { background: #00cc6a; }
-        button.danger { background: var(--danger); border-color: var(--danger); }
-        button.danger:hover { background: #cc0000; }
+
+        button.primary {
+            background: var(--accent);
+            color: #000;
+            border: none;
+        }
+
+        button.primary:hover {
+            background: #00cc6a;
+        }
+
+        button.danger {
+            background: var(--danger);
+            border-color: var(--danger);
+        }
+
+        button.danger:hover {
+            background: #cc0000;
+        }
 
         .stat-box {
             display: flex;
@@ -110,9 +124,13 @@
             display: block;
             margin-bottom: 5px;
         }
-        
-        .stat-label { font-size: 0.8rem; color: #888; text-transform: uppercase; }
-        
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #888;
+            text-transform: uppercase;
+        }
+
         textarea {
             width: 100%;
             height: 60px;
@@ -125,7 +143,11 @@
             margin-bottom: 10px;
             font-family: inherit;
         }
-        textarea:focus { outline: none; border-color: var(--accent); }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
     </style>
 </head>
 
@@ -183,17 +205,17 @@
 
         // --- 0. KERNEL SETUP ---
         const logger = new SovereignLogger('Root-Builder');
-        
+
         // Wrap logger to output to DOM as well
         const originalInfo = logger.info.bind(logger);
         logger.info = (msg) => { originalInfo(msg); appendLog(msg, 'info'); };
-        
+
         const originalWarn = logger.warn.bind(logger);
         logger.warn = (msg) => { originalWarn(msg); appendLog(msg, 'warn'); };
-        
+
         const originalError = logger.error.bind(logger);
         logger.error = (msg) => { originalError(msg); appendLog(msg, 'error'); };
-        
+
         const originalSuccess = logger.success.bind(logger);
         logger.success = (msg) => { originalSuccess(msg); appendLog(msg, 'success'); };
 
@@ -247,7 +269,7 @@
         async function init() {
             try {
                 logger.info("Initializing Root Kernel...");
-                
+
                 // Load Cozo WASM via Kernel
                 CozoDbClass = await initCozo('./cozo_lib_wasm_bg.wasm');
 
@@ -256,14 +278,14 @@
                     const [keys, items] = await loadAllFromIndexedDb('coda_memory', 'cozo_store', () => { });
                     logger.info(`Storage Probe: Found ${keys.length} items in persistence layer.`);
                     closeDatabase(); // Important: Release lock
-                    
+
                     // Try Persistent Load
                     try {
-                        const dbPromise = CozoDbClass.new_from_indexed_db('coda_memory', 'cozo_store', () => {});
+                        const dbPromise = CozoDbClass.new_from_indexed_db('coda_memory', 'cozo_store', () => { });
                         // Timeout protection
                         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('DB Load Timeout')), 5000));
                         db = await Promise.race([dbPromise, timeoutPromise]);
-                        
+
                         state.dbStatus = "Active (Persistent)";
                         state.dbColor = "#00ff88";
                         logger.success("Root Graph Online (Persistent).");
@@ -323,7 +345,14 @@
 
         async function ensureSchema() {
             try {
+                // 1. Check if table exists
                 await safeRun("?[id] := *memory{id} :limit 1", "{}");
+
+                // 2. Migration: Try to add new columns if they don't exist
+                // (CozoDB ignores 'add' if column exists or throws specific error, we catch to be safe)
+                try { await safeRun("::alter memory add mime_type: String?", "{}"); } catch (e) { }
+                try { await safeRun("::alter memory add blob_ref: String?", "{}"); } catch (e) { }
+
             } catch (e) {
                 logger.warn("Schema missing. Creating Root Graph schema...");
                 await safeRun(`
@@ -333,7 +362,9 @@
                         role: String,
                         content: String,
                         source: String,
-                        embedding: <F32; 384>
+                        embedding: <F32; 384>,
+                        mime_type: String?,
+                        blob_ref: String?
                     }
                 `, "{}");
                 logger.success("Schema Created.");
@@ -353,37 +384,52 @@
         async function handleFiles(files) {
             if (!embedder || !db) return logger.error("System not ready.");
             for (const file of files) {
-                logger.info(`Reading ${file.name}...`);
+                logger.info(`Reading ${file.name} (${file.type || 'unknown'})...`);
                 try {
-                    const text = await file.text();
                     let records = [];
-                    
-                    if (file.name.endsWith('.json')) {
-                        const json = JSON.parse(text);
-                        if (Array.isArray(json)) records = json;
-                        else if (json.conversations) records = json.conversations;
-                        else if (json.relations) {
-                             // Extract rows logic simplified
-                             const mem = json.relations.find(r => r.name === 'memory') || json.relations[0];
-                             if (mem) {
-                                 const hdr = mem.headers || ['id','timestamp','role','content','source','embedding'];
-                                 records = (mem.rows || []).map(r => {
-                                     const obj = {};
-                                     hdr.forEach((h,i) => obj[h] = r[i]);
-                                     return obj;
-                                 });
-                             }
-                        }
-                    } else {
-                        // Text file
+
+                    // Binary Handling (Images/Audio)
+                    if (file.type.startsWith('image/') || file.type.startsWith('audio/')) {
                         records = [{
-                            role: 'system',
+                            role: 'user',
                             source: file.name,
                             timestamp: file.lastModified,
-                            content: text
+                            content: `[BINARY_REF] ${file.name}`, // Placeholder for text search
+                            mime_type: file.type,
+                            blob_ref: file.name
                         }];
                     }
-                    
+                    // Text Handling
+                    else {
+                        const text = await file.text();
+
+                        if (file.name.endsWith('.json')) {
+                            const json = JSON.parse(text);
+                            if (Array.isArray(json)) records = json;
+                            else if (json.conversations) records = json.conversations;
+                            else if (json.relations) {
+                                // Extract rows logic simplified
+                                const mem = json.relations.find(r => r.name === 'memory') || json.relations[0];
+                                if (mem) {
+                                    const hdr = mem.headers || ['id', 'timestamp', 'role', 'content', 'source', 'embedding'];
+                                    records = (mem.rows || []).map(r => {
+                                        const obj = {};
+                                        hdr.forEach((h, i) => obj[h] = r[i]);
+                                        return obj;
+                                    });
+                                }
+                            }
+                        } else {
+                            // Text file
+                            records = [{
+                                role: 'system',
+                                source: file.name,
+                                timestamp: file.lastModified,
+                                content: text
+                            }];
+                        }
+                    }
+
                     await processRecords(records, file.name);
                 } catch (e) {
                     logger.error(`Failed ${file.name}: ${e.message}`);
@@ -406,9 +452,12 @@
                 }
 
                 const ts = rec.timestamp ? new Date(rec.timestamp).getTime() : Date.now();
-                const id = `${ts}-${Math.random().toString(36).substr(2,9)}`;
-                
-                batch.push([id, ts, rec.role || 'unknown', content, rec.source || sourceName, embedding]);
+                const id = `${ts}-${Math.random().toString(36).substr(2, 9)}`;
+
+                const mime = rec.mime_type || null;
+                const ref = rec.blob_ref || null;
+
+                batch.push([id, ts, rec.role || 'unknown', content, rec.source || sourceName, embedding, mime, ref]);
 
                 if (batch.length >= SOV_BATCH_SIZE) {
                     await insertBatch(batch);
@@ -416,28 +465,28 @@
                 }
             }
             if (batch.length) await insertBatch(batch);
-            try { await flushPendingWrites(); } catch (e) {}
+            try { await flushPendingWrites(); } catch (e) { }
             logger.success(`Imported ${records.length} items from ${sourceName}`);
         }
 
         async function insertBatch(rows) {
-            const q = `?[id, ts, role, content, src, vec] <- $data :put memory { id, timestamp: ts, role, content, source: src, embedding: vec }`;
+            const q = `?[id, ts, role, content, src, vec, mime, ref] <- $data :put memory { id, timestamp: ts, role, content, source: src, embedding: vec, mime_type: mime, blob_ref: ref }`;
             await safeRun(q, JSON.stringify({ data: rows }));
         }
 
         // --- 3. EVENT LISTENERS ---
         document.getElementById('drop-zone').addEventListener('click', () => document.getElementById('file-input').click());
         document.getElementById('file-input').addEventListener('change', (e) => handleFiles(e.target.files));
-        
+
         document.getElementById('drop-zone').addEventListener('dragover', (e) => { e.preventDefault(); e.target.style.borderColor = '#00ff88'; });
         document.getElementById('drop-zone').addEventListener('drop', (e) => { e.preventDefault(); e.target.style.borderColor = '#444'; handleFiles(e.dataTransfer.files); });
 
         document.getElementById('quick-add-btn').addEventListener('click', async () => {
-             const val = document.getElementById('quick-mem-content').value.trim();
-             if (!val) return;
-             await processRecords([{ role: 'manual', content: val, source: 'user_input' }], 'QuickAdd');
-             document.getElementById('quick-mem-content').value = "";
-             await updateStats();
+            const val = document.getElementById('quick-mem-content').value.trim();
+            if (!val) return;
+            await processRecords([{ role: 'manual', content: val, source: 'user_input' }], 'QuickAdd');
+            document.getElementById('quick-mem-content').value = "";
+            await updateStats();
         });
 
         document.getElementById('reset-btn').addEventListener('click', async () => {
@@ -446,11 +495,11 @@
                 location.reload();
             }
         });
-        
+
         document.getElementById('query-btn').addEventListener('click', async () => {
             try {
                 const res = await safeRun("?[ts, content] := *memory{timestamp: ts, content} :sort -ts :limit 5");
-                if (res.rows) logger.info("Recent:\n" + res.rows.map(r => `${new Date(r[0]).toLocaleTimeString()}: ${r[1].substring(0,50)}...`).join('\n'));
+                if (res.rows) logger.info("Recent:\n" + res.rows.map(r => `${new Date(r[0]).toLocaleTimeString()}: ${r[1].substring(0, 50)}...`).join('\n'));
                 else logger.warn("No rows returned.");
             } catch (e) { logger.error(e.message); }
         });
@@ -465,7 +514,31 @@
             } catch (e) { logger.error(e.message); }
         });
 
+        document.getElementById('export-db-btn').addEventListener('click', async () => {
+            try {
+                logger.info("Exporting Root Memory...");
+                // Export the 'memory' relation including vectors
+                const jsonStr = await db.export_relations(JSON.stringify({relations: ["memory"]}));
+                
+                // Create Blob and Download
+                const blob = new Blob([jsonStr], {type: "application/json"});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `root_coda_memory_dump_${Date.now()}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                logger.success("Export Complete. You can now drag this file into another Root Coda instance.");
+            } catch (e) {
+                logger.error("Export Failed: " + e.message);
+            }
+        });
+
         init();
     </script>
 </body>
+
 </html>
