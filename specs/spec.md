@@ -36,6 +36,7 @@ The system has evolved into **Root Coda**, a pure [WASM (WebAssembly)](https://w
 - **Root Builder** (`sovereign-db-builder.html`): The **Stomach**. Ingests files/logs into the Graph.
 - **Root Mic** (`sovereign-mic.html`): The **Ears**. Whisper-Tiny (WASM) + LLM cleanup.
 - **Log Viewer** (`log-viewer.html`): The **Nerves**. System-wide diagnostics.
+- **Root Dreamer** (`tools/root-dreamer.html`): The **Subconscious**. Background optimization and association.
 
 ## Data Flow
 
@@ -66,7 +67,7 @@ graph TD
    - If missing info: Request specific search (`NEED_CONTEXT: term`).
 4. Final answer streamed to user.
 
-### 2. Sovereign Persistence
+### 2. Root Persistence
 - **Zero Backend:** Python is only used for serving static files (`http.server`).
 - **Portability:** The entire "Brain" is contained in `browser_data` and IndexedDB.
 

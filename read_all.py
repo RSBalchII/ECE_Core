@@ -12,8 +12,9 @@ It respects the current project structure:
 - scripts/: CI/Utility scripts
 """
 import argparse
+import json
 import os
-from typing import List, Tuple
+from typing import List, Tuple, Any
 
 def find_project_root(start_path: str | None = None) -> str:
     """
@@ -74,6 +75,42 @@ def get_allowed_files(project_root: str) -> List[Tuple[str, str]]:
                 
     return allowed_files
 
+def to_yaml_style(obj: Any, indent: int = 0) -> str:
+    """
+    Recursively converts a JSON-compatible object to a YAML-like string.
+    """
+    lines = []
+    prefix = "  " * indent
+    
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(v, (dict, list)):
+                lines.append(f"{prefix}{k}:")
+                lines.append(to_yaml_style(v, indent + 1))
+            else:
+                # Handle multiline strings safely
+                v_str = str(v)
+                if '\n' in v_str:
+                     lines.append(f"{prefix}{k}: |")
+                     for line in v_str.split('\n'):
+                         lines.append(f"{prefix}  {line}")
+                else:
+                    lines.append(f"{prefix}{k}: {v}")
+    elif isinstance(obj, list):
+        for item in obj:
+            if isinstance(item, (dict, list)):
+                lines.append(f"{prefix}-")
+                # For list items that are objects, we want the properties to align slightly differently
+                # But for simplicity in this custom dumper:
+                sub = to_yaml_style(item, indent + 1)
+                lines.append(sub)
+            else:
+                lines.append(f"{prefix}- {item}")
+    else:
+        return f"{prefix}{obj}"
+
+    return "\n".join(lines)
+
 def create_project_corpus(
     output_file: str | None = None,
     dry_run: bool = False,
@@ -99,6 +136,8 @@ def create_project_corpus(
             print(f"  - {os.path.relpath(file_path, project_root)} ({section})")
         return
 
+    memory_records = []
+
     with open(output_file, "w", encoding="utf-8") as outfile:
         # Add a file map at the very top for the orchestrator
         outfile.write("=== PROJECT FILE MAP ===\n")
@@ -121,14 +160,44 @@ def create_project_corpus(
                 except UnicodeDecodeError:
                     decoded_content = raw_data.decode("utf-8", errors="replace")
 
+                ext = os.path.splitext(file_path)[1].lower()
+                final_content = decoded_content
+                
+                # Upgrade: Convert JSON to YAML-like text
+                if ext == '.json':
+                    try:
+                        json_obj = json.loads(decoded_content)
+                        # Use pretty print json as a reliable fallback or strict yaml style
+                        # The user asked for "YAML-like string (key: value) or pretty-printed JSON (indent=2)"
+                        # Let's try our YAML converter first, it's cleaner for reading.
+                        final_content = to_yaml_style(json_obj)
+                    except Exception:
+                        # Fallback to original content if parsing fails
+                        pass
+
                 outfile.write(f"--- START OF FILE: {rel_path} ---\n")
-                outfile.write(decoded_content)
-                if not decoded_content.endswith('\n'):
+                outfile.write(final_content)
+                if not final_content.endswith('\n'):
                     outfile.write('\n')
-                outfile.write(f"--- END OF FILE: {rel_path}---\n\n")
+                outfile.write(f"--- END OF FILE: {rel_path} ---\n\n")
+
+                # Store for JSON memory export (Node structure)
+                memory_records.append({
+                    "id": rel_path,
+                    "timestamp": int(os.path.getmtime(file_path)),
+                    "role": "file",
+                    "content": final_content,
+                    "source": rel_path
+                })
 
             except Exception as e:
                 print(f"Error processing '{rel_path}': {e}")
+
+    # Save the combined memory records for Builder ingestion
+    memory_file = os.path.join(project_root, "combined_memory.json")
+    with open(memory_file, "w", encoding="utf-8") as f:
+        json.dump(memory_records, f, indent=2, ensure_ascii=False)
+    print(f"Memory records saved to '{memory_file}'.")
 
     print(f"\nAggregation complete. Corpus saved to '{output_file}'.")
 

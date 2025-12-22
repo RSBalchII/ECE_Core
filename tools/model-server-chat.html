@@ -320,8 +320,8 @@
                         </optgroup>
 
                         <optgroup label="🌟 14B Models">
-                            <option value="mlc-ai/Llama-3.1-8B-Instruct-q4f16_1-MLC">Llama 3.1 8B</option>
-                            <option value="mlc-ai/Llama-3.1-70B-Instruct-q4f16_1-MLC">Llama 3.1 70B</option>
+                            <option value="mlc-ai/Qwen2.5-14B-Instruct-q4f16_1-MLC">Qwen 2.5 14B (Instruct)</option>
+                            <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-14B-q4f16_1-MLC">DeepSeek R1 (14B Distill)</option>
                         </optgroup>
 
                         <optgroup label="🧪 Experimental / Other">
@@ -685,6 +685,8 @@ ${userText}
                         throw genErr;
                     }
 
+                    if (!reply) reply = ""; // Safety guard
+
                     if (reply.includes("NEED_CONTEXT:")) {
                         const searchTerm = reply.split("NEED_CONTEXT:")[1].trim();
                         ui.log(`🤖 Requested search: "${searchTerm}"`, "warn");
@@ -777,7 +779,7 @@ ${userText}
 
                 // Mapper
                 // SOTA / New
-                if (lowerId.includes('deepseek-r1')) modelLib = libBase + `Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm`;
+                if (lowerId.includes('deepseek-r1') && !lowerId.includes('14b')) modelLib = libBase + `Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm`;
                 else if (lowerId.includes('qwen3-4b')) modelLib = libBase + `Qwen3-4B-${qTag}-ctx4k_cs1k-webgpu.wasm`;
                 else if (lowerId.includes('qwen3-8b')) modelLib = libBase + `Qwen3-8B-${qTag}-ctx4k_cs1k-webgpu.wasm`;
                 else if (lowerId.includes('qwen2.5-7b')) modelLib = libBase + `Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm`;
@@ -789,8 +791,8 @@ ${userText}
                 else if (lowerId.includes('tinyllama-1.1b')) modelLib = libBase + `TinyLlama-1.1B-Chat-v1.0-q4f16_1-ctx2k_cs1k-webgpu.wasm`;
 
                 // 14B Models
-                else if (lowerId.includes('llama-3.1-8b')) modelLib = libBase + `Llama-3.1-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                else if (lowerId.includes('llama-3.1-70b')) modelLib = libBase + `Llama-3.1-70B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                else if (lowerId.includes('qwen2.5-14b')) modelLib = libBase + `Qwen2.5-14B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                else if (lowerId.includes('deepseek-r1-distill-qwen-14b')) modelLib = libBase + `Qwen2.5-14B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
 
                 // Legacy / Stable
                 else if (lowerId.includes('qwen2.5-3b')) modelLib = libBase + `Qwen2.5-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
@@ -836,9 +838,10 @@ ${userText}
                 document.getElementById('input').focus();
 
             } catch (e) {
-                ui.log(`Load Failed: ${e.message}`, "error");
+                const errorMsg = e.message || String(e);
+                ui.log(`Load Failed: ${errorMsg}`, "error");
                 // Provide suggestion for common model name issues
-                if (e.message.includes("Network response was not ok")) {
+                if (errorMsg && errorMsg.includes("Network response was not ok")) {
                     ui.log(`💡 Hint: Model may not exist or be temporarily unavailable. Try another model.`, "warn");
                 }
                 document.getElementById('load-model-btn').disabled = false;

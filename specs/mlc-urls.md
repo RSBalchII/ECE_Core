@@ -27,3 +27,10 @@
 | :--- | :--- | :--- | :--- |
 | **Llama-3.2-3B-Instruct** | `mlc-ai/Llama-3.2-3B-Instruct-q4f16_1-MLC` | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Llama-3.2-3B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm` | ✅ **VERIFIED** |
 | **DeepSeek-R1-Distill-Qwen** | `mlc-ai/DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC` | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm` | ✅ **VERIFIED** |
+
+### 14B Models (High-End)
+
+| Model Name | HuggingFace ID | WASM Library URL | Status |
+| :--- | :--- | :--- | :--- |
+| **Qwen 2.5 14B Instruct** | `mlc-ai/Qwen2.5-14B-Instruct-q4f16_1-MLC` | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2.5-14B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm` | ✅ **VERIFIED** |
+| **DeepSeek R1 Distill 14B** | `mlc-ai/DeepSeek-R1-Distill-Qwen-14B-q4f16_1-MLC` | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2.5-14B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm` | ✅ **VERIFIED** (Shared WASM) |

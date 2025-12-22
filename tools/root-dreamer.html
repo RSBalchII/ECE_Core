@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Root Dreamer (Subconscious)</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌙</text></svg>">
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --text-color: #c9d1d9;
+            --border-color: #30363d;
+            --accent-color: #58a6ff;
+            --success-color: #238636;
+            --danger-color: #da3633;
+            --thought-color: #d29922;
+            --raw-color: #8b949e;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        h1 { margin: 0; font-size: 1.5rem; }
+
+        .status-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: #161b22;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 15px;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #8b949e;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            background-color: #21262d;
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.2s;
+        }
+
+        button:hover { background-color: #30363d; }
+        
+        button.active {
+            background-color: var(--success-color);
+            color: white;
+            border-color: var(--success-color);
+        }
+        
+        button.stop {
+            background-color: var(--danger-color);
+            border-color: var(--danger-color);
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 0;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            color: #8b949e;
+        }
+        
+        .tab:hover { color: var(--text-color); }
+        
+        .tab.active {
+            color: var(--text-color);
+            border-bottom-color: var(--accent-color);
+        }
+
+        /* Logs */
+        .log-container {
+            flex-grow: 1;
+            background: #000;
+            border: 1px solid var(--border-color);
+            border-top: none;
+            border-bottom-left-radius: 6px;
+            border-bottom-right-radius: 6px;
+            padding: 10px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.85rem;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            display: none; /* Hidden by default */
+        }
+        
+        .log-container.active { display: block; }
+
+        .log-entry { margin-bottom: 5px; border-bottom: 1px solid #222; padding-bottom: 2px; }
+        .log-info { color: #58a6ff; }
+        .log-success { color: #238636; }
+        .log-warn { color: #d29922; }
+        .log-error { color: #f85149; }
+        
+        .log-thought { color: var(--thought-color); font-style: italic; border-left: 2px solid var(--thought-color); padding-left: 10px; margin: 5px 0; }
+        .log-raw { color: var(--raw-color); font-size: 0.8rem; opacity: 0.8; }
+        .log-json { color: var(--success-color); font-weight: bold; }
+
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Root Dreamer (Subconscious)</h1>
+        <div class="controls">
+            <button id="btn-toggle" class="active">Wake Up</button>
+        </div>
+    </header>
+
+    <div class="status-panel">
+        <div class="card">
+            <div class="stat-value" id="stat-processed">0</div>
+            <div class="stat-label">Memories Processed</div>
+        </div>
+        <div class="card">
+            <div class="stat-value" id="stat-synapses">0</div>
+            <div class="stat-label">Synapses Formed</div>
+        </div>
+        <div class="card">
+            <div class="stat-value" id="stat-model">Loading...</div>
+            <div class="stat-label">Model Status</div>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" data-target="log-main">Stream</div>
+        <div class="tab" data-target="log-thoughts">Thoughts (Internal Monologue)</div>
+        <div class="tab" data-target="log-synapses">Synapses (Connections)</div>
+        <div class="tab" data-target="log-raw">Raw Protocol</div>
+    </div>
+
+    <div id="log-main" class="log-container active"></div>
+    <div id="log-thoughts" class="log-container"></div>
+    <div id="log-synapses" class="log-container"></div>
+    <div id="log-raw" class="log-container"></div>
+
+    <script type="module">
+        import { SovereignLogger, createStore, getWebGPUConfig, initCozo } from './modules/sovereign.js';
+        import { CreateWebWorkerMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
+
+        const logger = new SovereignLogger('Dreamer');
+        const MODEL_ID = "Qwen2.5-1.5B-Instruct-q4f32_1-MLC";
+        
+        // State
+        const store = createStore({
+            processedCount: 0,
+            synapseCount: 0,
+            isDreaming: false,
+            modelReady: false
+        });
+
+        // DOM Elements
+        const elProcessed = document.getElementById('stat-processed');
+        const elSynapses = document.getElementById('stat-synapses');
+        const elModel = document.getElementById('stat-model');
+        const elToggle = document.getElementById('btn-toggle');
+        
+        const logs = {
+            main: document.getElementById('log-main'),
+            thoughts: document.getElementById('log-thoughts'),
+            synapses: document.getElementById('log-synapses'),
+            raw: document.getElementById('log-raw')
+        };
+
+        // Tab Switching
+        document.querySelectorAll('.tab').forEach(t => {
+            t.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+                document.querySelectorAll('.log-container').forEach(x => x.classList.remove('active'));
+                
+                t.classList.add('active');
+                document.getElementById(t.dataset.target).classList.add('active');
+            });
+        });
+
+        // Logging UI Helper
+        function appendLog(targetId, msg, type = 'info') {
+            const container = logs[targetId];
+            const div = document.createElement('div');
+            
+            // Special styling based on type
+            if (type === 'thought') div.className = 'log-thought';
+            else if (type === 'json') div.className = 'log-json';
+            else if (type === 'raw') div.className = 'log-raw';
+            else div.className = `log-entry log-${type}`;
+
+            // Timestamp for main stream only usually, but good for all
+            const ts = `[${new Date().toLocaleTimeString()}] `;
+            
+            if (type === 'thought' || type === 'json' || type === 'raw') {
+                div.textContent = msg; // Raw content for these
+            } else {
+                div.textContent = ts + msg;
+            }
+            
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Subscribe to state
+        store.subscribe((prop, val) => {
+            if (prop === 'processedCount') elProcessed.textContent = val;
+            if (prop === 'synapseCount') elSynapses.textContent = val;
+            if (prop === 'modelReady') elModel.textContent = val ? "Ready" : "Loading...";
+            if (prop === 'isDreaming') {
+                elToggle.textContent = val ? "Sleep" : "Wake Up";
+                elToggle.className = val ? "active" : "";
+            }
+        });
+
+        // Initialize Cozo
+        let db;
+        
+        async function runQuery(query, params = "{}", immutable = false) {
+            if (!db) throw new Error("Database not initialized");
+            const res = await db.run(query, params, immutable);
+            let parsed = res;
+            if (typeof res === 'string') {
+                try { parsed = JSON.parse(res); } catch (e) { 
+                    logger.warn("Failed to parse Cozo response: " + res);
+                }
+            }
+            if (parsed && parsed.ok === false) throw new Error(parsed.message);
+            return parsed;
+        }
+
+        async function init() {
+            try {
+                logger.info("Initializing Root Dreamer...");
+                appendLog('main', "Initializing CozoDB...");
+                const CozoDb = await initCozo();
+                
+                try {
+                    db = await CozoDb.new_from_indexed_db('coda_memory', 'cozo_store', () => {});
+                    appendLog('main', "Connected to Persistent Brain (coda_memory).", 'success');
+                } catch (e) {
+                    logger.warn(`Persistence failed, falling back to RAM: ${e.message}`);
+                    db = CozoDb.new(); 
+                    appendLog('main', "Connected to Transient Brain (In-Memory).", 'warn');
+                }
+                
+                appendLog('main', "DEBUG: Creating memory table...", 'info');
+                // Ensure tables exist (idempotent)
+                await runQuery(`
+                    :create memory {
+                        id: String =>
+                        timestamp: Int,
+                        role: String,
+                        content: String,
+                        source: String,
+                        embedding: <F32; 384>?
+                    }
+                `);
+                
+                appendLog('main', "DEBUG: Creating relationships table...", 'info');
+                await runQuery(`
+                    :create relationships {
+                        source_id: String,
+                        target_id: String,
+                        type: String =>
+                        weight: Float
+                    }
+                `);
+
+                appendLog('main', "CozoDB Ready.");
+                
+                // Initialize LLM
+                appendLog('main', `Loading Model: ${MODEL_ID}...`);
+                const worker = new Worker('./modules/llm-worker.js', { type: 'module' });
+                window.engine = await CreateWebWorkerMLCEngine(worker, MODEL_ID, {
+                    initProgressCallback: (report) => {
+                        elModel.textContent = report.text;
+                        if (report.progress === 1) store.state.modelReady = true;
+                    }
+                });
+
+                appendLog('main', "Model Loaded. Ready to dream.");
+                store.state.modelReady = true;
+
+            } catch (e) {
+                logger.error(e.message);
+                appendLog('main', `Initialization Error: ${e.message}`, 'error');
+            }
+        }
+
+        // The Dream Loop
+        let isLoopRunning = false;
+        async function dreamLoop() {
+            if (isLoopRunning || !store.state.isDreaming) return;
+            if (!store.state.modelReady) {
+                await new Promise(r => setTimeout(r, 1000));
+                return dreamLoop();
+            }
+
+            isLoopRunning = true;
+            try {
+                // 1. Select Orphan
+                const query = `
+                    ?[id, content] := *memory{id, content}, 
+                    not *relationships{source_id: id}
+                    :limit 1
+                `;
+                
+                const result = await runQuery(query);
+
+                if (!result.rows || result.rows.length === 0) {
+                    appendLog('main', "No orphans found. Resting...", 'info');
+                    await new Promise(r => setTimeout(r, 2000)); 
+                    isLoopRunning = false;
+                    if (store.state.isDreaming) dreamLoop();
+                    return;
+                }
+
+                const [id, content] = result.rows[0];
+                if (!content) throw new Error(`Memory ${id} has no content.`);
+                
+                appendLog('main', `Dreaming on memory: ${id}...`);
+                
+                // Truncate content
+                const safeContent = content.length > 3000 ? content.substring(0, 3000) + "..." : content;
+                
+                // 2. Deep Analysis Prompt
+                const prompt = `
+You are the Subconscious. Deeply analyze this memory to find hidden patterns, abstract themes, and architectural implications.
+Don't just look at surface keywords. Dig deeper.
+
+Step 1: THOUGHTS. Discuss with yourself potential connections. Explore ambiguities. Ask "Why is this here?" and "What does this imply?".
+Step 2: JSON Extract 2-5 strongest concepts as a JSON array.
+
+Format your response exactly like this:
+<thought>
+[Your internal monologue and deep analysis here]
+</thought>
+<json>
+[{"target": "ConceptName", "type": "relates_to", "weight": 0.9}]
+</json>
+
+Memory:
+${safeContent}
+                `.trim();
+
+                // Log Raw Request
+                appendLog('raw', `>>> PROMPT:
+${prompt}
+
+`, 'raw');
+
+                const response = await window.engine.chat.completions.create({
+                    messages: [{ role: "user", content: prompt }],
+                    temperature: 0.3, // Slightly higher for creativity in thoughts
+                    max_tokens: 1024
+                });
+                
+                const rawReply = response.choices[0].message.content;
+                appendLog('raw', `<<< REPLY:
+${rawReply}
+-----------------------------------
+`, 'raw');
+
+                // 3. Parse Output
+                const thoughtMatch = rawReply.match(/<thought>([\s\S]*?)<\/thought>/);
+                const jsonMatch = rawReply.match(/<json>([\s\S]*?)<\/json>/);
+
+                // Log Thoughts
+                if (thoughtMatch && thoughtMatch[1]) {
+                    appendLog('thoughts', `[Memory: ${id}]
+${thoughtMatch[1].trim()}`, 'thought');
+                } else {
+                    appendLog('thoughts', `[Memory: ${id}] (No internal monologue generated)`, 'warn');
+                }
+
+                // Parse JSON
+                let relationships = [];
+                try {
+                    let jsonStr = jsonMatch ? jsonMatch[1] : rawReply; // Fallback to raw if tags missing
+                    // Cleanup markdown
+                    jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+                    relationships = JSON.parse(jsonStr);
+                    
+                    if (!Array.isArray(relationships)) throw new Error("Not an array");
+                    
+                    appendLog('synapses', `[Memory: ${id}] Synthesized:
+${JSON.stringify(relationships, null, 2)}`, 'json');
+
+                } catch (parseErr) {
+                    appendLog('main', `Failed to parse dream JSON: ${parseErr.message}`, 'warn');
+                    // Mark processed to avoid loop
+                    relationships = [{ target: id, type: "self_processed", weight: 0.1 }];
+                }
+
+                // 4. Store
+                const rows = relationships.map(r => [id, r.target, r.type || 'relates_to', r.weight || 0.5]);
+                
+                if (rows.length > 0) {
+                    const insertQuery = `
+                        ?[src, tgt, type, w] <- $rows
+                        :put relationships {source_id: src, target_id: tgt, type: type, weight: w}
+                    `;
+                    
+                    const insertRes = await runQuery(insertQuery, JSON.stringify({ rows }));
+                    if (insertRes.ok !== false) {
+                        store.state.processedCount++;
+                        store.state.synapseCount += rows.length;
+                        appendLog('main', `Synthesized ${rows.length} connections.`, 'success');
+                    }
+                }
+                
+                // Short pause
+                await new Promise(r => setTimeout(r, 2000));
+                
+            } catch (err) {
+                appendLog('main', `Dream Error: ${err.message}`, 'error');
+                await new Promise(r => setTimeout(r, 5000));
+            } finally {
+                isLoopRunning = false;
+            }
+            
+            // Re-trigger loop
+            if (store.state.isDreaming) dreamLoop();
+        }
+
+        // Toggle
+        elToggle.addEventListener('click', () => {
+            store.state.isDreaming = !store.state.isDreaming;
+            if (store.state.isDreaming) {
+                dreamLoop();
+            }
+        });
+
+        // Start
+        init();
+
+    </script>
+</body>
+</html>

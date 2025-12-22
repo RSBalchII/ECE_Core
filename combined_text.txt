@@ -29,6 +29,7 @@
 - tools\model-server-chat.html (TOOLS)
 - tools\prepare_cozo_import.py (TOOLS)
 - tools\README.md (TOOLS)
+- tools\root-dreamer.html (TOOLS)
 - tools\root-mic.html (TOOLS)
 - tools\sovereign-db-builder.html (TOOLS)
 - tools\start-bridge.bat (TOOLS)
@@ -350,7 +351,7 @@
 
 ### Fixed
 - **Basic Functionality**: Initial implementation of core features
---- END OF FILE: CHANGELOG.md---
+--- END OF FILE: CHANGELOG.md ---
 
 --- START OF FILE: kill-edge.bat ---
 @echo off
@@ -359,7 +360,7 @@ taskkill /F /IM msedge.exe /T
 echo.
 echo ✅ Edge terminated. You can now run 'launch-edge-unsafe.bat' cleanly.
 pause
---- END OF FILE: kill-edge.bat---
+--- END OF FILE: kill-edge.bat ---
 
 --- START OF FILE: launch-chromium-d3d12.bat ---
 @echo off
@@ -441,7 +442,7 @@ echo.
 
 "%BROWSER%" %FLAGS% %URL%
 pause
---- END OF FILE: launch-chromium-d3d12.bat---
+--- END OF FILE: launch-chromium-d3d12.bat ---
 
 --- START OF FILE: launch-chromium-vulkan.bat ---
 @echo off
@@ -523,7 +524,7 @@ echo.
 
 "%BROWSER%" %FLAGS% %URL%
 pause
---- END OF FILE: launch-chromium-vulkan.bat---
+--- END OF FILE: launch-chromium-vulkan.bat ---
 
 --- START OF FILE: README.md ---
 # Context Engine (Sovereign Edition)
@@ -585,7 +586,7 @@ graph TD
 The old Python/Neo4j backend has been **archived**.
 *   Legacy README: [archive/v1_python_backend/README_LEGACY.md](archive/v1_python_backend/README_LEGACY.md)
 *   Legacy Code: `archive/v1_python_backend/`
---- END OF FILE: README.md---
+--- END OF FILE: README.md ---
 
 --- START OF FILE: read_all.py ---
 #!/usr/bin/env python3
@@ -602,8 +603,9 @@ It respects the current project structure:
 - scripts/: CI/Utility scripts
 """
 import argparse
+import json
 import os
-from typing import List, Tuple
+from typing import List, Tuple, Any
 
 def find_project_root(start_path: str | None = None) -> str:
     """
@@ -664,6 +666,42 @@ def get_allowed_files(project_root: str) -> List[Tuple[str, str]]:
                 
     return allowed_files
 
+def to_yaml_style(obj: Any, indent: int = 0) -> str:
+    """
+    Recursively converts a JSON-compatible object to a YAML-like string.
+    """
+    lines = []
+    prefix = "  " * indent
+    
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(v, (dict, list)):
+                lines.append(f"{prefix}{k}:")
+                lines.append(to_yaml_style(v, indent + 1))
+            else:
+                # Handle multiline strings safely
+                v_str = str(v)
+                if '\n' in v_str:
+                     lines.append(f"{prefix}{k}: |")
+                     for line in v_str.split('\n'):
+                         lines.append(f"{prefix}  {line}")
+                else:
+                    lines.append(f"{prefix}{k}: {v}")
+    elif isinstance(obj, list):
+        for item in obj:
+            if isinstance(item, (dict, list)):
+                lines.append(f"{prefix}-")
+                # For list items that are objects, we want the properties to align slightly differently
+                # But for simplicity in this custom dumper:
+                sub = to_yaml_style(item, indent + 1)
+                lines.append(sub)
+            else:
+                lines.append(f"{prefix}- {item}")
+    else:
+        return f"{prefix}{obj}"
+
+    return "\n".join(lines)
+
 def create_project_corpus(
     output_file: str | None = None,
     dry_run: bool = False,
@@ -689,6 +727,8 @@ def create_project_corpus(
             print(f"  - {os.path.relpath(file_path, project_root)} ({section})")
         return
 
+    memory_records = []
+
     with open(output_file, "w", encoding="utf-8") as outfile:
         # Add a file map at the very top for the orchestrator
         outfile.write("=== PROJECT FILE MAP ===\n")
@@ -711,14 +751,44 @@ def create_project_corpus(
                 except UnicodeDecodeError:
                     decoded_content = raw_data.decode("utf-8", errors="replace")
 
+                ext = os.path.splitext(file_path)[1].lower()
+                final_content = decoded_content
+                
+                # Upgrade: Convert JSON to YAML-like text
+                if ext == '.json':
+                    try:
+                        json_obj = json.loads(decoded_content)
+                        # Use pretty print json as a reliable fallback or strict yaml style
+                        # The user asked for "YAML-like string (key: value) or pretty-printed JSON (indent=2)"
+                        # Let's try our YAML converter first, it's cleaner for reading.
+                        final_content = to_yaml_style(json_obj)
+                    except Exception:
+                        # Fallback to original content if parsing fails
+                        pass
+
                 outfile.write(f"--- START OF FILE: {rel_path} ---\n")
-                outfile.write(decoded_content)
-                if not decoded_content.endswith('\n'):
+                outfile.write(final_content)
+                if not final_content.endswith('\n'):
                     outfile.write('\n')
-                outfile.write(f"--- END OF FILE: {rel_path}---\n\n")
+                outfile.write(f"--- END OF FILE: {rel_path} ---\n\n")
+
+                # Store for JSON memory export (Node structure)
+                memory_records.append({
+                    "id": rel_path,
+                    "timestamp": int(os.path.getmtime(file_path)),
+                    "role": "file",
+                    "content": final_content,
+                    "source": rel_path
+                })
 
             except Exception as e:
                 print(f"Error processing '{rel_path}': {e}")
+
+    # Save the combined memory records for Builder ingestion
+    memory_file = os.path.join(project_root, "combined_memory.json")
+    with open(memory_file, "w", encoding="utf-8") as f:
+        json.dump(memory_records, f, indent=2, ensure_ascii=False)
+    print(f"Memory records saved to '{memory_file}'.")
 
     print(f"\nAggregation complete. Corpus saved to '{output_file}'.")
 
@@ -743,7 +813,7 @@ if __name__ == "__main__":
         output_file=args.out,
         dry_run=args.dry_run,
     )
---- END OF FILE: read_all.py---
+--- END OF FILE: read_all.py ---
 
 --- START OF FILE: secure-bridge-launch.ps1 ---
 <#
@@ -815,7 +885,7 @@ try {
         }
     }
 }
---- END OF FILE: secure-bridge-launch.ps1---
+--- END OF FILE: secure-bridge-launch.ps1 ---
 
 --- START OF FILE: start-sovereign-console.bat ---
 @echo off
@@ -838,7 +908,7 @@ start "WebGPU Bridge" cmd /k python webgpu_bridge.py
 echo Launching File Server...
 python -m http.server 8000
 pause
---- END OF FILE: start-sovereign-console.bat---
+--- END OF FILE: start-sovereign-console.bat ---
 
 --- START OF FILE: scripts\ci\check_docs.py ---
 #!/usr/bin/env python3
@@ -904,7 +974,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
---- END OF FILE: scripts\ci\check_docs.py---
+--- END OF FILE: scripts\ci\check_docs.py ---
 
 --- START OF FILE: specs\doc_policy.md ---
 # Documentation Policy (Context-Engine)
@@ -1096,7 +1166,7 @@ await window.db.run(":create memory { id: String => timestamp: Int, role: String
 **Last Updated:** 2025-12-15  
 **Version:** 1.0  
 **Policy Owner:** Architecture Council
---- END OF FILE: specs\doc_policy.md---
+--- END OF FILE: specs\doc_policy.md ---
 
 --- START OF FILE: specs\mlc-urls.md ---
 # Verified MLC Model Registry
@@ -1128,7 +1198,14 @@ await window.db.run(":create memory { id: String => timestamp: Int, role: String
 | :--- | :--- | :--- | :--- |
 | **Llama-3.2-3B-Instruct** | `mlc-ai/Llama-3.2-3B-Instruct-q4f16_1-MLC` | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Llama-3.2-3B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm` | ✅ **VERIFIED** |
 | **DeepSeek-R1-Distill-Qwen** | `mlc-ai/DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC` | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm` | ✅ **VERIFIED** |
---- END OF FILE: specs\mlc-urls.md---
+
+### 14B Models (High-End)
+
+| Model Name | HuggingFace ID | WASM Library URL | Status |
+| :--- | :--- | :--- | :--- |
+| **Qwen 2.5 14B Instruct** | `mlc-ai/Qwen2.5-14B-Instruct-q4f16_1-MLC` | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2.5-14B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm` | ✅ **VERIFIED** |
+| **DeepSeek R1 Distill 14B** | `mlc-ai/DeepSeek-R1-Distill-Qwen-14B-q4f16_1-MLC` | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2.5-14B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm` | ✅ **VERIFIED** (Shared WASM) |
+--- END OF FILE: specs\mlc-urls.md ---
 
 --- START OF FILE: specs\plan.md ---
 # Root Coda Roadmap (V2.0)
@@ -1160,7 +1237,7 @@ await window.db.run(":create memory { id: String => timestamp: Int, role: String
 ## Phase 4: Federation
 - [ ] **Device Sync**: Sync IndexedDB across devices (Peer-to-Peer).
 - [ ] **Local-First Cloud**: Optional encrypted backup.
---- END OF FILE: specs\plan.md---
+--- END OF FILE: specs\plan.md ---
 
 --- START OF FILE: specs\spec.md ---
 # Architecture Overview: Root Coda (v2.0)
@@ -1201,6 +1278,7 @@ The system has evolved into **Root Coda**, a pure [WASM (WebAssembly)](https://w
 - **Root Builder** (`sovereign-db-builder.html`): The **Stomach**. Ingests files/logs into the Graph.
 - **Root Mic** (`sovereign-mic.html`): The **Ears**. Whisper-Tiny (WASM) + LLM cleanup.
 - **Log Viewer** (`log-viewer.html`): The **Nerves**. System-wide diagnostics.
+- **Root Dreamer** (`tools/root-dreamer.html`): The **Subconscious**. Background optimization and association.
 
 ## Data Flow
 
@@ -1231,14 +1309,14 @@ graph TD
    - If missing info: Request specific search (`NEED_CONTEXT: term`).
 4. Final answer streamed to user.
 
-### 2. Sovereign Persistence
+### 2. Root Persistence
 - **Zero Backend:** Python is only used for serving static files (`http.server`).
 - **Portability:** The entire "Brain" is contained in `browser_data` and IndexedDB.
 
 ## Reference Specs
 - [Sovereign WASM Spec](architecture/sovereign-wasm.spec.md) (Detailed Kernel Docs)
 - [Memory Layer Spec](architecture/memory-layer.spec.md)
---- END OF FILE: specs\spec.md---
+--- END OF FILE: specs\spec.md ---
 
 --- START OF FILE: specs\tasks.md ---
 # Context-Engine Implementation Tasks
@@ -1258,6 +1336,11 @@ graph TD
 - [x] **Crash Prevention**: Context clamping for constrained drivers.
 - [x] **Mobile Optimization**: Service Worker (`llm-worker.js`) for non-blocking inference.
 
+## Phase 3: The Subconscious (Completed) ✅
+- [x] **Root Dreamer**: Created `tools/root-dreamer.html` for background memory consolidation.
+- [x] **Ingestion Refinement**: Upgraded `read_all.py` to produce LLM-legible YAML.
+- [x] **Root Architecture Docs**: Finalized terminology (Sovereign -> Root).
+
 ### Active Development - Expansion
 - [ ] **Agentic Tools**: Port Verifier/Distiller logic to `tools/modules/agents.js`.
 - [ ] **Multimodal**: Add image support to Builder (drag-and-drop embedding).
@@ -1271,7 +1354,7 @@ graph TD
 ## Backlog
 - [ ] **Federation Protocol**: P2P sync.
 - [ ] **Android App**: Wrapper for Root Coda.
---- END OF FILE: specs\tasks.md---
+--- END OF FILE: specs\tasks.md ---
 
 --- START OF FILE: specs\architecture\extension-bridge.spec.md ---
 # Chrome Extension Bridge Specification
@@ -1708,7 +1791,7 @@ const CONFIG = {
 **Last Updated:** 2025-12-15  
 **Status:** Design Phase (ready for implementation)
 **Development Phase:** Priority 3 (Sovereign Stack must be operational first)
---- END OF FILE: specs\architecture\extension-bridge.spec.md---
+--- END OF FILE: specs\architecture\extension-bridge.spec.md ---
 
 --- START OF FILE: specs\architecture\memory-layer.spec.md ---
 # Sovereign Memory Architecture (CozoDB + WASM)
@@ -1783,7 +1866,7 @@ Retrieves context based on embedding similarity (Cosine distance).
 
 *   **Import**: Drag & Drop `combined_memory.json` into `sovereign-db-builder.html`.
 *   **Export**: The builder allows exporting the full graph (with embeddings) to JSON for backup or transfer between devices.
---- END OF FILE: specs\architecture\memory-layer.spec.md---
+--- END OF FILE: specs\architecture\memory-layer.spec.md ---
 
 --- START OF FILE: specs\architecture\sovereign-wasm.spec.md ---
 # Sovereign WASM Specification (Root Kernel)
@@ -1867,27 +1950,23 @@ To prevent UI freezing during heavy inference, the LLM runs in a dedicated Web W
 - **Role**: Hosts the `MLCEngine` instance.
 - **Communication**: Uses `WebWorkerMLCEngineHandler` to bridge messages between the main thread and the worker.
 - **Benefit**: Ensures the UI remains responsive (scrolling, typing) even while the GPU is crunching tokens.
---- END OF FILE: specs\architecture\sovereign-wasm.spec.md---
+--- END OF FILE: specs\architecture\sovereign-wasm.spec.md ---
 
 --- START OF FILE: templates\waveai_ece.json ---
-{
-    "ece-local": {
-        "display:name": "Sovereign Console (ECE)",
-        "display:order": 1,
-        "display:icon": "microchip",
-        "display:description": "Local WebGPU Model via ECE Bridge",
-        "ai:provider": "custom",
-        "ai:apitype": "openai-chat",
-        "ai:model": "webgpu-chat",
-        "ai:thinkinglevel": "medium",
-        "ai:endpoint": "http://127.0.0.1:8080/v1/chat/completions",
-        "ai:apitoken": "not-needed",
-        "ai:capabilities": [
-            "tools"
-        ]
-    }
-}
---- END OF FILE: templates\waveai_ece.json---
+ece-local:
+  display:name: Sovereign Console (ECE)
+  display:order: 1
+  display:icon: microchip
+  display:description: Local WebGPU Model via ECE Bridge
+  ai:provider: custom
+  ai:apitype: openai-chat
+  ai:model: webgpu-chat
+  ai:thinkinglevel: medium
+  ai:endpoint: http://127.0.0.1:8080/v1/chat/completions
+  ai:apitoken: not-needed
+  ai:capabilities:
+    - tools
+--- END OF FILE: templates\waveai_ece.json ---
 
 --- START OF FILE: tools\CHANGELOG.md ---
 # Changelog
@@ -1903,7 +1982,7 @@ All notable changes to the Sovereign Tools suite will be documented in this file
 - **Mobile Chat**: `mobile-chat.html` for a lightweight, mobile-friendly UI.
 - **Log Viewer**: `log-viewer.html` for real-time server log monitoring.
 - **Documentation**: Added `README.md` and `specs/sovereign-tools.spec.md`.
---- END OF FILE: tools\CHANGELOG.md---
+--- END OF FILE: tools\CHANGELOG.md ---
 
 --- START OF FILE: tools\code_tools.py ---
 """Top-level shim to re-export `anchor.tools.code_tools` for test imports that expect `tools.code_tools`.
@@ -1919,7 +1998,7 @@ except Exception:
         return {"root": root, "query": query, "files": 0, "total_matches": 0, "results": []}
 
 __all__ = ["code_search", "code_grep"]
---- END OF FILE: tools\code_tools.py---
+--- END OF FILE: tools\code_tools.py ---
 
 --- START OF FILE: tools\cozo_lib_wasm.js ---
 import { loadAllFromIndexedDb, flushPendingWrites, writeToIndexedDb, setWriteCounter } from './indexeddb.js';
@@ -2608,7 +2687,7 @@ async function __wbg_init(input) {
 
 export { initSync }
 export default __wbg_init;
---- END OF FILE: tools\cozo_lib_wasm.js---
+--- END OF FILE: tools\cozo_lib_wasm.js ---
 
 --- START OF FILE: tools\decode_cozo_blob.py ---
 #!/usr/bin/env python3
@@ -2856,7 +2935,7 @@ if __name__ == '__main__':
         sys.exit(1)
     for p in sys.argv[1:]:
         analyze(Path(p))
---- END OF FILE: tools\decode_cozo_blob.py---
+--- END OF FILE: tools\decode_cozo_blob.py ---
 
 --- START OF FILE: tools\eyes.py ---
 import argparse
@@ -2910,7 +2989,7 @@ def main():
 
 if __name__ == "__main__":
     main()
---- END OF FILE: tools\eyes.py---
+--- END OF FILE: tools\eyes.py ---
 
 --- START OF FILE: tools\index.html ---
 <!DOCTYPE html>
@@ -3040,6 +3119,13 @@ if __name__ == "__main__":
             <div class="desc">Dictate directly to the engine using Whisper.</div>
             <div class="status">Input</div>
         </a>
+
+        <a href="root-dreamer.html" class="card">
+            <div class="icon">🌙</div>
+            <div class="title">Root Dreamer</div>
+            <div class="desc">The synthetic subconscious. Background memory consolidation and association.</div>
+            <div class="status">Subconscious</div>
+        </a>
     </div>
 
     <div style="margin-top: 50px; color: #555; font-size: 0.8rem;">
@@ -3049,7 +3135,7 @@ if __name__ == "__main__":
 </body>
 
 </html>
---- END OF FILE: tools\index.html---
+--- END OF FILE: tools\index.html ---
 
 --- START OF FILE: tools\indexeddb.js ---
 let db = null;
@@ -3193,7 +3279,7 @@ export async function clearIndexedDbStore(dbName, storeName) {
     request.onerror = (e) => reject(e.target.error);
   });
 }
---- END OF FILE: tools\indexeddb.js---
+--- END OF FILE: tools\indexeddb.js ---
 
 --- START OF FILE: tools\log-viewer.html ---
 <!DOCTYPE html>
@@ -3542,7 +3628,7 @@ export async function clearIndexedDbStore(dbName, storeName) {
 </body>
 
 </html>
---- END OF FILE: tools\log-viewer.html---
+--- END OF FILE: tools\log-viewer.html ---
 
 --- START OF FILE: tools\mobile-chat.html ---
 <!DOCTYPE html>
@@ -3794,7 +3880,7 @@ export async function clearIndexedDbStore(dbName, storeName) {
 </body>
 
 </html>
---- END OF FILE: tools\mobile-chat.html---
+--- END OF FILE: tools\mobile-chat.html ---
 
 --- START OF FILE: tools\model-server-chat.html ---
 <!DOCTYPE html>
@@ -4119,8 +4205,8 @@ export async function clearIndexedDbStore(dbName, storeName) {
                         </optgroup>
 
                         <optgroup label="🌟 14B Models">
-                            <option value="mlc-ai/Llama-3.1-8B-Instruct-q4f16_1-MLC">Llama 3.1 8B</option>
-                            <option value="mlc-ai/Llama-3.1-70B-Instruct-q4f16_1-MLC">Llama 3.1 70B</option>
+                            <option value="mlc-ai/Qwen2.5-14B-Instruct-q4f16_1-MLC">Qwen 2.5 14B (Instruct)</option>
+                            <option value="mlc-ai/DeepSeek-R1-Distill-Qwen-14B-q4f16_1-MLC">DeepSeek R1 (14B Distill)</option>
                         </optgroup>
 
                         <optgroup label="🧪 Experimental / Other">
@@ -4484,6 +4570,8 @@ ${userText}
                         throw genErr;
                     }
 
+                    if (!reply) reply = ""; // Safety guard
+
                     if (reply.includes("NEED_CONTEXT:")) {
                         const searchTerm = reply.split("NEED_CONTEXT:")[1].trim();
                         ui.log(`🤖 Requested search: "${searchTerm}"`, "warn");
@@ -4576,7 +4664,7 @@ ${userText}
 
                 // Mapper
                 // SOTA / New
-                if (lowerId.includes('deepseek-r1')) modelLib = libBase + `Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm`;
+                if (lowerId.includes('deepseek-r1') && !lowerId.includes('14b')) modelLib = libBase + `Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm`;
                 else if (lowerId.includes('qwen3-4b')) modelLib = libBase + `Qwen3-4B-${qTag}-ctx4k_cs1k-webgpu.wasm`;
                 else if (lowerId.includes('qwen3-8b')) modelLib = libBase + `Qwen3-8B-${qTag}-ctx4k_cs1k-webgpu.wasm`;
                 else if (lowerId.includes('qwen2.5-7b')) modelLib = libBase + `Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm`;
@@ -4588,8 +4676,8 @@ ${userText}
                 else if (lowerId.includes('tinyllama-1.1b')) modelLib = libBase + `TinyLlama-1.1B-Chat-v1.0-q4f16_1-ctx2k_cs1k-webgpu.wasm`;
 
                 // 14B Models
-                else if (lowerId.includes('llama-3.1-8b')) modelLib = libBase + `Llama-3.1-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
-                else if (lowerId.includes('llama-3.1-70b')) modelLib = libBase + `Llama-3.1-70B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                else if (lowerId.includes('qwen2.5-14b')) modelLib = libBase + `Qwen2.5-14B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                else if (lowerId.includes('deepseek-r1-distill-qwen-14b')) modelLib = libBase + `Qwen2.5-14B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
 
                 // Legacy / Stable
                 else if (lowerId.includes('qwen2.5-3b')) modelLib = libBase + `Qwen2.5-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
@@ -4635,9 +4723,10 @@ ${userText}
                 document.getElementById('input').focus();
 
             } catch (e) {
-                ui.log(`Load Failed: ${e.message}`, "error");
+                const errorMsg = e.message || String(e);
+                ui.log(`Load Failed: ${errorMsg}`, "error");
                 // Provide suggestion for common model name issues
-                if (e.message.includes("Network response was not ok")) {
+                if (errorMsg && errorMsg.includes("Network response was not ok")) {
                     ui.log(`💡 Hint: Model may not exist or be temporarily unavailable. Try another model.`, "warn");
                 }
                 document.getElementById('load-model-btn').disabled = false;
@@ -4721,7 +4810,7 @@ ${userText}
 </body>
 
 </html>
---- END OF FILE: tools\model-server-chat.html---
+--- END OF FILE: tools\model-server-chat.html ---
 
 --- START OF FILE: tools\prepare_cozo_import.py ---
 #!/usr/bin/env python3
@@ -4865,7 +4954,7 @@ def main():
 
 if __name__ == '__main__':
     raise SystemExit(main())
---- END OF FILE: tools\prepare_cozo_import.py---
+--- END OF FILE: tools\prepare_cozo_import.py ---
 
 --- START OF FILE: tools\README.md ---
 ## Requirements
@@ -4892,7 +4981,475 @@ If you see "Failed to convert Uint8Array to Vec<u8>" or WASM panics:
 
 ### Option 2: Extension Integration (Optional)
 Install Chrome extension for automatic page context injection
---- END OF FILE: tools\README.md---
+--- END OF FILE: tools\README.md ---
+
+--- START OF FILE: tools\root-dreamer.html ---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Root Dreamer (Subconscious)</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌙</text></svg>">
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --text-color: #c9d1d9;
+            --border-color: #30363d;
+            --accent-color: #58a6ff;
+            --success-color: #238636;
+            --danger-color: #da3633;
+            --thought-color: #d29922;
+            --raw-color: #8b949e;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        h1 { margin: 0; font-size: 1.5rem; }
+
+        .status-panel {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: #161b22;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 15px;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #8b949e;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            background-color: #21262d;
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.2s;
+        }
+
+        button:hover { background-color: #30363d; }
+        
+        button.active {
+            background-color: var(--success-color);
+            color: white;
+            border-color: var(--success-color);
+        }
+        
+        button.stop {
+            background-color: var(--danger-color);
+            border-color: var(--danger-color);
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 0;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            color: #8b949e;
+        }
+        
+        .tab:hover { color: var(--text-color); }
+        
+        .tab.active {
+            color: var(--text-color);
+            border-bottom-color: var(--accent-color);
+        }
+
+        /* Logs */
+        .log-container {
+            flex-grow: 1;
+            background: #000;
+            border: 1px solid var(--border-color);
+            border-top: none;
+            border-bottom-left-radius: 6px;
+            border-bottom-right-radius: 6px;
+            padding: 10px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.85rem;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            display: none; /* Hidden by default */
+        }
+        
+        .log-container.active { display: block; }
+
+        .log-entry { margin-bottom: 5px; border-bottom: 1px solid #222; padding-bottom: 2px; }
+        .log-info { color: #58a6ff; }
+        .log-success { color: #238636; }
+        .log-warn { color: #d29922; }
+        .log-error { color: #f85149; }
+        
+        .log-thought { color: var(--thought-color); font-style: italic; border-left: 2px solid var(--thought-color); padding-left: 10px; margin: 5px 0; }
+        .log-raw { color: var(--raw-color); font-size: 0.8rem; opacity: 0.8; }
+        .log-json { color: var(--success-color); font-weight: bold; }
+
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Root Dreamer (Subconscious)</h1>
+        <div class="controls">
+            <button id="btn-toggle" class="active">Wake Up</button>
+        </div>
+    </header>
+
+    <div class="status-panel">
+        <div class="card">
+            <div class="stat-value" id="stat-processed">0</div>
+            <div class="stat-label">Memories Processed</div>
+        </div>
+        <div class="card">
+            <div class="stat-value" id="stat-synapses">0</div>
+            <div class="stat-label">Synapses Formed</div>
+        </div>
+        <div class="card">
+            <div class="stat-value" id="stat-model">Loading...</div>
+            <div class="stat-label">Model Status</div>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" data-target="log-main">Stream</div>
+        <div class="tab" data-target="log-thoughts">Thoughts (Internal Monologue)</div>
+        <div class="tab" data-target="log-synapses">Synapses (Connections)</div>
+        <div class="tab" data-target="log-raw">Raw Protocol</div>
+    </div>
+
+    <div id="log-main" class="log-container active"></div>
+    <div id="log-thoughts" class="log-container"></div>
+    <div id="log-synapses" class="log-container"></div>
+    <div id="log-raw" class="log-container"></div>
+
+    <script type="module">
+        import { SovereignLogger, createStore, getWebGPUConfig, initCozo } from './modules/sovereign.js';
+        import { CreateWebWorkerMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
+
+        const logger = new SovereignLogger('Dreamer');
+        const MODEL_ID = "Qwen2.5-1.5B-Instruct-q4f32_1-MLC";
+        
+        // State
+        const store = createStore({
+            processedCount: 0,
+            synapseCount: 0,
+            isDreaming: false,
+            modelReady: false
+        });
+
+        // DOM Elements
+        const elProcessed = document.getElementById('stat-processed');
+        const elSynapses = document.getElementById('stat-synapses');
+        const elModel = document.getElementById('stat-model');
+        const elToggle = document.getElementById('btn-toggle');
+        
+        const logs = {
+            main: document.getElementById('log-main'),
+            thoughts: document.getElementById('log-thoughts'),
+            synapses: document.getElementById('log-synapses'),
+            raw: document.getElementById('log-raw')
+        };
+
+        // Tab Switching
+        document.querySelectorAll('.tab').forEach(t => {
+            t.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+                document.querySelectorAll('.log-container').forEach(x => x.classList.remove('active'));
+                
+                t.classList.add('active');
+                document.getElementById(t.dataset.target).classList.add('active');
+            });
+        });
+
+        // Logging UI Helper
+        function appendLog(targetId, msg, type = 'info') {
+            const container = logs[targetId];
+            const div = document.createElement('div');
+            
+            // Special styling based on type
+            if (type === 'thought') div.className = 'log-thought';
+            else if (type === 'json') div.className = 'log-json';
+            else if (type === 'raw') div.className = 'log-raw';
+            else div.className = `log-entry log-${type}`;
+
+            // Timestamp for main stream only usually, but good for all
+            const ts = `[${new Date().toLocaleTimeString()}] `;
+            
+            if (type === 'thought' || type === 'json' || type === 'raw') {
+                div.textContent = msg; // Raw content for these
+            } else {
+                div.textContent = ts + msg;
+            }
+            
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Subscribe to state
+        store.subscribe((prop, val) => {
+            if (prop === 'processedCount') elProcessed.textContent = val;
+            if (prop === 'synapseCount') elSynapses.textContent = val;
+            if (prop === 'modelReady') elModel.textContent = val ? "Ready" : "Loading...";
+            if (prop === 'isDreaming') {
+                elToggle.textContent = val ? "Sleep" : "Wake Up";
+                elToggle.className = val ? "active" : "";
+            }
+        });
+
+        // Initialize Cozo
+        let db;
+        
+        async function init() {
+            try {
+                logger.info("Initializing Root Dreamer...");
+                appendLog('main', "Initializing CozoDB...");
+                const CozoDb = await initCozo();
+                
+                try {
+                    db = await CozoDb.new_from_indexed_db('coda_memory', 'cozo_store', () => {});
+                    appendLog('main', "Connected to Persistent Brain (coda_memory).", 'success');
+                } catch (e) {
+                    logger.warn(`Persistence failed, falling back to RAM: ${e.message}`);
+                    db = CozoDb.new(); 
+                    appendLog('main', "Connected to Transient Brain (In-Memory).", 'warn');
+                }
+                
+                // Ensure tables exist (idempotent)
+                await db.run(`
+                    :create memory {
+                        id: String,
+                        timestamp: Int,
+                        role: String,
+                        content: String,
+                        source: String,
+                        embedding: [F32; 384]?
+                    }
+                `);
+                
+                await db.run(`
+                    :create relationships {
+                        source_id: String,
+                        target_id: String,
+                        type: String,
+                        weight: Float
+                    }
+                `);
+
+                appendLog('main', "CozoDB Ready.");
+                
+                // Initialize LLM
+                appendLog('main', `Loading Model: ${MODEL_ID}...`);
+                const worker = new Worker('./modules/llm-worker.js', { type: 'module' });
+                window.engine = await CreateWebWorkerMLCEngine(worker, MODEL_ID, {
+                    initProgressCallback: (report) => {
+                        elModel.textContent = report.text;
+                        if (report.progress === 1) store.state.modelReady = true;
+                    }
+                });
+
+                appendLog('main', "Model Loaded. Ready to dream.");
+                store.state.modelReady = true;
+
+            } catch (e) {
+                logger.error(e.message);
+                appendLog('main', `Initialization Error: ${e.message}`, 'error');
+            }
+        }
+
+        // The Dream Loop
+        let isLoopRunning = false;
+        async function dreamLoop() {
+            if (isLoopRunning || !store.state.isDreaming) return;
+            if (!store.state.modelReady) {
+                await new Promise(r => setTimeout(r, 1000));
+                return dreamLoop();
+            }
+
+            isLoopRunning = true;
+            try {
+                // 1. Select Orphan
+                const query = `
+                    ?[id, content] := *memory{id, content}, 
+                    not *relationships{source_id: id}
+                    :limit 1
+                `;
+                
+                const result = await db.run(query);
+                if (!result.ok) throw new Error(result.message);
+
+                if (result.rows.length === 0) {
+                    appendLog('main', "No orphans found. Resting...", 'info');
+                    await new Promise(r => setTimeout(r, 2000)); 
+                    isLoopRunning = false;
+                    if (store.state.isDreaming) dreamLoop();
+                    return;
+                }
+
+                const [id, content] = result.rows[0];
+                appendLog('main', `Dreaming on memory: ${id}...`);
+                
+                // Truncate content
+                const safeContent = content.length > 3000 ? content.substring(0, 3000) + "..." : content;
+                
+                // 2. Deep Analysis Prompt
+                const prompt = `
+You are the Subconscious. Deeply analyze this memory to find hidden patterns, abstract themes, and architectural implications.
+Don't just look at surface keywords. Dig deeper.
+
+Step 1: THOUGHTS. Discuss with yourself potential connections. Explore ambiguities. Ask "Why is this here?" and "What does this imply?".
+Step 2: JSON Extract 2-5 strongest concepts as a JSON array.
+
+Format your response exactly like this:
+<thought>
+[Your internal monologue and deep analysis here]
+</thought>
+<json>
+[{"target": "ConceptName", "type": "relates_to", "weight": 0.9}]
+</json>
+
+Memory:
+${safeContent}
+                `.trim();
+
+                // Log Raw Request
+                appendLog('raw', `>>> PROMPT:
+${prompt}
+
+`, 'raw');
+
+                const response = await window.engine.chat.completions.create({
+                    messages: [{ role: "user", content: prompt }],
+                    temperature: 0.3, // Slightly higher for creativity in thoughts
+                    max_tokens: 1024
+                });
+                
+                const rawReply = response.choices[0].message.content;
+                appendLog('raw', `<<< REPLY:
+${rawReply}
+-----------------------------------
+`, 'raw');
+
+                // 3. Parse Output
+                const thoughtMatch = rawReply.match(/<thought>([\s\S]*?)<\/thought>/);
+                const jsonMatch = rawReply.match(/<json>([\s\S]*?)<\/json>/);
+
+                // Log Thoughts
+                if (thoughtMatch && thoughtMatch[1]) {
+                    appendLog('thoughts', `[Memory: ${id}]
+${thoughtMatch[1].trim()}`, 'thought');
+                } else {
+                    appendLog('thoughts', `[Memory: ${id}] (No internal monologue generated)`, 'warn');
+                }
+
+                // Parse JSON
+                let relationships = [];
+                try {
+                    let jsonStr = jsonMatch ? jsonMatch[1] : rawReply; // Fallback to raw if tags missing
+                    // Cleanup markdown
+                    jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+                    relationships = JSON.parse(jsonStr);
+                    
+                    if (!Array.isArray(relationships)) throw new Error("Not an array");
+                    
+                    appendLog('synapses', `[Memory: ${id}] Synthesized:
+${JSON.stringify(relationships, null, 2)}`, 'json');
+
+                } catch (parseErr) {
+                    appendLog('main', `Failed to parse dream JSON: ${parseErr.message}`, 'warn');
+                    // Mark processed to avoid loop
+                    relationships = [{ target: id, type: "self_processed", weight: 0.1 }];
+                }
+
+                // 4. Store
+                const rows = relationships.map(r => [id, r.target, r.type || 'relates_to', r.weight || 0.5]);
+                
+                if (rows.length > 0) {
+                    const insertQuery = `
+                        ?[src, tgt, type, w] <- $rows
+                        :put relationships {source_id: src, target_id: tgt, type: type, weight: w}
+                    `;
+                    
+                    const insertRes = await db.run(insertQuery, { rows });
+                    if (insertRes.ok) {
+                        store.state.processedCount++;
+                        store.state.synapseCount += rows.length;
+                        appendLog('main', `Synthesized ${rows.length} connections.`, 'success');
+                    }
+                }
+                
+                // Short pause
+                await new Promise(r => setTimeout(r, 2000));
+                
+            } catch (err) {
+                appendLog('main', `Dream Error: ${err.message}`, 'error');
+                await new Promise(r => setTimeout(r, 5000));
+            } finally {
+                isLoopRunning = false;
+            }
+            
+            // Re-trigger loop
+            if (store.state.isDreaming) dreamLoop();
+        }
+
+        // Toggle
+        elToggle.addEventListener('click', () => {
+            store.state.isDreaming = !store.state.isDreaming;
+            if (store.state.isDreaming) {
+                dreamLoop();
+            }
+        });
+
+        // Start
+        init();
+
+    </script>
+</body>
+</html>
+--- END OF FILE: tools\root-dreamer.html ---
 
 --- START OF FILE: tools\root-mic.html ---
 <!DOCTYPE html>
@@ -5491,7 +6048,7 @@ Install Chrome extension for automatic page context injection
     </script>
 </body>
 </html>
---- END OF FILE: tools\root-mic.html---
+--- END OF FILE: tools\root-mic.html ---
 
 --- START OF FILE: tools\sovereign-db-builder.html ---
 <!DOCTYPE html>
@@ -6038,7 +6595,7 @@ Install Chrome extension for automatic page context injection
 </body>
 
 </html>
---- END OF FILE: tools\sovereign-db-builder.html---
+--- END OF FILE: tools\sovereign-db-builder.html ---
 
 --- START OF FILE: tools\start-bridge.bat ---
 @echo off
@@ -6047,7 +6604,7 @@ echo This bridge allows external tools (like Wave Terminal) to talk to the brows
 echo.
 python webgpu_bridge.py
 pause
---- END OF FILE: tools\start-bridge.bat---
+--- END OF FILE: tools\start-bridge.bat ---
 
 --- START OF FILE: tools\webgpu-server-chat.html ---
 <!DOCTYPE html>
@@ -6227,7 +6784,7 @@ pause
 </body>
 
 </html>
---- END OF FILE: tools\webgpu-server-chat.html---
+--- END OF FILE: tools\webgpu-server-chat.html ---
 
 --- START OF FILE: tools\webgpu_bridge.py ---
 import asyncio
@@ -6714,7 +7271,7 @@ if __name__ == "__main__":
     print("="*60 + "\n")
     
     uvicorn.run(app, host=host, port=port)
---- END OF FILE: tools\webgpu_bridge.py---
+--- END OF FILE: tools\webgpu_bridge.py ---
 
 --- START OF FILE: tools\modules\llm-worker.js ---
 import { WebWorkerMLCEngineHandler, MLCEngine } from "https://esm.run/@mlc-ai/web-llm";
@@ -6726,7 +7283,7 @@ const handler = new WebWorkerMLCEngineHandler(engine);
 self.onmessage = (msg) => {
     handler.onmessage(msg);
 };
---- END OF FILE: tools\modules\llm-worker.js---
+--- END OF FILE: tools\modules\llm-worker.js ---
 
 --- START OF FILE: tools\modules\sovereign.js ---
 /* tools/modules/sovereign.js */
@@ -6842,5 +7399,5 @@ export async function initCozo(wasmUrl = '../cozo_lib_wasm_bg.wasm') {
     await initWasm(wasmUrl);
     return CozoDb;
 }
---- END OF FILE: tools\modules\sovereign.js---
+--- END OF FILE: tools\modules\sovereign.js ---
 

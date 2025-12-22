@@ -95,7 +95,7 @@ const encodeString = (typeof cachedTextEncoder.encodeInto === 'function'
 });
 
 function passStringToWasm0(arg, malloc, realloc) {
-
+    if (typeof arg !== 'string') arg = arg ? String(arg) : "";
     if (realloc === undefined) {
         const buf = cachedTextEncoder.encode(arg);
         const ptr = malloc(buf.length, 1) >>> 0;
@@ -204,6 +204,7 @@ export class CozoDb {
     * @returns {Promise<string>}
     */
     run(script, params, immutable) {
+        if (typeof params === 'undefined' || params === null) params = "{}";
         const ptr0 = passStringToWasm0(script, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passStringToWasm0(params, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);

@@ -15,6 +15,11 @@
 - [x] **Crash Prevention**: Context clamping for constrained drivers.
 - [x] **Mobile Optimization**: Service Worker (`llm-worker.js`) for non-blocking inference.
 
+## Phase 3: The Subconscious (Completed) ✅
+- [x] **Root Dreamer**: Created `tools/root-dreamer.html` for background memory consolidation.
+- [x] **Ingestion Refinement**: Upgraded `read_all.py` to produce LLM-legible YAML.
+- [x] **Root Architecture Docs**: Finalized terminology (Sovereign -> Root).
+
 ### Active Development - Expansion
 - [ ] **Agentic Tools**: Port Verifier/Distiller logic to `tools/modules/agents.js`.
 - [ ] **Multimodal**: Add image support to Builder (drag-and-drop embedding).
