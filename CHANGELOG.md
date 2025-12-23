@@ -8,6 +8,11 @@
 - **CozoDB Corruption Recovery**: Enhanced error handling for IndexedDB corruption with automatic fallback to in-memory database, manual recovery button, and timeout protection against hanging WASM calls.
 - **Bulk CozoDB Import Tool**: Added `tools/prepare_cozo_import.py` to transform `combined_memory.json` into the canonical `relations` payload (`cozo_import_memory.json`) for atomic bulk imports into CozoDB.
 - **Import Safety & Verification**: Added recommended import procedure and a post-import verification + backup step to avoid Schema Detachment.
+- **WebGPU Bridge**: `webgpu_bridge.py` for proxying OpenAI API requests to browser workers.
+- **Chat Worker**: `webgpu-server-chat.html` for running LLMs in the browser.
+- **Embed Worker**: `webgpu-server-embed.html` for running embedding models in the browser.
+- **Mobile Chat**: `mobile-chat.html` for a lightweight, mobile-friendly UI.
+- **Log Viewer**: `log-viewer.html` for real-time server log monitoring.
 
 ### Changed
 - **Ingestion Defaults**: Recommended batch size increased to 100 to prevent long-running slow writes that can desync CozoDB's in-memory metadata.

@@ -21,8 +21,8 @@
 
 ## Phase 3: Expansion (Current)
 - [ ] **Agentic Capabilities**: Re-introduce Verifier/Distiller logic in JS.
-- [ ] **Active Memory Persistence**: Enable chat to write back to the Graph.
-- [ ] **Temporal Awareness**: Ground the model in real-time.
+- [x] **Active Memory Persistence**: Enable chat to write back to the Graph.
+- [x] **Temporal Awareness**: Ground the model in real-time.
 - [ ] **Mobile Optimization**: Polish mobile UX for `model-server-chat.html`.
 - [ ] **Hybrid RAG**: Optimize vector + graph retrieval weighting.
 
