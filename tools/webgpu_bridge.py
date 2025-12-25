@@ -148,14 +148,14 @@ gpu_lock = PriorityGPUManager()
 async def acquire_gpu_lock(request: Request):
     body = await request.json()
     requester = body.get("id", "unknown")
-    # Default wait time: 60s
-    success, token = await gpu_lock.acquire(requester, timeout=60.0)
-    
+    # FIX: Increase timeout to match the Manager's capability (120s)
+    success, token = await gpu_lock.acquire(requester, timeout=120.0)
+
     if success:
         return {"status": "acquired", "token": token}
     else:
         return JSONResponse(
-            status_code=503, 
+            status_code=503,
             content={"status": "timeout", "msg": "GPU Queue Timeout"}
         )
 

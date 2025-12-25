@@ -120,9 +120,25 @@ class GPUController {
     static modelLoadPromise = null;  // Promise to serialize model loading
     static activeModelLoaders = new Set();  // Track active model loaders
 
+    // Mind Blanking state - prevents immediate Dreamer activation after intensive tasks
+    static blankingUntil = 0;  // Timestamp when blanking period ends
+    static BLANKING_DURATION = 30000;  // 30 seconds default blanking period
+    static lastIntensiveTask = null;  // Track the last intensive task
+
     // Enhanced GPU lock with retry logic and better error handling
     static async acquireLock(agentId, timeout = 120000) { // Increased default timeout to 120 seconds
         const startTime = Date.now();
+
+        // Check if this is an intensive task that should trigger blanking
+        const isIntensiveTask = agentId.includes('Console') || agentId.includes('Chat');
+        const isDreamer = agentId.includes('Dreamer');
+
+        // If this is the Dreamer, check if we're in a blanking period
+        if (isDreamer && Date.now() < this.blankingUntil) {
+            const remaining = this.blankingUntil - Date.now();
+            console.log(`[${agentId}] Mind Blanking active. Waiting ${Math.ceil(remaining/1000)}s before resuming.`);
+            await new Promise(resolve => setTimeout(resolve, remaining));
+        }
 
         while (Date.now() - startTime < timeout) {
             try {
@@ -178,6 +194,15 @@ class GPUController {
     }
 
     static async releaseLock(agentId) {
+        // Check if this was an intensive task that should trigger blanking
+        const isIntensiveTask = agentId.includes('Console') || agentId.includes('Chat');
+        if (isIntensiveTask) {
+            // Set the blanking period to start after this release
+            this.blankingUntil = Date.now() + this.BLANKING_DURATION;
+            this.lastIntensiveTask = agentId;
+            console.log(`[${agentId}] Mind Blanking initiated. System will reset for ${this.BLANKING_DURATION/1000}s.`);
+        }
+
         try {
             await fetch(`${this.BRIDGE_URL}/v1/gpu/unlock`, {
                 method: 'POST',
@@ -271,6 +296,20 @@ class GPUController {
         };
     }
 
+    // Get mind blanking status
+    static getMindBlankingStatus() {
+        const isBlanking = Date.now() < this.blankingUntil;
+        const remainingTime = Math.max(0, this.blankingUntil - Date.now());
+        return {
+            isBlanking,
+            blankingUntil: new Date(this.blankingUntil).toISOString(),
+            remainingMs: remainingTime,
+            remainingSeconds: Math.ceil(remainingTime / 1000),
+            lastIntensiveTask: this.lastIntensiveTask,
+            blankingDuration: this.BLANKING_DURATION
+        };
+    }
+
     // New: Check GPU status to help with debugging
     static async checkStatus() {
         try {
@@ -282,7 +321,13 @@ class GPUController {
             });
 
             if (res.ok) {
-                return await res.json();
+                const bridgeStatus = await res.json();
+                // Add mind blanking status to the bridge status
+                const blankingStatus = this.getMindBlankingStatus();
+                return {
+                    ...bridgeStatus,
+                    mindBlanking: blankingStatus
+                };
             }
             return { error: `Status check failed (${res.status})` };
         } catch (e) {

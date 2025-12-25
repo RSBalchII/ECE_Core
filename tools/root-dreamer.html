@@ -361,7 +361,7 @@
             isLoopRunning = true;
             try {
                 // Find memories that don't have relationships (orphan memories)
-                const query = `?[id, content] := *memory{id: id, content: content}, not *relationships{source_id: id, target_id: $tgt, type: $type} :limit 1`;
+                const query = `?[id, content] := *memory{id, content}, not *relationships{source_id: id} :limit 1`;
                 const result = await runQuery(query);
 
                 if (!result.rows || result.rows.length === 0) {
