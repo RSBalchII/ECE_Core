@@ -964,7 +964,7 @@
                 }); // Uses the default 5-minute timeout for model loading
 
                 ui.log("🎉 Root Console Online", "success");
-                contextManager = new ContextManager(engine, db);
+                await initializeContextManager();
                 document.getElementById('input').disabled = false;
                 document.getElementById('send-btn').disabled = false;
                 document.getElementById('input').focus();
@@ -1053,6 +1053,16 @@
             }
         }
 
+        // Initialize context manager after all dependencies are loaded
+        async function initializeContextManager() {
+            if (engine && db) {
+                contextManager = new ContextManager(engine, db);
+                ui.log("🧠 Context Manager Ready", "success");
+                return true;
+            }
+            return false;
+        }
+
         // --- BRIDGE LOGIC ---
         let bridgeWs = null;
         
@@ -1128,20 +1138,36 @@
 
         window.toggleBridge = function (enabled) {
             if (enabled) {
-                if (!engine) { alert("Load model first!"); document.getElementById('enable-bridge-toggle').checked = false; return; }
+                // Check if database is available (minimum requirement for bridge)
+                if (!db) {
+                    alert("Database not initialized. Please wait for CozoDB to load.");
+                    document.getElementById('enable-bridge-toggle').checked = false;
+                    return;
+                }
+
                 bridgeWs = new WebSocket("ws://localhost:8080/ws/chat");
                 bridgeWs.onopen = () => { document.getElementById('bridge-status').innerText = "🟢 Connected"; ui.log("Bridge Online", "success"); };
-                // [Replace the existing bridgeWs.onmessage handler with this]
                 bridgeWs.onmessage = async (e) => {
                     const msg = JSON.parse(e.data);
-                    
-                    // 1. STANDARD CHAT REQUEST (e.g. from VS Code)
+
+                    // 1. STANDARD CHAT REQUEST (e.g. from VS Code) - requires LLM engine
                     if (msg.type === 'chat') {
+                        // Check if engine is available for chat requests
+                        if (!engine) {
+                            const errorResponse = {
+                                id: msg.id,
+                                error: "LLM engine not loaded. Bridge only supports memory queries without loaded model."
+                            };
+                            bridgeWs.send(JSON.stringify(errorResponse));
+                            ui.log(`❌ Chat request failed: LLM engine not loaded`, "error");
+                            return;
+                        }
+
                         ui.log(`Bridge Chat: ${msg.id}`, "info");
                         try {
-                            const completion = await engine.chat.completions.create({ 
-                                messages: msg.data.messages, 
-                                stream: true 
+                            const completion = await engine.chat.completions.create({
+                                messages: msg.data.messages,
+                                stream: true
                             });
                             for await (const chunk of completion) {
                                 bridgeWs.send(JSON.stringify({ id: msg.id, chunk }));
@@ -1150,20 +1176,37 @@
                         } catch (err) {
                             bridgeWs.send(JSON.stringify({ id: msg.id, error: err.message }));
                         }
-                    } 
-                    
-                    // 2. MEMORY SEARCH REQUEST (From Chrome Extension)
+                    }
+
+                    // 2. MEMORY SEARCH REQUEST (From Chrome Extension) - works without LLM engine
                     else if (msg.type === 'memory_query') {
                         const queryText = msg.data.query;
                         ui.log(`🔎 Bridge Memory Search: "${queryText}"`, "info");
+
+                        // Initialize context manager if not ready (only for memory queries)
+                        if (!contextManager) {
+                            await initializeContextManager();
+                        }
+
+                        // Check if context manager is now available
+                        if (!contextManager) {
+                            const errorResponse = {
+                                id: msg.id,
+                                error: "Context manager not ready. Database may not be fully initialized."
+                            };
+                            bridgeWs.send(JSON.stringify(errorResponse));
+                            ui.log(`❌ Context manager not ready for query: ${queryText}`, "error");
+                            return;
+                        }
+
                         try {
                             // Use the new decoupled method
                             const results = await contextManager.findRelevantMemories(queryText);
-                            
+
                             // Send pure JSON back to the bridge
-                            bridgeWs.send(JSON.stringify({ 
-                                id: msg.id, 
-                                result: results 
+                            bridgeWs.send(JSON.stringify({
+                                id: msg.id,
+                                result: results
                             }));
                             ui.log(`✅ Returned ${results.length} memories`, "success");
                         } catch (err) {

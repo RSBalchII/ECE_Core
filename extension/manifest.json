@@ -11,7 +11,9 @@
   ],
   "host_permissions": [
     "*://gemini.google.com/*",
-    "*://chatgpt.openai.com/*"
+    "*://chatgpt.openai.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
   ],
   "content_scripts": [
     {

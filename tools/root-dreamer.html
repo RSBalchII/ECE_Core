@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Root Dreamer (Subconscious)</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌙</text></svg>">
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌙</text></svg>">
     <style>
         :root {
             --bg-color: #0d1117;
@@ -38,7 +40,10 @@
             margin-bottom: 20px;
         }
 
-        h1 { margin: 0; font-size: 1.5rem; }
+        h1 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
 
         .status-panel {
             display: grid;
@@ -81,14 +86,16 @@
             transition: background-color 0.2s;
         }
 
-        button:hover { background-color: #30363d; }
-        
+        button:hover {
+            background-color: #30363d;
+        }
+
         button.active {
             background-color: var(--success-color);
             color: white;
             border-color: var(--success-color);
         }
-        
+
         button.stop {
             background-color: var(--danger-color);
             border-color: var(--danger-color);
@@ -100,16 +107,18 @@
             border-bottom: 1px solid var(--border-color);
             margin-bottom: 0;
         }
-        
+
         .tab {
             padding: 10px 20px;
             cursor: pointer;
             border-bottom: 2px solid transparent;
             color: #8b949e;
         }
-        
-        .tab:hover { color: var(--text-color); }
-        
+
+        .tab:hover {
+            color: var(--text-color);
+        }
+
         .tab.active {
             color: var(--text-color);
             border-bottom-color: var(--accent-color);
@@ -128,23 +137,57 @@
             font-size: 0.85rem;
             overflow-y: auto;
             white-space: pre-wrap;
-            display: none; /* Hidden by default */
+            display: none;
+            /* Hidden by default */
         }
-        
-        .log-container.active { display: block; }
 
-        .log-entry { margin-bottom: 5px; border-bottom: 1px solid #222; padding-bottom: 2px; }
-        .log-info { color: #58a6ff; }
-        .log-success { color: #238636; }
-        .log-warn { color: #d29922; }
-        .log-error { color: #f85149; }
-        
-        .log-thought { color: var(--thought-color); font-style: italic; border-left: 2px solid var(--thought-color); padding-left: 10px; margin: 5px 0; }
-        .log-raw { color: var(--raw-color); font-size: 0.8rem; opacity: 0.8; }
-        .log-json { color: var(--success-color); font-weight: bold; }
+        .log-container.active {
+            display: block;
+        }
 
+        .log-entry {
+            margin-bottom: 5px;
+            border-bottom: 1px solid #222;
+            padding-bottom: 2px;
+        }
+
+        .log-info {
+            color: #58a6ff;
+        }
+
+        .log-success {
+            color: #238636;
+        }
+
+        .log-warn {
+            color: #d29922;
+        }
+
+        .log-error {
+            color: #f85149;
+        }
+
+        .log-thought {
+            color: var(--thought-color);
+            font-style: italic;
+            border-left: 2px solid var(--thought-color);
+            padding-left: 10px;
+            margin: 5px 0;
+        }
+
+        .log-raw {
+            color: var(--raw-color);
+            font-size: 0.8rem;
+            opacity: 0.8;
+        }
+
+        .log-json {
+            color: var(--success-color);
+            font-weight: bold;
+        }
     </style>
 </head>
+
 <body>
     <header>
         <h1>Root Dreamer (Subconscious)</h1>
@@ -196,7 +239,7 @@
 
         const logger = new SovereignLogger('Dreamer');
         const MODEL_ID = "Qwen2.5-1.5B-Instruct-q4f32_1-MLC";
-        
+
         // State
         const store = createStore({
             processedCount: 0,
@@ -211,7 +254,7 @@
         const elModel = document.getElementById('stat-model');
         const elToggle = document.getElementById('btn-toggle');
         const elReset = document.getElementById('btn-reset');
-        
+
         const logs = {
             main: document.getElementById('log-main'),
             thoughts: document.getElementById('log-thoughts'),
@@ -269,10 +312,12 @@
 
         async function loadModel() {
             appendLog('main', `Loading Model: ${MODEL_ID}...`);
-            const worker = new Worker('./modules/llm-worker.js', { type: 'module' });
 
             try {
                 await GPUController.withModelLoadLock("Dreamer-Init", async () => {
+                    // Create a new worker for the Dreamer to avoid conflicts with other components
+                    const worker = new Worker('./modules/llm-worker.js', { type: 'module' });
+
                     // Use a more reliable model URL for the Dreamer
                     const config = {
                         model_list: [{
@@ -284,13 +329,26 @@
                         }]
                     };
 
-                    window.engine = await CreateWebWorkerMLCEngine(worker, "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", {
+                    // If there's an existing engine, try to dispose it gracefully
+                    if (window.engine && typeof window.engine.dispose === 'function') {
+                        try {
+                            await window.engine.dispose();
+                        } catch (disposeErr) {
+                            console.warn("Warning: Could not dispose existing engine:", disposeErr);
+                        }
+                    }
+
+                    // Use a dedicated engine instance for the Dreamer to avoid conflicts
+                    window.dreamerEngine = await CreateWebWorkerMLCEngine(worker, "Qwen2.5-1.5B-Instruct-q4f16_1-MLC", {
                         appConfig: config,
                         initProgressCallback: (report) => {
                             elModel.textContent = report.text;
                             if (report.progress === 1) store.state.modelReady = true;
                         }
                     });
+
+                    // Make the engine available as window.engine for compatibility
+                    window.engine = window.dreamerEngine;
                 });
                 appendLog('main', "Model Loaded. Ready to dream.", 'success');
                 store.state.modelReady = true;
@@ -323,13 +381,13 @@
                 appendLog('main', "Initializing CozoDB...");
                 const CozoDb = await initCozo();
                 try {
-                    db = await CozoDb.new_from_indexed_db('coda_memory', 'cozo_store', () => {});
+                    db = await CozoDb.new_from_indexed_db('coda_memory', 'cozo_store', () => { });
                     appendLog('main', "Connected to Persistent Brain.", 'success');
                 } catch (e) {
                     db = CozoDb.new();
                     appendLog('main', "Connected to Transient Brain.", 'warn');
                 }
-                
+
                 // Tables - Idempotent Creation
                 try {
                     await runQuery(":create memory { id: String => timestamp: Int, role: String, content: String, source: String, embedding: <F32; 384>? }");
@@ -342,7 +400,7 @@
                 } catch (e) {
                     if (!e.message.includes('conflicts')) throw e;
                 }
-                
+
                 await loadModel();
             } catch (e) {
                 const msg = e.message || String(e);
@@ -361,7 +419,7 @@
             isLoopRunning = true;
             try {
                 // Find memories that don't have relationships (orphan memories)
-                const query = `?[id, content] := *memory{id, content}, not *relationships{source_id: id} :limit 1`;
+                const query = `?[id, content] := *memory{id: id, content: content}, not *relationships{source_id: id} :limit 1`;
                 const result = await runQuery(query);
 
                 if (!result.rows || result.rows.length === 0) {
@@ -375,48 +433,65 @@
                 const [id, content] = result.rows[0];
                 appendLog('main', `Dreaming on memory: ${id}...`);
                 const safeContent = content.length > 3000 ? content.substring(0, 3000) + "..." : content;
-                
+
                 const prompt = `Analyze this memory. Output Step 1: Thoughts (monologue) and Step 2: JSON array of concepts. Use <thought> and <json> tags. Memory: ${safeContent}`;
 
                 await GPUController.withLock("Dreamer-Think", async () => {
-                    const response = await window.engine.chat.completions.create({
-                        messages: [{ role: "user", content: prompt }],
-                        temperature: 0.3,
-                        max_tokens: 1024
-                    });
-                    
-                    const rawReply = response.choices[0].message.content;
-                    const thoughtMatch = rawReply.match(/<thought>([\s\S]*?)<\/thought>/);
-                    const jsonMatch = rawReply.match(/<json>([\s\S]*?)<\/json>/);
-
-                    if (thoughtMatch) appendLog('thoughts', `[${id}] ${thoughtMatch[1].trim()}`, 'thought');
-                    
-                    let relationships = [];
                     try {
-                        let jsonStr = jsonMatch ? jsonMatch[1] : rawReply;
-                        jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
-                        const start = jsonStr.indexOf('[');
-                        const end = jsonStr.lastIndexOf(']');
-                        if (start !== -1 && end !== -1) {
-                            relationships = JSON.parse(jsonStr.substring(start, end + 1));
-                            appendLog('synapses', `[${id}] Synthesized ${relationships.length} links.`, 'json');
-                        }
-                    } catch (pe) {
-                        relationships = [{ target: "failed_parse", type: "system_flag", weight: 0.0 }];
-                    }
+                        // Use the dedicated dreamer engine
+                        const response = await (window.dreamerEngine || window.engine).chat.completions.create({
+                            messages: [{ role: "user", content: prompt }],
+                            temperature: 0.3,
+                            max_tokens: 1024
+                        });
 
-                    const rows = relationships.map(r => [String(id), String(r.target || "unknown"), String(r.type || 'relates_to'), parseFloat(r.weight || 0.5)]);
-                    if (rows.length > 0) {
-                        await runQuery(`?[src, tgt, type, w] <- $rows :put relationships {source_id: src, target_id: tgt, type: type, weight: w}`, JSON.stringify({ rows }));
-                        store.state.processedCount++;
-                        store.state.synapseCount += rows.length;
+                        const rawReply = response.choices[0].message.content;
+                        const thoughtMatch = rawReply.match(/<thought>([\s\S]*?)<\/thought>/);
+                        const jsonMatch = rawReply.match(/<json>([\s\S]*?)<\/json>/);
+
+                        if (thoughtMatch) appendLog('thoughts', `[${id}] ${thoughtMatch[1].trim()}`, 'thought');
+
+                        let relationships = [];
+                        try {
+                            let jsonStr = jsonMatch ? jsonMatch[1] : rawReply;
+                            jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+                            const start = jsonStr.indexOf('[');
+                            const end = jsonStr.lastIndexOf(']');
+                            if (start !== -1 && end !== -1) {
+                                relationships = JSON.parse(jsonStr.substring(start, end + 1));
+                                appendLog('synapses', `[${id}] Synthesized ${relationships.length} links.`, 'json');
+                            }
+                        } catch (pe) {
+                            relationships = [{ target: "failed_parse", type: "system_flag", weight: 0.0 }];
+                        }
+
+                        const rows = relationships.map(r => [String(id), String(r.target || "unknown"), String(r.type || 'relates_to'), parseFloat(r.weight || 0.5)]);
+                        if (rows.length > 0) {
+                            await runQuery(`?[src, tgt, type, w] <- $rows :put relationships {source_id: src, target_id: tgt, type: type, weight: w}`, JSON.stringify({ rows }));
+                            store.state.processedCount++;
+                            store.state.synapseCount += rows.length;
+                        }
+                    } catch (inferenceError) {
+                        // Check if this is the disposal error
+                        if (inferenceError.message &&
+                            (inferenceError.message.includes("disposed") ||
+                                inferenceError.message.includes("external Instance reference no longer exists"))) {
+                            appendLog('main', "Engine disposed, reloading model...", 'warn');
+                            store.state.modelReady = false;
+                            // Don't throw here, just return to let the retry mechanism handle it
+                            return;
+                        }
+                        throw inferenceError; // Re-throw other errors
                     }
                 });
                 await new Promise(r => setTimeout(r, 2000));
             } catch (err) {
                 const msg = err.message || String(err);
                 appendLog('main', `Dream Error: ${msg}`, 'error');
-                if (msg.includes("Model not loaded") || msg.includes("Tokenizer")) {
+                if (msg.includes("Model not loaded") ||
+                    msg.includes("Tokenizer") ||
+                    msg.includes("disposed") ||
+                    msg.includes("external Instance reference no longer exists")) {
                     store.state.modelReady = false;
                     await loadModel();
                 }
@@ -431,7 +506,7 @@
             store.state.isDreaming = !store.state.isDreaming;
             if (store.state.isDreaming) dreamLoop();
         });
-        
+
         elReset.addEventListener('click', async () => {
             store.state.isDreaming = false;
             store.state.modelReady = false;
@@ -442,4 +517,5 @@
         init();
     </script>
 </body>
+
 </html>

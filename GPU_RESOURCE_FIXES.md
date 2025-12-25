@@ -25,9 +25,9 @@ This document outlines the fixes implemented to resolve GPU resource contention 
 - Enhanced logging for better debugging
 
 ### 3. Updated Components
-- **Root Console (`model-server-chat.html`)**: Added 2-minute timeout for model loading, improved error handling, now uses model loading lock, fixed model URL
+- **Root Console (`model-server-chat.html`)**: Added 2-minute timeout for model loading, improved error handling, now uses model loading lock, fixed model URL, enhanced bridge connection with proper context manager initialization, **NEW: Decoupled bridge functionality allowing memory queries without loaded LLM model**
 - **Root Mic (`root-mic.html`)**: Enhanced GPU lock acquisition with status checking, now uses model loading lock
-- **Root Dreamer (`root-dreamer.html`)**: Added retry logic for model loading, now uses model loading lock, uses more reliable model configuration
+- **Root Dreamer (`root-dreamer.html`)**: Added retry logic for model loading, now uses model loading lock, uses more reliable model configuration, fixed Datalog query for finding orphan memories
 
 ### 4. New Utilities
 - **GPU Manager Script** (`scripts/gpu_manager.py`): Command-line tool to monitor and manage GPU resources
