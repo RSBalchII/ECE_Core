@@ -225,10 +225,10 @@
     <div id="log-raw" class="log-container"></div>
 
     <script type="module">
-        import { SovereignLogger, createStore, getWebGPUConfig, initCozo, GPUController } from './modules/sovereign.js';
+        import { AnchorLogger, createStore, getWebGPUConfig, initCozo, GPUController } from './modules/anchor.js';
         import { CreateWebWorkerMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
 
-        const logger = new SovereignLogger('Dreamer');
+        const logger = new AnchorLogger('Dreamer');
         const MODEL_ID = "Qwen2.5-1.5B-Instruct-q4f32_1-MLC";
 
         // State

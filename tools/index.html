@@ -139,11 +139,45 @@
             <div class="desc">Direct shell access. Command the host via the Neural Shell Protocol.</div>
             <div class="status">Sovereign</div>
         </a>
+
+        <div id="anchor-shell-card" class="card" onclick="spawnAnchorShell()">
+            <div class="icon">🚀</div>
+            <div class="title">Native Shell</div>
+            <div class="desc">Launch the Anchor terminal in a new PowerShell window.</div>
+            <div class="status">System</div>
+        </div>
     </div>
 
     <div style="margin-top: 50px; color: #555; font-size: 0.8rem;">
         Running on Localhost • WebGPU Enabled
     </div>
+
+    <script>
+        async function spawnAnchorShell() {
+            try {
+                const response = await fetch('http://localhost:8080/v1/system/spawn_shell', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer sovereign-secret'
+                    },
+                    body: JSON.stringify({})
+                });
+
+                if (response.ok) {
+                    console.log('🚀 Launching Native Shell...');
+                    alert('🚀 Anchor terminal launched in new PowerShell window!');
+                } else {
+                    const errorData = await response.json();
+                    console.error('Failed to spawn shell:', errorData);
+                    alert('❌ Failed to launch Anchor terminal: ' + errorData.error);
+                }
+            } catch (error) {
+                console.error('Error spawning shell:', error);
+                alert('❌ Error launching Anchor terminal: ' + error.message);
+            }
+        }
+    </script>
 
 </body>
 

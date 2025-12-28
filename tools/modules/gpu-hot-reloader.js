@@ -48,7 +48,7 @@ class GPUHotReloader {
         try {
             // Check if any GPU-related files have been modified
             const gpuFiles = [
-                'tools/modules/sovereign.js',
+                'tools/modules/anchor.js',
                 'tools/model-server-chat.html',
                 'tools/root-mic.html',
                 'tools/root-dreamer.html'

@@ -688,11 +688,11 @@ async def shell_exec(request: Request):
     Security: Protected by Bearer Token.
     """
     # 1. Verify Auth (Handled by Middleware)
-    
+
     try:
         body = await request.json()
         cmd = body.get("cmd", "")
-        
+
         if not cmd:
             return JSONResponse(status_code=400, content={"error": "No command provided"})
 
@@ -701,10 +701,10 @@ async def shell_exec(request: Request):
         # 2. Execute via Subprocess (PowerShell/CMD compatible)
         # timeout=30 prevents hanging processes
         proc = subprocess.run(
-            cmd, 
-            shell=True, 
-            capture_output=True, 
-            text=True, 
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
             input="", # EOF to stdin: prevents hanging on interactive commands like 'powershell'
             timeout=30
         )
@@ -722,6 +722,36 @@ async def shell_exec(request: Request):
         log(f"❌ Shell Error: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+
+# --- SYSTEM SPAWN PROTOCOL (Fire-and-Forget) ---
+@app.post("/v1/system/spawn_shell")
+async def spawn_shell(request: Request):
+    """
+    Spawns a new PowerShell window running the Anchor terminal.
+    This is a fire-and-forget operation that doesn't wait for output.
+    """
+    try:
+        log("🚀 Spawning Anchor Terminal in new PowerShell window")
+
+        # Determine the command to run the anchor script
+        # Use absolute path to avoid issues with current working directory
+        project_root = os.path.dirname(os.path.abspath(__file__))  # This gets the tools directory
+        anchor_script_path = os.path.join(project_root, "anchor.py")
+
+        cmd = f'start "Anchor Terminal" powershell -NoExit -Command "cd {project_root} && python anchor.py"'
+
+        # Execute the command to spawn a new window (non-blocking)
+        subprocess.Popen(
+            cmd,
+            shell=True
+        )
+
+        return {"status": "spawned", "message": "Anchor terminal launched in new PowerShell window"}
+
+    except Exception as e:
+        log(f"❌ Spawn Error: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 if __name__ == "__main__":
     host = os.getenv("BRIDGE_HOST", "0.0.0.0")
     
@@ -734,11 +764,11 @@ if __name__ == "__main__":
         port = random.randint(9000, 9999)
 
     print("\n" + "="*60)
-    print(f"🔒 SECURE BRIDGE STARTING")
+    print(f"SECURE BRIDGE STARTING")
     print(f"   Host: {host}")
     print(f"   Port: {port}")
-    print(f"   🔑 TOKEN: {AUTH_TOKEN}")
-    print(f"   📱 Mobile URL: http://{host}:{port}/mobile")
+    print(f"   TOKEN: {AUTH_TOKEN}")
+    print(f"   Mobile URL: http://{host}:{port}/mobile")
     print("="*60 + "\n")
     
     uvicorn.run(app, host=host, port=port)
