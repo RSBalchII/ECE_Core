@@ -1,81 +1,100 @@
-# Architecture Overview: Root Coda (v2.0)
+# Root Coda: The Visual Monolith (v2.1)
 
-**Status:** Production (Root Architecture)
-**Philosophy:** 100% Local, 100% Browser, 100% Sovereign.
+**Status:** Production | **Philosophy:** 100% Local, 100% Browser, 100% Sovereign.
 
-## Core Stack
-
-The system has evolved into **Root Coda**, a pure [WASM (WebAssembly)](https://webassembly.org/) ecosystem where the browser is the Operating System.
-
-### 1. The Kernel (`sovereign.js`)
-- **Role:** The central nervous system.
-- **Function:**
-  - **Unified Logging:** Broadcasts to `log-viewer` and Mission Control.
-  - **Reactive State:** Zero-dependency `Proxy` store for UI state.
-  - **Hardware Abstraction:** "Snapdragon Fix" (WebGPU buffer clamping) and Profile management.
-  - **Memory Driver:** Standardized CozoDB WASM initialization.
-
-### 2. The Compute (`web-llm`)
-- **Engine:** [WebLLM](https://webllm.mlc.ai/) (MLC-AI)
-- **Runtime:** WebGPU (Hardware accelerated)
-- **Models:**
-  - **SOTA (Latest):** Qwen 3 (4B, 8B) / Gemma 3 (1B) / Phi 3.5
-  - **High Performance:** SmolLM2 (1.7B, 360M) / Qwen2.5-3B
-  - **Legacy:** Qwen2.5-14B / DeepSeek-R1 (16GB+ VRAM)
-
-### 3. The Memory (`cozo-lib-wasm`)
-- **Database:** [CozoDB](https://cozodb.org/) (Datalog/Relational/Graph)
-- **Storage:** IndexedDB / OPFS (Origin Private File System) -> Persistent.
-- **Schema:**
-  - `*memory`: Stored relations (content, timestamp, embedding).
-    - **Multisensory (Phase A):** Now includes `mime_type` and `blob_ref` for binary file referencing.
-  - `*vectors`: HNSW vector index for semantic search.
-
-### 4. The Interfaces (Root Tools)
-- **Root Console** (`model-server-chat.html`): The **Brain**. Runs Graph-R1 in a **Web Worker** (`llm-worker.js`) to prevent UI freezing during inference.
-- **Root Builder** (`sovereign-db-builder.html`): The **Stomach**. Ingests files/logs into the Graph.
-- **Root Mic** (`root-mic.html`): The **Ears**. Whisper-Tiny (WASM) + LLM cleanup.
-- **Log Viewer** (`log-viewer.html`): The **Nerves**. System-wide diagnostics.
-- **Root Dreamer** (`tools/root-dreamer.html`): The **Subconscious**. Background optimization and association.
-
-## Data Flow
+## 1. The Kernel (System Architecture)
+The **Sovereign Kernel** (`sovereign.js`) abstracts hardware, manages state, and enforces the "Consciousness Semaphore" (Resource Hardening).
 
 ```mermaid
 graph TD
-    User -->|Voice| Mic[Root Mic]
-    User -->|Files| Builder[Root Builder]
-    User -->|Chat| Console[Root Console]
+    User[User Input] --> Kernel[Sovereign Kernel]
+    Kernel -->|State: LISTENING| Mic[Root Mic]
+    Kernel -->|State: COGNITION| Console[Root Console]
+    Kernel -->|State: DREAMING| Dreamer[Root Dreamer]
     
-    Mic -->|Text| Console
-    Builder -->|Insert| Cozo[CozoDB WASM]
-    
-    subgraph Browser Kernel
-        Console -->|Msg| Worker[LLM Worker]
-        Worker -->|Inference| WebGPU
-        Console -->|Query| Cozo
-        Cozo -->|Persist| IDB[IndexedDB]
+    subgraph Hardware Layer
+        Kernel -->|Clamp Buffer| WebGPU[WebGPU Adapter]
+        Kernel -->|Persist| IDB[IndexedDB]
     end
+    
+    Console -.->|Block| Dreamer
+    Mic -.->|Block| Dreamer
 ```
 
-## Critical Workflows
+**Key Components:**
+- **Hardware Abstraction:** Clamps WebGPU buffers (256MB/1GB) for Snapdragon/Mobile stability.
+- **Consciousness Semaphore:** Ensures `Dreamer` (background tasks) yields instantly to `Console` or `Mic` (active tasks) to prevent VRAM crashes.
+- **Unified Logger:** Broadcasts logs to `log-viewer.html` via `BroadcastChannel`.
 
-### 1. The Reasoning Loop (Graph-R1)
-1. User input triggers **Hybrid Reflex** (Vector Embedding + Keyword/Regex search in CozoDB).
-2. **Context Manager** assembles a "Virtual Prompt" with retrieved clues.
-3. LLM executes **R1 Loop**:
-   - If answer found: Synthesize.
-   - If missing info: Request specific search (`NEED_CONTEXT: term`).
-4. Final answer streamed to user.
+---
 
-### 2. The Write Loop (Active Cognition)
-- **Concept**: The Brain is no longer read-only.
-- **Action**: Every chat interaction is persisted to CozoDB (`*memory` relation).
-- **Consolidation**: The "Root Dreamer" (Subconscious) picks up these raw memories, vectorizes them, and creates associations in the background.
+## 2. The Memory (CozoDB + WASM)
+A Hybrid Graph-Vector database running entirely in WASM, persisted to IndexedDB/OPFS.
 
-### 3. Root Persistence
-- **Zero Backend:** Python is only used for serving static files (`http.server`).
-- **Portability:** The entire "Brain" is contained in `browser_data` and IndexedDB.
+```mermaid
+erDiagram
+    MEMORY {
+        string id PK
+        int timestamp
+        string role
+        string content
+        string source
+        vector embedding
+    }
+    RELATIONSHIPS {
+        string source_id FK
+        string target_id FK
+        string type
+        float weight
+    }
+    MEMORY ||--o{ RELATIONSHIPS : connects_to
+```
 
-## Reference Specs
-- [Sovereign WASM Spec](architecture/sovereign-wasm.spec.md) (Detailed Kernel Docs)
-- [Memory Layer Spec](architecture/memory-layer.spec.md)
+**Schema:**
+- **`*memory`**: Stores raw text, chat logs, and vector embeddings (`<F32; 384>`).
+- **`*relationships`**: Stores synaptic links generated by the Dreamer (Subconscious).
+- **Persistence:** Writes to WASM memory, auto-flushes to `coda_memory` (IndexedDB).
+
+---
+
+## 3. The Logic (Graph-R1 Loop)
+The reasoning engine combining Semantic Search (Vector) and Lexical Search (Keyword) with a self-correcting LLM loop.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Reflex: User Query
+    Reflex --> ContextManager: Top-k Vectors + Keywords
+    ContextManager --> LLM: Virtual Prompt
+    LLM --> Synthesis: Answer Found
+    LLM --> Reflex: NEED_CONTEXT (Tool Call)
+    Synthesis --> [*]: Stream Response
+```
+
+**Flow:**
+1. **Reflex:** Simultaneous Vector + Regex search.
+2. **Context Manager:** Assembles "Virtual Prompt" with retrieved clues + System Time.
+3. **Loop:** LLM generates answer or requests more data (`NEED_CONTEXT:`).
+
+---
+
+## 4. The Bridge (Silent Injection)
+Extensions allow the Sovereign Brain to inject context into corporate LLMs (Gemini/ChatGPT).
+
+```mermaid
+sequenceDiagram
+    participant Chrome as Chrome Extension
+    participant Bridge as WebGPU Bridge (ws:8080)
+    participant DB as CozoDB (WASM)
+    
+    Chrome->>Chrome: User types... (3s pause)
+    Chrome->>Bridge: queryMemories(text)
+    Bridge->>DB: Run Datalog Query
+    DB-->>Bridge: JSON Result
+    Bridge-->>Chrome: Context Summary
+    Chrome->>Chrome: Inject into Textarea
+```
+
+**Security:**
+- **Local-First:** No data leaves localhost.
+- **Obfuscation:** Binds to random port or 8080.
+- **Protocol:** WebSocket for low-latency (<50ms) lookup.

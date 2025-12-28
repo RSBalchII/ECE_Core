@@ -548,14 +548,6 @@
         import { SovereignLogger, createStore, getWebGPUConfig, initCozo, GPUController } from './modules/sovereign.js';
         import { MemoryAuditor } from './modules/agents.js';
 
-        // Load hot reload functionality in development
-        if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-            import('./modules/gpu-hot-reloader.js').then(() => {
-                console.log('🔄 GPU Hot Reloader loaded for development');
-            }).catch(err => {
-                console.warn('⚠️ GPU Hot Reloader not available:', err);
-            });
-        }
         import { CozoDb } from './cozo_lib_wasm.js';
         import { loadAllFromIndexedDb, writeToIndexedDb } from './indexeddb.js';
         import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0';

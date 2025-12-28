@@ -74,13 +74,26 @@ export function createStore(initialState) {
 // --- 3. HARDWARE DETECTOR (The XPS Fix) ---
 // Centralized WebGPU configuration to prevent crashes on 256MB cards.
 export async function getWebGPUConfig(profile = 'mid') {
-    if (!navigator.gpu) throw new Error("WebGPU not supported");
+    if (!navigator.gpu) {
+        throw new Error("WebGPU is not supported by this browser. Ensure you are using a modern browser (Chrome 113+, Edge 113+) and it is not disabled in flags.");
+    }
     
-    // 1. Request Adapter (Prefer High Performance)
-    const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }) 
-                 || await navigator.gpu.requestAdapter();
+    // 1. Request Adapter (Progressive Fallback)
+    let adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
     
-    if (!adapter) throw new Error("No WebGPU Adapter found.");
+    if (!adapter) {
+        console.warn("[Kernel] High-performance adapter failed. Trying default...");
+        adapter = await navigator.gpu.requestAdapter();
+    }
+    
+    if (!adapter) {
+        console.warn("[Kernel] Default adapter failed. Trying low-power fallback...");
+        adapter = await navigator.gpu.requestAdapter({ powerPreference: 'low-power' });
+    }
+    
+    if (!adapter) {
+        throw new Error("No WebGPU Adapter found. This often happens after a GPU crash. Please RESTART YOUR BROWSER or check for driver updates.");
+    }
 
     // 2. Detect Hardware Limits
     const hardwareLimit = adapter.limits.maxStorageBufferBindingSize;
@@ -116,28 +129,51 @@ export async function initCozo(wasmUrl = '../cozo_lib_wasm_bg.wasm') {
 class GPUController {
     static get BRIDGE_URL() { return 'http://localhost:8080'; }
 
+    // System Consciousness States
+    static States = {
+        IDLE: 'IDLE',
+        DREAMING: 'DREAMING',
+        COGNITION: 'COGNITION',
+        LISTENING: 'LISTENING'
+    };
+
+    static currentState = 'IDLE';
+    static stateChannel = new BroadcastChannel('sovereign-state');
+
     // Separate locks for different operations
     static modelLoadPromise = null;  // Promise to serialize model loading
     static activeModelLoaders = new Set();  // Track active model loaders
 
-    // Mind Blanking state - prevents immediate Dreamer activation after intensive tasks
-    static blankingUntil = 0;  // Timestamp when blanking period ends
-    static BLANKING_DURATION = 30000;  // 30 seconds default blanking period
-    static lastIntensiveTask = null;  // Track the last intensive task
+    static broadcastState(newState) {
+        if (this.currentState === newState) return;
+        this.currentState = newState;
+        this.stateChannel.postMessage({ type: 'STATE_CHANGE', state: newState });
+        console.log(`[GPUController] State changed to: ${newState}`);
+    }
 
     // Enhanced GPU lock with retry logic and better error handling
     static async acquireLock(agentId, timeout = 120000) { // Increased default timeout to 120 seconds
         const startTime = Date.now();
 
-        // Check if this is an intensive task that should trigger blanking
-        const isIntensiveTask = agentId.includes('Console') || agentId.includes('Chat');
-        const isDreamer = agentId.includes('Dreamer');
+        // 1. Determine Intended State
+        let intendedState = this.States.IDLE;
+        if (agentId.includes('Dreamer')) intendedState = this.States.DREAMING;
+        else if (agentId.includes('Console') || agentId.includes('Chat')) intendedState = this.States.COGNITION;
+        else if (agentId.includes('Mic')) intendedState = this.States.LISTENING;
 
-        // If this is the Dreamer, check if we're in a blanking period
-        if (isDreamer && Date.now() < this.blankingUntil) {
-            const remaining = this.blankingUntil - Date.now();
-            console.log(`[${agentId}] Mind Blanking active. Waiting ${Math.ceil(remaining/1000)}s before resuming.`);
-            await new Promise(resolve => setTimeout(resolve, remaining));
+        // 2. SEMAPHORE CHECK (Consciousness Priority)
+        const highPriority = [this.States.COGNITION, this.States.LISTENING];
+        
+        // If Dreamer tries to wake while Brain/Ears are active -> REJECT IMMEDIATELY
+        if (intendedState === this.States.DREAMING && highPriority.includes(this.currentState)) {
+             return { success: false, error: `Consciousness Semaphore: System is busy (${this.currentState}). Dreamer suppressed.` };
+        }
+
+        // If High Priority Agent (Brain/Ears) starts -> Assert Dominance
+        if (highPriority.includes(intendedState)) {
+            this.broadcastState(intendedState);
+        } else if (intendedState === this.States.DREAMING) {
+            this.broadcastState(this.States.DREAMING);
         }
 
         while (Date.now() - startTime < timeout) {
@@ -194,15 +230,6 @@ class GPUController {
     }
 
     static async releaseLock(agentId) {
-        // Check if this was an intensive task that should trigger blanking
-        const isIntensiveTask = agentId.includes('Console') || agentId.includes('Chat');
-        if (isIntensiveTask) {
-            // Set the blanking period to start after this release
-            this.blankingUntil = Date.now() + this.BLANKING_DURATION;
-            this.lastIntensiveTask = agentId;
-            console.log(`[${agentId}] Mind Blanking initiated. System will reset for ${this.BLANKING_DURATION/1000}s.`);
-        }
-
         try {
             await fetch(`${this.BRIDGE_URL}/v1/gpu/unlock`, {
                 method: 'POST',
@@ -216,6 +243,11 @@ class GPUController {
         } catch (e) {
             console.warn("Failed to release lock", e);
             // Don't throw error on release failure to avoid blocking cleanup
+        } finally {
+             // Reset state to IDLE if a high-priority agent is finishing
+             if (agentId.includes('Console') || agentId.includes('Chat') || agentId.includes('Mic')) {
+                 this.broadcastState(this.States.IDLE);
+             }
         }
     }
 

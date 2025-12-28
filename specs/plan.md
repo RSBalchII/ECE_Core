@@ -1,7 +1,7 @@
-# Root Coda Roadmap (V2.0)
+# Root Coda Roadmap (V2.1)
 
 **Status:** Root Architecture Deployed
-**Focus:** Expansion, Agentic Capabilities, Multimodal.
+**Focus:** Hardening, Consolidation, and Hygiene.
 
 ## Phase 1: Foundation (Completed)
 - [x] Pivot to WebLLM/WebGPU stack.
@@ -19,12 +19,13 @@
 - [x] **The Stomach**: Refactored `sovereign-db-builder.html` to Root Architecture.
 - [x] **The Brain**: Refactored `model-server-chat.html` to Root Architecture (Graph-R1 preservation).
 
-## Phase 3: Expansion (Current)
-- [ ] **Agentic Capabilities**: Re-introduce Verifier/Distiller logic in JS.
+## Phase 3: Expansion & Hardening (Current)
+- [x] **Resource Hardening**: Implemented "Consciousness Semaphore" in `sovereign.js`.
+- [x] **Documentation Refactor**: Executed "Visual Monolith" strategy.
+- [ ] **Memory Hygiene**: Implement "Forgetting Curve" in `root-dreamer.html`.
 - [x] **Active Memory Persistence**: Enable chat to write back to the Graph.
 - [x] **Temporal Awareness**: Ground the model in real-time.
 - [ ] **Mobile Optimization**: Polish mobile UX for `model-server-chat.html`.
-- [ ] **Hybrid RAG**: Optimize vector + graph retrieval weighting.
 
 ## Phase 4: Federation
 - [ ] **Device Sync**: Sync IndexedDB across devices (Peer-to-Peer).
