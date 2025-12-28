@@ -1,6 +1,6 @@
 # Root Coda Roadmap (V2.1)
 
-**Status:** Root Architecture Deployed
+**Status:** Ghost & Shell Architecture Deployed
 **Focus:** Hardening, Consolidation, and Hygiene.
 
 ## Phase 1: Foundation (Completed)
@@ -19,14 +19,22 @@
 - [x] **The Stomach**: Refactored `sovereign-db-builder.html` to Root Architecture.
 - [x] **The Brain**: Refactored `model-server-chat.html` to Root Architecture (Graph-R1 preservation).
 
-## Phase 3: Expansion & Hardening (Current)
+## Phase 3: Expansion & Hardening (Completed)
 - [x] **Resource Hardening**: Implemented "Consciousness Semaphore" in `sovereign.js`.
 - [x] **Documentation Refactor**: Executed "Visual Monolith" strategy.
-- [ ] **Memory Hygiene**: Implement "Forgetting Curve" in `root-dreamer.html`.
+- [x] **Memory Hygiene**: Implement "Forgetting Curve" in `root-dreamer.html`.
 - [x] **Active Memory Persistence**: Enable chat to write back to the Graph.
 - [x] **Temporal Awareness**: Ground the model in real-time.
-- [ ] **Mobile Optimization**: Polish mobile UX for `model-server-chat.html`.
+- [x] **Mobile Optimization**: Polish mobile UX for `model-server-chat.html`.
 
-## Phase 4: Federation
+## Phase 4: Ghost & Shell Architecture
+- [x] **Phase 1:** "Stealth Mode" Cache Bypass (Completed).
+- [x] **Phase 2:** Headless Browser Script (`launch-ghost.ps1`) (Completed).
+- [x] **Phase 3:** `sov.py` Native Client Implementation.
+- [x] **Phase 4:** Neural Shell Protocol (`/v1/shell/exec` endpoint).
+- [x] **Phase 4.5:** Ghost Auto-Ignition (Auto-start with ?headless=true flag).
+- [ ] **Phase 5:** Migration to C++ Native Runtime (Removing Chrome entirely).
+
+## Phase 6: Federation
 - [ ] **Device Sync**: Sync IndexedDB across devices (Peer-to-Peer).
 - [ ] **Local-First Cloud**: Optional encrypted backup.
