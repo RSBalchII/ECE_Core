@@ -1445,6 +1445,39 @@
                         }
                     };
                 }
+
+                // --- GHOST PROTOCOL (Headless Auto-Start) ---
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('headless') === 'true') {
+                    ui.log("👻 Ghost Mode Detected: Initiating Auto-Sequence...", "warn");
+
+                    // 1. Auto-Connect Bridge
+                    const bridgeToggle = document.getElementById('enable-bridge-toggle');
+                    if (bridgeToggle && !bridgeToggle.checked) {
+                        bridgeToggle.checked = true;
+                        toggleBridge(true);
+                        ui.log("👻 Bridge Connection: ENABLED", "success");
+                    }
+
+                    // 2. Auto-Load Model (Qwen-Coder 1.5B for speed/utility)
+                    // We use a small delay to ensure CozoDB is ready
+                    setTimeout(() => {
+                        const targetModel = "mlc-ai/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC";
+                        const selector = document.getElementById('model-select');
+
+                        if (selector) {
+                            selector.value = targetModel;
+                            // If value didn't stick (because model list is dynamic), try setting custom
+                            if (selector.value !== targetModel) {
+                                selector.value = 'custom';
+                                document.getElementById('custom-model-input').value = targetModel;
+                            }
+
+                            ui.log(`👻 Ghost Auto-Load: ${targetModel}`, "info");
+                            loadModel(); // Trigger the existing load logic
+                        }
+                    }, 2000);
+                }
             }
         }
 

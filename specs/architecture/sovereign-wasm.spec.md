@@ -92,23 +92,44 @@ To prevent UI freezing during heavy inference, the LLM runs in a dedicated Web W
 
 ## 6. Resource Management (Orchestrator)
 **Problem**: Multiple browser tabs (Mic, Console, Dreamer) competing for the single GPU resource led to deadlocks, timeouts, and "Device Lost" errors.
-**Solution**: A Priority-Queue based Locking System.
+**Solution**: A Priority-Queue based Locking System with enhanced timeout handling and emergency procedures.
 
 ### 6.1 GPU Controller (`tools/modules/sovereign.js`)
-- **Serialized Loading**: `withModelLoadLock()` ensures only one tab loads a model at a time.
+- **Serialized Loading**: `withModelLoadLock()` ensures only one tab loads a model at a time, preventing GPU overload during initial loading.
 - **Access Priority**:
   - **Priority 0 (High)**: Root Mic (Voice Input - cannot wait)
   - **Priority 10 (Med)**: Root Console (Chat - user waiting)
+  - **Priority 15 (Med)**: Default priority
   - **Priority 20 (Low)**: Root Dreamer (Background tasks)
-- **Timeouts**: Increased broken-lock timeout from 60s to **120s** to accommodate large model loading.
+- **Timeouts**: Increased broken-lock timeout from 60s to **120s** (2 minutes) to accommodate large model loading.
+- **Retry Logic**: Added retry mechanism with proper error handling.
+- **Fallback Mechanism**: Direct WebGPU access when bridge unavailable.
+- **Status Checking**: Added GPU status check functionality.
 - **Emergency Release**: If a lock is held >120s, it is forcibly broken to prevent system deadlock.
 
 ### 6.2 Bridge Orchestration (`smart_gpu_bridge.py`)
 - **Queue Tracking**: Tracks request start times to prevent starvation.
+- **Enhanced Timeouts**: Increased timeout from 60s to 120s for lock acquisition.
+- **Request Tracking**: Added request_start_times to prevent queue starvation.
+- **Enhanced Status**: Detailed queue information in status endpoint.
 - **Endpoints**:
   - `GET /v1/gpu/status`: Monitor active locks and queue depth.
   - `POST /v1/gpu/lock`: Acquire lock (blocking).
+  - `POST /v1/gpu/unlock`: Release GPU lock.
+  - `POST /v1/gpu/reset`: Standard reset.
   - `POST /v1/gpu/force-release-all`: Nuclear option for stuck states.
+  - `POST /v1/gpu/force-release`: Emergency release endpoint.
+  - `POST /v1/hot-reload`: Hot reload endpoint for development.
+
+### 6.3 GPU Management Utilities
+- **GPU Manager Script** (`scripts/gpu_manager.py`): Command-line tool to monitor and manage GPU resources.
+- **Test Script** (`scripts/test_gpu_fixes.py`): Comprehensive testing of GPU resource management.
+- **Monitoring Commands**:
+  - `python scripts/gpu_manager.py --status`: Check GPU status
+  - `python scripts/gpu_manager.py --monitor --interval 10`: Monitor continuously
+  - `python scripts/gpu_manager.py --force-release`: Force release GPU locks
+  - `python scripts/gpu_manager.py --reset`: Standard reset
+  - `python scripts/gpu_manager.py --hot-reload`: Trigger hot reload
 
 ## 7. Development Infrastructure
 **Problem**: Restarting the Python bridge and refreshing 3 browser tabs for every small code change is slow.
