@@ -1,18 +1,18 @@
-/* tools/modules/sovereign.js */
+/* tools/modules/anchor.js */
 
 // Import CozoDB bindings from the parent directory
 import initWasm, { CozoDb } from '../cozo_lib_wasm.js';
 
 /**
- * Sovereign Coda Kernel (v2.0)
+ * Anchor Coda Kernel (v2.0)
  * Standard Library for Logging, State, Hardware, and Memory.
  */
 
 // --- 1. THE NERVOUS SYSTEM (Unified Logging) ---
-export class SovereignLogger {
+export class AnchorLogger {
     constructor(sourceId) {
         this.source = sourceId;
-        this.logChannel = new BroadcastChannel('sovereign-logs');
+        this.logChannel = new BroadcastChannel('anchor-logs');
         this.codaChannel = new BroadcastChannel('coda_logs');
     }
 
@@ -25,11 +25,11 @@ export class SovereignLogger {
         // 1. Console Fallback
         const style = type === 'error' ? 'color:red' : (type === 'success' ? 'color:green' : 'color:blue');
         console.log(`%c[${this.source}] ${msg}`, style);
-        
+
         // 2. Broadcast to Mission Control
         const timestamp = new Date().toISOString();
         const timeShort = new Date().toLocaleTimeString();
-        
+
         try {
             // New JSON Channel (for Mission Control)
             this.codaChannel.postMessage({
@@ -39,11 +39,11 @@ export class SovereignLogger {
                 timestamp
             });
             // Legacy Channel (for Log Viewer compatibility)
-            this.logChannel.postMessage({ 
-                source: 'system', 
-                msg: `[${this.source}] ${msg}`, 
-                type, 
-                time: timeShort 
+            this.logChannel.postMessage({
+                source: 'system',
+                msg: `[${this.source}] ${msg}`,
+                type,
+                time: timeShort
             });
         } catch (e) {
             console.warn('Logger broadcast failed', e);
@@ -138,7 +138,7 @@ class GPUController {
     };
 
     static currentState = 'IDLE';
-    static stateChannel = new BroadcastChannel('sovereign-state');
+    static stateChannel = new BroadcastChannel('anchor-state');
 
     // Separate locks for different operations
     static modelLoadPromise = null;  // Promise to serialize model loading

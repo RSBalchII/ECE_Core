@@ -200,16 +200,12 @@
         async function askBrain(query) {
             DOM.status.classList.add('busy');
             try {
-                const res = await fetch(`${BRIDGE_URL}/v1/chat/completions`, {
+                // Use the new shell/exec endpoint which handles NL->Command conversion
+                const res = await fetch(`${BRIDGE_URL}/v1/shell/exec`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },
                     body: JSON.stringify({
-                        model: "mlc-ai/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC", // Default to the 1.5B Coder
-                        messages: [
-                            { role: "system", content: "You are a Windows PowerShell expert. Convert this user request to a single executable PowerShell command. Output ONLY the command, no markdown, no explanation, no code blocks." },
-                            { role: "user", content: query }
-                        ],
-                        stream: false
+                        prompt: query  // Send natural language as prompt
                     })
                 });
 
@@ -219,19 +215,14 @@
                 }
 
                 const data = await res.json();
-                if (data.error) throw new Error(data.error.message || data.error);
+                if (data.error) throw new Error(data.error);
 
-                if (!data.choices || !data.choices.length) throw new Error("No response from Neural Brain.");
-
-                let cmd = data.choices[0].message.content.trim();
-                // Strip code blocks if the model ignores instruction
-                cmd = cmd.replace(/^```powershell\s*/i, '').replace(/^```\s*/, '').replace(/```$/, '').trim();
-
-                return cmd;
+                // The endpoint returns {command, explanation}
+                return data.command || data;
 
             } catch (e) {
                 log(`Brain Error: ${e.message}`, 'error');
-                log(`(Ensure tools/model-server-chat.html is open with Qwen-Coder loaded)`, 'info');
+                log(`(Ensure tools/model-server-chat.html is open with Ghost Engine loaded)`, 'info');
                 return null;
             } finally {
                 DOM.status.classList.remove('busy');

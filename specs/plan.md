@@ -33,7 +33,8 @@
 - [x] **Phase 3:** `sov.py` Native Client Implementation.
 - [x] **Phase 4:** Neural Shell Protocol (`/v1/shell/exec` endpoint).
 - [x] **Phase 4.5:** Ghost Auto-Ignition (Auto-start with ?headless=true flag).
-- [ ] **Phase 5:** Migration to C++ Native Runtime (Removing Chrome entirely).
+- [x] **Phase 5:** Native Shell Implementation (Anchor terminal with spawn endpoint).
+- [ ] **Phase 7:** Migration to C++ Native Runtime (Removing Chrome entirely).
 
 ## Phase 6: Federation
 - [ ] **Device Sync**: Sync IndexedDB across devices (Peer-to-Peer).

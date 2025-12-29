@@ -46,6 +46,14 @@ Fastest start times. Works on most laptops/integrated graphics.
 | `Qwen2.5-1.5B-Instruct-q4f16_1-MLC` | **Ultra-Lite.** 1.5B params. Blazing fast. | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2-1.5B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm` |
 | `SmolLM2-1.7B-Instruct-q4f16_1-MLC` | Efficient 1.7B model. | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/SmolLM2-1.7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm` |
 
+### 🧠 Code Specialist Models
+Models optimized for code generation and command translation.
+
+| Model ID | Details | WASM URL |
+| :--- | :--- | :--- |
+| `Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC` | **Qwen Coder 1.5B.** Specialized for code and command generation. | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2-1.5B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm` |
+| `Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC` | **Qwen Coder 7B.** Advanced code reasoning and command translation. | `https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm` |
+
 ### 🌟 Gemma Models (Google)
 Lightweight and efficient models from Google.
 

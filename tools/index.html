@@ -139,11 +139,32 @@
             <div class="desc">Direct shell access. Command the host via the Neural Shell Protocol.</div>
             <div class="status">Sovereign</div>
         </a>
+
+        <div class="card" onclick="spawnAnchorShell()">
+            <div class="icon">⚓</div>
+            <div class="title">Anchor Shell</div>
+            <div class="desc">Launch the native PowerShell client connected to the Ghost Engine.</div>
+            <div class="status">Offline</div>
+        </div>
     </div>
 
     <div style="margin-top: 50px; color: #555; font-size: 0.8rem;">
         Running on Localhost • WebGPU Enabled
     </div>
+
+    <script>
+    async function spawnAnchorShell() {
+        try {
+            const res = await fetch('http://localhost:8080/v1/system/spawn_shell', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer sovereign-secret' },
+                body: JSON.stringify({})
+            });
+            if (res.ok) console.log("Anchor Shell Spawned");
+            else alert("Failed to spawn. Is Bridge running?");
+        } catch (e) { alert("Error: " + e.message); }
+    }
+    </script>
 
 </body>
 

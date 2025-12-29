@@ -1,4 +1,4 @@
-import { SovereignLogger } from './sovereign.js';
+import { AnchorLogger } from './anchor.js';
 
 /**
  * THE AUDITOR (Quality Assurance)
@@ -7,7 +7,7 @@ import { SovereignLogger } from './sovereign.js';
  */
 export class MemoryAuditor {
     constructor() {
-        this.logger = new SovereignLogger('Auditor');
+        this.logger = new AnchorLogger('Auditor');
         
         // The "Law" - Derived from your NotebookLM Table & Specs
         this.schema = {

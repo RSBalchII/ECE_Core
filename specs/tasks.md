@@ -37,8 +37,8 @@
 - [ ] **Phase 4:** Migration to C++ Native Runtime (Removing Chrome entirely).
 - [ ] **Bridge Repair**: Debug and stabilize `extension-bridge` connectivity.
 - [x] **Neural Shell Protocol**: Implement `/v1/shell/exec` in `webgpu_bridge.py`.
-- [ ] **The "Coder" Model**: Add `Qwen2.5-Coder-1.5B` to Model Registry.
-- [ ] **Terminal UI**: Create `tools/neural-terminal.html` for natural language command execution.
+- [x] **The "Coder" Model**: Add `Qwen2.5-Coder-1.5B` to Model Registry.
+- [x] **Terminal UI**: Create `tools/neural-terminal.html` for natural language command execution.
 
 ### Phase 4.2: Agentic Expansion (Deferred)
 - [ ] **Agentic Tools**: Port Verifier/Distiller logic to `tools/modules/agents.js`.

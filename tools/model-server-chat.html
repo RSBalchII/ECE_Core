@@ -545,7 +545,7 @@
         }
 
         // --- IMPORTS ---
-        import { SovereignLogger, createStore, getWebGPUConfig, initCozo, GPUController } from './modules/sovereign.js';
+        import { AnchorLogger, createStore, getWebGPUConfig, initCozo, GPUController } from './modules/anchor.js';
         import { MemoryAuditor } from './modules/agents.js';
 
         import { CozoDb } from './cozo_lib_wasm.js';
@@ -558,7 +558,7 @@
         env.allowLocalModels = false;
 
         // --- ROOT KERNEL SETUP ---
-        const logger = new SovereignLogger('Root-Console');
+        const logger = new AnchorLogger('Root-Console');
         const auditor = new MemoryAuditor();
 
         const { state, subscribe } = createStore({

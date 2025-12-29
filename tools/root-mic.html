@@ -282,7 +282,7 @@
         import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
         // THE NEW KERNEL
-        import { SovereignLogger, createStore, getWebGPUConfig, GPUController } from './modules/sovereign.js';
+        import { AnchorLogger, createStore, getWebGPUConfig, GPUController } from './modules/anchor.js';
 
         // Load hot reload functionality in development
         if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
@@ -293,7 +293,7 @@
             });
         }
 
-        const logger = new SovereignLogger('Root-Mic');
+        const logger = new AnchorLogger('Root-Mic');
         
         // Reactive Store
         const { state, subscribe } = createStore({

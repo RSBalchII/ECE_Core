@@ -197,14 +197,14 @@
     <div class="log-area" id="logs"></div>
 
     <script type="module">
-        import { SovereignLogger, initCozo, createStore } from './modules/sovereign.js';
+        import { AnchorLogger, initCozo, createStore } from './modules/anchor.js';
         import { loadAllFromIndexedDb, closeDatabase, clearIndexedDbStore, flushPendingWrites } from './indexeddb.js';
         import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.16.0';
 
         env.allowLocalModels = false;
 
         // --- 0. KERNEL SETUP ---
-        const logger = new SovereignLogger('Root-Builder');
+        const logger = new AnchorLogger('Root-Builder');
 
         // Wrap logger to output to DOM as well
         const originalInfo = logger.info.bind(logger);
