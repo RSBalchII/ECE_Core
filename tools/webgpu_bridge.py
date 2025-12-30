@@ -5,25 +5,23 @@ import asyncio
 import uvicorn
 import json
 import uuid
-import time
-import random
-import secrets
-from collections import deque
-from fastapi import FastAPI, WebSocket, Request, HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
+from fastapi import FastAPI, WebSocket, Request
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict, Any
+from typing import Dict
 
-# --- CRITICAL FIX: Force UTF-8 Output on Windows ---
+# --- CONFIGURATION ---
+PORT = 8000  # The One Port
+HOST = "0.0.0.0"
+
+# Fix Windows Encoding
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding='utf-8')
 
-app = FastAPI(title="WebGPU Bridge")
+app = FastAPI(title="Anchor Core")
 
-# --- AUTH & CORS ---
-AUTH_TOKEN = os.getenv("BRIDGE_TOKEN", "sovereign-secret")
-
+# --- CORS (Open Internal Borders) ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -31,23 +29,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.middleware("http")
-async def verify_token(request: Request, call_next):
-    if request.method == "OPTIONS" or request.url.path in ["/mobile", "/favicon.ico", "/logs", "/health", "/audit/server-logs", "/file-mod-time"]:
-        return await call_next(request)
-    if request.url.path.startswith("/models") or request.url.path.startswith("/v1/models"):
-        return await call_next(request)
-    
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer ") or auth_header.split(" ")[1] != AUTH_TOKEN:
-        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
-    return await call_next(request)
-
 # --- STATE ---
-workers: Dict[str, WebSocket] = { "chat": None, "embed": None }
+workers: Dict[str, WebSocket] = {"chat": None}
 active_requests: Dict[str, asyncio.Queue] = {}
 
-# --- MODEL MANAGEMENT (No-Cache Serving) ---
+# --- STATIC ASSETS (No-Cache for Models) ---
 class NoCacheStaticFiles(StaticFiles):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -55,8 +41,9 @@ class NoCacheStaticFiles(StaticFiles):
         async def send_wrapper(message):
             if message['type'] == 'http.response.start':
                 headers = message.get('headers', [])
+                # Force browser to keep models in RAM, not Disk
                 headers.extend([
-                    (b"Cache-Control", b"no-store, no-cache, must-revalidate, proxy-revalidate"),
+                    (b"Cache-Control", b"no-store, no-cache, must-revalidate"),
                     (b"Pragma", b"no-cache"),
                     (b"Expires", b"0"),
                 ])
@@ -64,108 +51,94 @@ class NoCacheStaticFiles(StaticFiles):
             await send(message)
         await super().__call__(scope, receive, send_wrapper)
 
-app.mount("/models", NoCacheStaticFiles(directory="models"), name="models")
+# 1. Mount Models (Special No-Cache Handling)
+# Look for models directory in the parent directory (project root)
+models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
+if os.path.exists(models_dir):
+    app.mount("/models", NoCacheStaticFiles(directory=models_dir), name="models")
+else:
+    # If models directory doesn't exist, mount an empty directory or skip
+    # For now, let's mount the models directory from the tools directory as fallback
+    fallback_models_dir = os.path.join(os.path.dirname(__file__), "models")
+    if os.path.exists(fallback_models_dir):
+        app.mount("/models", NoCacheStaticFiles(directory=fallback_models_dir), name="models")
+    else:
+        # Create a temporary empty directory for models if none exists
+        os.makedirs(fallback_models_dir, exist_ok=True)
+        app.mount("/models", NoCacheStaticFiles(directory=fallback_models_dir), name="models")
 
-# --- ANCHOR PROTOCOL: Spawn Native Shell ---
-@app.post("/v1/system/spawn_shell")
-async def spawn_shell(request: Request):
-    """Launches anchor.py in a new visible PowerShell window."""
-    try:
-        print("🚀 Spawning Anchor Terminal...")
-        tools_dir = os.path.dirname(os.path.abspath(__file__))
-        anchor_script = os.path.join(tools_dir, "anchor.py")
-        
-        # Windows-specific spawn
-        if os.name == 'nt':
-            cmd = f'Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd \'{tools_dir}\'; python anchor.py" -WindowStyle Normal'
-            subprocess.Popen(["powershell", "-Command", cmd], shell=True)
-        else:
-            # Linux/Mac fallback (xterm)
-            subprocess.Popen(["xterm", "-e", f"python3 {anchor_script}"], shell=False)
-
-        return {"status": "spawned", "message": "Anchor Shell Launched"}
-    except Exception as e:
-        print(f"❌ Spawn Error: {e}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
-
-# --- NEURAL SHELL PROTOCOL ---
-@app.post("/v1/shell/exec")
-async def shell_exec(request: Request):
-    """
-    Handles NL->Command translation via the connected Ghost (Chat Worker).
-    Returns the suggested command to the client (Anchor) for local execution.
-    """
+# --- API ENDPOINTS (The Brain) ---
+@app.post("/v1/chat/completions")
+async def chat_completions(request: Request):
+    """Proxies chat requests to the Browser Engine (Ghost)"""
+    if not workers["chat"]:
+        return JSONResponse(status_code=503, content={"error": "Anchor Engine not connected. Open chat.html."})
+    
     try:
         body = await request.json()
-        prompt = body.get("prompt", "")
-        
-        if not workers["chat"]:
-             return JSONResponse(status_code=503, content={"error": "Ghost Engine not connected. Launch the Headless Browser."})
-
-        # Ask Ghost to translate
         req_id = str(uuid.uuid4())
         active_requests[req_id] = asyncio.Queue()
-        
-        system_prompt = "You are a Windows PowerShell expert. Output a JSON object with keys: 'command' (the exact powershell command) and 'explanation' (brief reasoning). Do not use markdown."
         
         await workers["chat"].send_json({
             "id": req_id,
             "type": "chat",
-            "data": {
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.1,
-                "stream": False
-            }
+            "data": body
         })
         
-        # Wait for Ghost response
-        raw_response = await asyncio.wait_for(active_requests[req_id].get(), timeout=30.0)
+        # Wait for response (Simple non-streaming for now, or stream handling could be added)
+        # For simplicity in this unified view, we assume non-streaming or handle the first chunk
+        response = await asyncio.wait_for(active_requests[req_id].get(), timeout=60.0)
         del active_requests[req_id]
         
-        # Parse Ghost response
-        content = raw_response.get("choices", [{}])[0].get("message", {}).get("content", "")
-        
-        # Clean markdown if present
-        content = content.replace("```json", "").replace("```", "").strip()
-        
-        try:
-            data = json.loads(content)
-            return data # {command, explanation}
-        except:
-            # Fallback if model didn't output JSON
-            return {"command": content, "explanation": "Raw model output"}
-
+        return response
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+@app.post("/v1/shell/exec")
+async def shell_exec(request: Request):
+    """Executes system commands requested by the Engine"""
+    try:
+        body = await request.json()
+        cmd = body.get("cmd") or body.get("command")
+        if not cmd:
+            return JSONResponse(status_code=400, content={"error": "No command provided"})
+            
+        print(f"⚓ EXEC: {cmd}")
+        # Execute in native shell
+        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        
+        return {
+            "stdout": proc.stdout,
+            "stderr": proc.stderr,
+            "code": proc.returncode
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
-# --- WEBSOCKET HANDLERS (Ghost Connection) ---
-@app.websocket("/ws/{worker_type}")
-async def websocket_endpoint(websocket: WebSocket, worker_type: str):
+# --- WEBSOCKETS (The Nervous System) ---
+@app.websocket("/ws/chat")
+async def ws_chat(websocket: WebSocket):
     await websocket.accept()
-    workers[worker_type] = websocket
-    print(f"✅ {worker_type.upper()} Ghost Connected")
+    workers["chat"] = websocket
+    print("✅ Anchor Engine Connected")
     try:
         while True:
             data = await websocket.receive_text()
             msg = json.loads(data)
-            # Route responses to waiting HTTP requests
             if "id" in msg and msg["id"] in active_requests:
                 await active_requests[msg["id"]].put(msg)
     except:
-        workers[worker_type] = None
-        print(f"❌ {worker_type.upper()} Ghost Disconnected")
-
+        workers["chat"] = None
+        print("❌ Anchor Engine Disconnected")
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "nominal", "engine": "connected" if workers["chat"] else "waiting"}
+
+# 2. Mount UI (The Face) - Must be last to catch all other routes
+# Serves the current directory (tools/) as the root website
+app.mount("/", StaticFiles(directory=".", html=True), name="ui")
 
 if __name__ == "__main__":
-    host = os.getenv("BRIDGE_HOST", "0.0.0.0")
-    port = int(os.getenv("BRIDGE_PORT", "8080"))
-    print(f"🔒 BRIDGE STARTED on {host}:{port}")
-    uvicorn.run(app, host=host, port=port, log_level="error")
+    print(f"⚓ ANCHOR CORE RUNNING on http://{HOST}:{PORT}")
+    uvicorn.run(app, host=HOST, port=PORT, log_level="warning")

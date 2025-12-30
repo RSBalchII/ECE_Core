@@ -57,7 +57,7 @@ The system includes a comprehensive hot reload mechanism for GPU management and 
 *   **Enhanced Monitoring**: Includes GPU manager with status checking capabilities
 
 ### Getting Started with Hot Reload
-1. Use the enhanced startup script: `start-sovereign-console-hotreload.bat`
+1. Use the unified startup script: `start-ghost-shell.bat`
 2. Monitor changes in real-time with the GPU manager: `python scripts/gpu_manager.py`
 3. Manual reload triggers available in browser console: `window.triggerGPUHotReload()`
 4. Enable/disable hot reload in browser: `window.setGPUHotReloadEnabled(true/false)`
@@ -65,7 +65,7 @@ The system includes a comprehensive hot reload mechanism for GPU management and 
 
 ### Files Monitored
 - `tools/webgpu_bridge.py` - Backend bridge logic
-- `tools/modules/sovereign.js` - Frontend GPU controller
+- `tools/modules/anchor.js` - Frontend GPU controller
 - `tools/model-server-chat.html` - Main console interface
 - `tools/root-mic.html` - Voice input interface
 - `tools/root-dreamer.html` - Background processing
@@ -75,6 +75,25 @@ The system includes a comprehensive hot reload mechanism for GPU management and 
 - **No Service Interruption**: Updates occur without restarting services
 - **Stale Lock Prevention**: Automatic cleanup during reloads
 - **Development Convenience**: Built-in triggers for manual reloads
+
+## 🏛️ Ghost & Shell Architecture
+
+The system now features the Ghost & Shell architecture for native OS integration:
+
+*   **Ghost Engine**: Headless browser running inference in background (`launch-ghost.ps1`)
+*   **Shell Interface**: Native terminal with natural language processing (`anchor.py`, `neural-terminal.html`)
+*   **Bridge Protocol**: Secure communication via WebGPU bridge on port 8080
+*   **Spawn Endpoint**: Launch native terminals from dashboard (`/v1/system/spawn_shell`)
+
+### Getting Started with Ghost & Shell
+1. Start the complete system: `start-ghost-shell.bat`
+2. Access the dashboard: `http://localhost:8000`
+3. Click "Anchor Shell" to spawn native terminal, or use `python tools/anchor.py`
+4. Use natural language commands (prefix with `?` in neural terminal)
+
+### Known Issues
+* **Headless GPU Access**: WebGPU may not initialize in some headless environments. Ensure GPU drivers are up to date and hardware acceleration is enabled in browser settings.
+* **Model Loading**: Large models may require significant VRAM and take time to load initially.
 
 ## 🔄 Model Loading Serialization
 

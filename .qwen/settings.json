@@ -2,5 +2,8 @@
   "ui": {
     "hideBanner": true
   },
-  "$version": 2
+  "$version": 2,
+  "general": {
+    "preferredEditor": "vscode"
+  }
 }

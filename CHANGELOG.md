@@ -1,8 +1,46 @@
 # Context-Engine Changelog
 
-## [Unreleased]
+## [2.0.0] - 2025-12-29 "Unified Anchor"
+
+### Architecture Shift
+- **Unified Anchor Core**: Consolidated Bridge, File Server, and UI into a single process (`webgpu_bridge.py`) running on **Port 8000**.
+- **Single Origin**: Eliminated CORS issues and port confusion. UI, API, and Models are served from the same origin.
+- **Protocol**:
+    - Brain: `http://localhost:8000/chat.html`
+    - Terminal: `http://localhost:8000/terminal.html`
+    - API: `http://localhost:8000/v1/...`
+
+### Removed / Archived
+- **CLI Bloat**: Deleted `anchor.py` and `sov.py` in favor of web-based `terminal.html` or direct API calls.
+- **Legacy Scripts**: Archived `start-bridge.bat`, `start-ghost-shell.bat`, `launch-ghost.ps1`, `hot_reload_gpu.py`, and others to `archive/v2_ghost_shell/`.
 
 ### Added
+- **start-anchor.bat**: Single-click launcher that starts the Core and the Ghost Engine (Minimized Browser).
+
+## [1.2.4] - 2025-12-29 "Ghost & Shell Architecture"
+
+### Added
+- **Ghost & Shell Architecture**: Implemented headless Ghost engine with native Anchor shell for OS integration
+- **Auto-Ignition Protocol**: Added auto-start sequence for headless browser with `?headless=true` parameter
+- **Anchor Terminal**: Created `tools/anchor.py` for native PowerShell interface with natural language processing
+- **Spawn Endpoint**: Added `/v1/system/spawn_shell` to launch native terminals from dashboard
+- **Neural Shell Protocol**: Enhanced `/v1/shell/exec` to process natural language to PowerShell commands
+- **UTF-8 Encoding Fix**: Added Windows encoding enforcement to prevent Unicode crashes in bridge
+- **Minimized Window Approach**: Updated `scripts/launch-ghost.ps1` to use `--start-minimized` for proper GPU access
+- **Unified Startup**: Consolidated to single `start-ghost-shell.bat` script launching complete architecture
+
+### Changed
+- **Renamed Kernel**: Migrated from `sovereign.js` to `anchor.js` with updated imports across all components
+- **Simplified Bridge**: Streamlined `webgpu_bridge.py` with essential functionality only
+- **Updated Neural Terminal**: Modified `tools/neural-terminal.html` to use new shell protocol
+- **Dashboard Integration**: Added Anchor Shell button to `tools/index.html`
+- **Startup Scripts**: Consolidated multiple startup scripts to single unified approach
+
+### Fixed
+- **Windows Encoding**: Resolved Unicode encoding crashes with UTF-8 enforcement
+- **Bridge Authorization**: Fixed authentication token consistency across components
+- **Headless GPU Access**: Resolved WebGPU initialization issues with minimized window approach
+- **Model Loading**: Fixed auto-load sequence for Ghost engine with proper model selection
 - **Cache Bypass Protocol**: Implemented "Stealth Mode" for browser AI engine by overriding Cache API and modifying static file headers to force browser to treat models as "data in RAM" rather than "persistent storage", bypassing strict security policies.
 - **NoCacheStaticFiles**: Custom StaticFiles class with `Cache-Control: no-store` headers to prevent browser cache API usage when serving models through the bridge.
 - **Neural Shell Protocol**: Activated "The Hands" (Layer 3) in `webgpu_bridge.py` (`/v1/shell/exec`), allowing the browser to execute system commands on the host.

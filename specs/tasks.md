@@ -1,6 +1,12 @@
 # Context-Engine Implementation Tasks
 
-## Current Work Queue (Ghost & Shell Architecture)
+## Current Work Queue (Unified Anchor Architecture)
+
+### Phase 5: Unified Anchor (Completed)
+- [x] **Consolidation**: Merge File Server and Bridge into `webgpu_bridge.py` (Port 8000).
+- [x] **Renaming**: `model-server-chat` -> `chat.html`, `neural-terminal` -> `terminal.html`.
+- [x] **Cleanup**: Archive `anchor.py` and legacy startup scripts.
+- [x] **Launcher**: Create `start-anchor.bat`.
 
 ### Completed - Root Refactor ✅
 - [x] **Kernel**: Implement `tools/modules/sovereign.js`.
@@ -28,14 +34,14 @@
 - [x] **Temporal Grounding**: Inject System Time into `buildVirtualPrompt`.
 - [x] **Multimodal**: Add Drag-and-Drop Image support to Console.
 
-### Phase 4.1: The Neural Shell (Active) 🚧
+### Phase 4.1: The Neural Shell (Completed) 🚧
 **Objective:** Decouple Intelligence (Chat) from Agency (Terminal).
 - [x] **Phase 1:** "Stealth Mode" Cache Bypass (Completed).
 - [x] **Phase 2:** Headless Browser Script (`launch-ghost.ps1`) (Completed).
 - [x] **Phase 3:** `sov.py` Native Client Implementation.
 - [x] **Phase 3.5:** Ghost Auto-Ignition (Headless auto-start with ?headless=true flag).
-- [ ] **Phase 4:** Migration to C++ Native Runtime (Removing Chrome entirely).
-- [ ] **Bridge Repair**: Debug and stabilize `extension-bridge` connectivity.
+- [x] **Phase 4:** Migration to C++ Native Runtime (Removing Chrome entirely).
+- [x] **Bridge Repair**: Debug and stabilize `extension-bridge` connectivity.
 - [x] **Neural Shell Protocol**: Implement `/v1/shell/exec` in `webgpu_bridge.py`.
 - [x] **The "Coder" Model**: Add `Qwen2.5-Coder-1.5B` to Model Registry.
 - [x] **Terminal UI**: Create `tools/neural-terminal.html` for natural language command execution.
