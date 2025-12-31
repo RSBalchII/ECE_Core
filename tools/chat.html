@@ -1057,7 +1057,10 @@
             }
         }
 
-        async function loadModel() {
+        // ARCHIVED MODEL LOADING FUNCTION - KEPT FOR FUTURE REFERENCE
+        // This function was attempting to use local model files with bridge downloads
+        // which was causing hangs and issues. See new online-only implementation below.
+        async function loadModel_archived() {
             const select = document.getElementById('model-select');
             const customInput = document.getElementById('custom-model-input');
             const modelInput = select.value === 'custom' ? customInput.value : select.value;
@@ -1337,6 +1340,161 @@
                             // If it's not a cache error, re-throw
                             throw cacheError;
                         }
+                    }
+                }); // Uses the default 5-minute timeout for model loading
+
+                ui.log("🎉 Root Console Online", "success");
+                await initializeContextManager();
+                document.getElementById('input').disabled = false;
+                document.getElementById('send-btn').disabled = false;
+                document.getElementById('input').focus();
+
+            } catch (e) {
+                const errorMsg = e.message || String(e);
+                ui.log(`Load Failed: ${errorMsg}`, "error");
+
+                // Specific handling for cache-related errors
+                if (errorMsg && (errorMsg.includes("Cache") || errorMsg.includes("cache"))) {
+                    ui.log(`🚨 CACHE ERROR: The browser is blocking cache access.`, "error");
+                    ui.log(`💡 SOLUTION: Try using an Incognito/Private window, or check browser security settings.`, "warn");
+                }
+
+                // Provide suggestion for common model name issues
+                if (errorMsg && errorMsg.includes("Network response was not ok")) {
+                    ui.log(`💡 Hint: Model may not exist or be temporarily unavailable. Try another model.`, "warn");
+                }
+                if (errorMsg && errorMsg.includes("QuotaExceededError")) {
+                    ui.log(`💡 STORAGE FULL: Click '🗑️ Clear Cache' to reset your browser storage.`, "error");
+                    // Auto-suggest cleanup
+                    if (confirm("Storage Quota Exceeded. Would you like to run the Deep Cleanup tool now?")) {
+                        clearModelCache();
+                    }
+                }
+                document.getElementById('load-model-btn').disabled = false;
+            }
+        }
+
+        // NEW MODEL LOADING FUNCTION - ONLINE ONLY
+        // Based on the working anchor-mic.html implementation
+        async function loadModel() {
+            const select = document.getElementById('model-select');
+            const customInput = document.getElementById('custom-model-input');
+            const modelInput = select.value === 'custom' ? customInput.value : select.value;
+            if (!modelInput) return alert("Please select a model.");
+
+            selectedModelId = modelInput;
+            document.getElementById('load-model-btn').disabled = true;
+
+            try {
+                // 0. THE BLOCKER (Model Load Lock) - Serialize model loading
+                ui.log("⏳ Queueing for Model Load (Sequential)...", "info");
+
+                await GPUController.withModelLoadLock("Root-Console-Init", async () => {
+                    ui.log(`Initializing Engine (${selectedModelId})...`, "info");
+
+                    // --- KERNEL: Hardware Config ---
+                    const hwProfile = document.getElementById('hw-profile').value;
+                    const gpuConfig = await getWebGPUConfig(hwProfile);
+
+                    if (gpuConfig.isConstrained) {
+                        ui.log(`⚠️ Clamping WebGPU buffer to ${Math.round(gpuConfig.maxBufferSize / 1024 / 1024)}MB`, "warn");
+                    } else {
+                        ui.log(`✅ GPU Configured: ${Math.round(gpuConfig.maxBufferSize / 1024 / 1024)}MB Buffer`, "success");
+                    }
+
+                    // --- Config Generation ---
+                    // (Simplified Logic for cleaner file)
+                    const libBase = "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/"; // Fixed URL
+                    let modelLib = null;
+                    const lowerId = selectedModelId.toLowerCase();
+                    let qTag = "q4f16_1"; // Default
+
+                    // Mapper
+                    // SOTA / New
+                    if (lowerId.includes('deepseek-r1') && lowerId.includes('7b')) modelLib = libBase + `Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('deepseek-r1') && lowerId.includes('8b') && lowerId.includes('llama')) modelLib = libBase + `Llama-3_1-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('qwen3-4b')) modelLib = libBase + `Qwen3-4B-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('qwen3-8b')) modelLib = libBase + `Qwen3-8B-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('qwen2.5-7b')) modelLib = libBase + `Qwen2-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('phi-3.5-mini')) modelLib = libBase + `Phi-3.5-mini-instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm`;
+
+                    // Vision Models
+                    else if (lowerId.includes('phi-3.5-vision')) modelLib = libBase + `Phi-3.5-vision-instruct-q4f16_1-ctx4k_cs2k-webgpu.wasm`;
+
+                    // Large Models (70B)
+                    else if (lowerId.includes('llama-3-70b')) modelLib = libBase + `Llama-3-70B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('llama-3.1-70b')) modelLib = libBase + `Llama-3.1-70B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+
+                    // Vision Models
+                    else if (lowerId.includes('llama-3.2-11b-vision')) modelLib = libBase + `Llama-3.2-11B-Vision-Instruct-q4f16_1-ctx4k_cs2k-webgpu.wasm`;
+                    else if (lowerId.includes('llama-3.2-90b-vision')) modelLib = libBase + `Llama-3.2-90B-Vision-Instruct-q3f16_1-ctx4k_cs2k-webgpu.wasm`;
+
+                    // Other Popular Models
+                    else if (lowerId.includes('llama-3.1-8b')) modelLib = libBase + `Llama-3_1-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('gemma-2-9b')) modelLib = libBase + `gemma-2-9b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('gemma-3-2b')) modelLib = libBase + `gemma-3-2b-it-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('qwen2-7b')) modelLib = libBase + `Qwen2-7B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('mistral-7b')) modelLib = libBase + `Mistral-7B-Instruct-v0.3-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('hermes-2-pro')) modelLib = libBase + `Llama-3-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('hermes-3')) modelLib = libBase + `Llama-3_1-8B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+
+                    // Small / Efficient
+                    else if (lowerId.includes('qwen3-0.6b')) modelLib = libBase + `Qwen3-0.6B-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('llama-3.2-1b')) modelLib = libBase + `Llama-3.2-1B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('qwen2.5-1.5b')) modelLib = libBase + `Qwen2-1.5B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('smollm2-1.7b')) modelLib = libBase + `SmolLM2-1.7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('smollm2-360m')) modelLib = libBase + `SmolLM2-360M-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm`;
+                    else if (lowerId.includes('tinyllama-1.1b')) modelLib = libBase + `TinyLlama-1.1B-Chat-v1.0-q4f16_1-ctx2k_cs1k-webgpu.wasm`;
+
+                    // Fallbacks
+                    else if (lowerId.includes('qwen2.5-1.5b')) modelLib = libBase + `Qwen2-1.5B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`;
+
+                    if (!modelLib) modelLib = libBase + `Qwen2.5-3B-Instruct-${qTag}-ctx4k_cs1k-webgpu.wasm`; // Safe Fallback 3B
+
+                    // 1. Clear previous engine if exists
+                    if (engine) {
+                        ui.log("Unloading previous engine...", "info");
+                        await engine.unload();
+                        engine = null;
+                        ui.log("Engine Unloaded", "success");
+                    }
+
+                    // Create appConfig with online model URL format (like anchor-mic.html)
+                    const appConfig = {
+                        model_list: [{
+                            model: "https://huggingface.co/" + selectedModelId + "/resolve/main/",
+                            model_id: selectedModelId,
+                            model_lib: modelLib,
+                            vram_required_MB: 2000,
+                            low_resource_required: true,
+                            buffer_size_required_bytes: gpuConfig.maxBufferSize,
+                            overrides: {
+                                context_window_size: gpuConfig.isConstrained ? 2048 : 4096
+                            }
+                        }],
+                        useIndexedDBCache: false, // Disable caching to prevent issues
+                    };
+
+                    // Initialize Engine with the new online-only approach
+                    ui.log(`Initializing Engine (${selectedModelId})...`, 'info');
+
+                    try {
+                        engine = await CreateWebWorkerMLCEngine(
+                            new Worker('./modules/llm-worker.js', { type: 'module' }),
+                            selectedModelId,
+                            {
+                                initProgressCallback: (report) => {
+                                    ui.updateProgress(report.progress, report.text);
+                                    if (report.progress === 1) ui.log("✅ Engine Ready", "success");
+                                },
+                                appConfig: appConfig,
+                                logLevel: "INFO",
+                                useIndexedDBCache: false, // Force disable cache
+                            }
+                        );
+                    } catch (error) {
+                        ui.log(`Engine initialization failed: ${error.message}`, "error");
+                        throw error;
                     }
                 }); // Uses the default 5-minute timeout for model loading
 
