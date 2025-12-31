@@ -7,7 +7,7 @@ import uvicorn
 import json
 import uuid
 from fastapi import FastAPI, WebSocket, Request
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict
@@ -98,21 +98,78 @@ class NoCacheStaticFiles(StaticFiles):
             await send(message)
         await super().__call__(scope, receive, send_wrapper)
 
-# 1. Mount Models (Special No-Cache Handling)
+# 1. Smart Model Redirect (Special No-Cache Handling)
 # Look for models directory in the parent directory (project root)
 models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
-if os.path.exists(models_dir):
-    app.mount("/models", NoCacheStaticFiles(directory=models_dir), name="models")
-else:
-    # If models directory doesn't exist, mount an empty directory or skip
-    # For now, let's mount the models directory from the tools directory as fallback
-    fallback_models_dir = os.path.join(os.path.dirname(__file__), "models")
-    if os.path.exists(fallback_models_dir):
-        app.mount("/models", NoCacheStaticFiles(directory=fallback_models_dir), name="models")
+if not os.path.exists(models_dir):
+    # If models directory doesn't exist, create it
+    os.makedirs(models_dir, exist_ok=True)
+
+# Create a custom route for models that checks locally first, then redirects to HuggingFace
+@app.get("/models/{file_path:path}")
+async def models_redirect(file_path: str):
+    """Smart redirect: Check for local file first, redirect to HuggingFace if missing"""
+    import os
+    from fastapi.responses import FileResponse, RedirectResponse
+
+    # Construct path to local model file
+    local_path = os.path.join(models_dir, file_path)
+
+    # Check if the file exists locally
+    if os.path.exists(local_path) and os.path.isfile(local_path):
+        # Serve the local file with no-cache headers (Standard 002)
+        return NoCacheFileResponse(local_path)
     else:
-        # Create a temporary empty directory for models if none exists
-        os.makedirs(fallback_models_dir, exist_ok=True)
-        app.mount("/models", NoCacheStaticFiles(directory=fallback_models_dir), name="models")
+        # File doesn't exist locally, redirect to HuggingFace
+        print(f"⚠️ File not found locally, redirecting to HuggingFace: {file_path}")
+        hf_url = f"https://huggingface.co/{file_path}"
+        return RedirectResponse(url=hf_url, status_code=302)
+
+# Also need to handle HEAD requests for the same path
+@app.head("/models/{file_path:path}")
+async def models_redirect_head(file_path: str):
+    """Handle HEAD requests for model files with same redirect logic"""
+    import os
+    from starlette.responses import Response
+
+    # Construct path to local model file
+    local_path = os.path.join(models_dir, file_path)
+
+    # Check if the file exists locally
+    if os.path.exists(local_path) and os.path.isfile(local_path):
+        # Return response with file size for HEAD request
+        file_size = os.path.getsize(local_path)
+        return Response(
+            status_code=200,
+            headers={
+                "content-length": str(file_size),
+                "content-type": "application/octet-stream",
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
+    else:
+        # File doesn't exist locally, redirect to HuggingFace
+        print(f"⚠️ HEAD request: File not found locally, redirecting to HuggingFace: {file_path}")
+        hf_url = f"https://huggingface.co/{file_path}"
+        return RedirectResponse(url=hf_url, status_code=302)
+
+# Custom FileResponse class to apply NoCache headers (Standard 002)
+class NoCacheFileResponse(FileResponse):
+    async def __call__(self, scope, receive, send):
+        # Apply the same cache control headers as NoCacheStaticFiles
+        async def send_wrapper(message):
+            if message['type'] == 'http.response.start':
+                headers = message.get('headers', [])
+                headers.extend([
+                    (b"Cache-Control", b"no-store, no-cache, must-revalidate"),
+                    (b"Pragma", b"no-cache"),
+                    (b"Expires", b"0"),
+                ])
+                message['headers'] = headers
+            await send(message)
+        await super().__call__(scope, receive, send_wrapper)
 
 # --- API ENDPOINTS (The Brain) ---
 @app.post("/v1/chat/completions")

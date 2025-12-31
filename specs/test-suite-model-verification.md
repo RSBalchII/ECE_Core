@@ -92,7 +92,7 @@ Based on test results and Standard 008 (Online-Only Approach):
 3. Use consistent configuration patterns across all UI components
 4. Test both pathways during development to ensure compatibility
 
-### Actual Solution: Download Required Models
+### Actual Solution: Download Required Models (Enhanced Bridge Redirect)
 Based on the verification results, all models are available on Hugging Face but need to be downloaded to the local models directory:
 
 ```bash
@@ -106,7 +106,13 @@ curl -X POST http://localhost:8000/v1/models/pull \
   }'
 ```
 
-After downloading models, they will be available for both local loading and bridge redirects.
+**Enhanced Bridge Redirect Implementation**: The system now implements Standard 009's bridge redirect logic:
+- **Check Local First**: When requesting `/models/{file_path}`, the bridge first checks for the file locally
+- **Serve Local**: If found locally, serves with proper no-cache headers
+- **Redirect Online**: If missing locally, redirects to HuggingFace with HTTP 302
+- **Fallback Resilience**: This ensures models work even if not downloaded locally
+
+After downloading models, they will be available for both local loading and bridge redirects. However, the enhanced bridge now provides automatic fallback to online sources when local files are missing.
 
 ## Verification Workflow
 
