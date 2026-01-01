@@ -10,3 +10,7 @@
 [2025-12-31 23:13:42] [INFO] GPU lock released by test-fix
 [2025-12-31 23:17:24] [INFO] GPU lock acquired by test-final (token: gpu_token_test-final...)
 [2025-12-31 23:17:24] [INFO] GPU lock released by test-final
+[2026-01-01 00:49:58] [INFO] GPU lock acquired by Root-Console-Chat (token: gpu_token_Root-Conso...)
+[2026-01-01 00:50:22] [INFO] GPU lock released by Root-Console-Chat
+[2026-01-01 00:50:30] [INFO] GPU lock acquired by Root-Console-Chat (token: gpu_token_Root-Conso...)
+[2026-01-01 00:50:38] [INFO] GPU lock released by Root-Console-Chat
