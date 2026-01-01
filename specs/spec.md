@@ -1,9 +1,9 @@
-# Anchor Core: The Visual Monolith (v3.2)
+# Anchor Core: The Visual Monolith (v3.5)
 
-**Status:** Browser-Controlled Architecture | **Philosophy:** Visual Command Center, Resource-Queued.
+**Status:** Text-Only + Watchdog + Session Recorder + Context Persistence Architecture | **Philosophy:** Visual Command Center, Resource-Queued.
 
 ## 1. The Anchor Architecture
-The **Anchor Core** (`webgpu_bridge.py`) is the unified server. The **Ghost Engine** is a headless browser window acting as the GPU Worker.
+The **Anchor Core** (`webgpu_bridge.py`) is the unified server. The **Ghost Engine** is a headless browser window acting as the GPU Worker. **Watchdog** provides passive text ingestion.
 
 ```mermaid
 graph TD
@@ -14,18 +14,29 @@ graph TD
             UI[chat.html]
             Context[context.html]
             Sidecar[sidecar.html]
-            Vision[vision_engine.py]
+            Watchdog[watchdog.py]
             Dreamer[memory-builder.html]
         end
 
         subgraph API_Endpoints
             ChatAPI["/v1/chat/completions"]
             SearchAPI["/v1/memory/search"]
-            VisionAPI["/v1/vision/ingest"]
+            IngestAPI["/v1/memory/ingest"]
             GPUAPI["/v1/gpu/lock, /v1/gpu/unlock, /v1/gpu/status"]
             LogAPI["/logs/recent, /logs/collect"]
         end
     end
+
+    subgraph Passive_Ingestion
+        Watchdog_Service[Watchdog Service]
+        Context_Folder["context/ folder"]
+        File_Monitoring[File System Events]
+    end
+
+    Watchdog_Service --> IngestAPI
+    Context_Folder --> Watchdog_Service
+    File_Monitoring --> Watchdog_Service
+```
 
     subgraph Ghost_Engine [Headless Browser]
         Worker[WebLLM (WASM)]

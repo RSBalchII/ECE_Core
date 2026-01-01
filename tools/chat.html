@@ -454,6 +454,11 @@
                         <label for="autosave-toggle" style="font-size: 11px; cursor: pointer;">💾 Auto-Save
                             Memories</label>
                     </div>
+                    <div
+                        style="background: #222; padding: 4px; margin-bottom: 4px; border: 1px solid #444; border-radius: 4px; display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="think-mode-toggle" onchange="toggleThinkMode(this.checked)">
+                        <label for="think-mode-toggle" style="font-size: 11px; cursor: pointer;">🤔 Enable Think Mode</label>
+                    </div>
                     <button id="clear-cache-btn"
                         style="width: 100%; padding: 6px; background: #a43131; border:none; margin-top:5px; font-size: 11px;">⚠️
                         Delete Model Cache</button>
@@ -463,18 +468,12 @@
                     <button id="force-unlock-btn"
                         style="width: 100%; padding: 6px; background: #da3633; border:none; margin-top: 5px; font-size: 11px; color: white;">🔓
                         Force Unlock GPU</button>
+                    <button id="view-logs-btn"
+                        style="width: 100%; padding: 6px; background: #0066cc; border:none; margin-top: 5px; font-size: 11px; color: white;"
+                        onclick="window.open('/log-viewer.html', '_blank')">📋 View Logs</button>
                 </div>
             </details>
 
-            <!-- COLLAPSIBLE: Logs -->
-            <details open style="flex: 1; display: flex; flex-direction: column;">
-                <summary>System Logs</summary>
-                <div class="panel-content" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-                    <button id="copy-logs-btn" style="width: 100%; padding: 4px; background: #333; font-size: 10px;">📋
-                        Copy Logs</button>
-                    <div id="status-log"></div>
-                </div>
-            </details>
         </div>
 
         <div id="resizer"></div>
@@ -499,6 +498,21 @@
                                 title="Upload Image">📎</button>
                             <textarea id="input" disabled placeholder="Type your message..."></textarea>
                             <button id="send-btn" disabled>Send</button>
+                        </div>
+                        <div id="input-controls"
+                            style="display: flex; gap: 5px; margin-top: 5px; justify-content: flex-end;">
+                            <button id="regenerate-btn" type="button" title="Regenerate response"
+                                style="padding: 4px 8px; font-size: 11px; background: #2d2d2d; color: #888; border: 1px solid #444; border-radius: 4px; cursor: pointer;"
+                                onclick="regenerateResponse()">🔄 Regen</button>
+                            <button id="clear-chat-btn" type="button" title="Clear chat"
+                                style="padding: 4px 8px; font-size: 11px; background: #2d2d2d; color: #888; border: 1px solid #444; border-radius: 4px; cursor: pointer;"
+                                onclick="clearChat()">🗑️ Clear</button>
+                            <button id="export-chat-btn" type="button" title="Export chat"
+                                style="padding: 4px 8px; font-size: 11px; background: #2d2d2d; color: #888; border: 1px solid #444; border-radius: 4px; cursor: pointer;"
+                                onclick="exportChat()">📤 Export</button>
+                            <button id="import-chat-btn" type="button" title="Import chat"
+                                style="padding: 4px 8px; font-size: 11px; background: #2d2d2d; color: #888; border: 1px solid #444; border-radius: 4px; cursor: pointer;"
+                                onclick="importChat()">📥 Import</button>
                         </div>
                     </div>
                 </div>
@@ -569,7 +583,8 @@
             status: "Initializing...",
             progress: 0,
             activeModel: null,
-            autoSave: true
+            autoSave: true,
+            messages: []
         });
 
         // --- UTILS: The Archivist ---
@@ -697,22 +712,23 @@
         let selectedModelId = null;
 
         // Custom App Config for Qwen-Coder and other new models not in the library default
+        // CRITICAL: Use local bridge URLs for model resolution to avoid 404 errors
         const appConfig = {
             model_list: [
                 {
-                    "model": "https://huggingface.co/mlc-ai/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC",
+                    "model": window.location.origin + "/models/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC/resolve/main/",
                     "model_id": "mlc-ai/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC",
                     "model_lib": "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2.5-1.5B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm",
                     "overrides": { "context_window_size": 4096 }
                 },
                 {
-                    "model": "https://huggingface.co/mlc-ai/Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC",
+                    "model": window.location.origin + "/models/Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC/resolve/main/",
                     "model_id": "mlc-ai/Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC",
                     "model_lib": "https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/main/web-llm-models/v0_2_80/Qwen2.5-7B-Instruct-q4f16_1-ctx4k_cs1k-webgpu.wasm",
                     "overrides": { "context_window_size": 4096 }
                 }
             ],
-            useIndexedDBCache: true
+            useIndexedDBCache: false  // Disable to prevent tracking prevention issues
         };
 
         // ... (Keep existing VisionController)
@@ -964,6 +980,9 @@
                 ui.append("user", text);
             }
 
+            // Add message to state
+            state.messages.push({ role: "user", content: text, timestamp: Date.now() });
+
             if (state.autoSave) await saveTurn("user", text + (imageBase64 ? " [Image Attached]" : ""));
 
             try {
@@ -996,7 +1015,14 @@
                         if (finalAnswer && finalAnswer.includes("System Crash")) return ui.log("🛑 Execution halted (GPU Crash).", "error");
 
                         ui.log("🧪 Synthesizing...", "warn");
-                        const sysPrompt = `You are a helpful assistant with access to retrieved context. Use it to answer the user's question.\n\nCONTEXT:\n${context || "(No relevant context)"}`;
+
+                        // Build system prompt based on think mode
+                        let sysPrompt = `You are a helpful assistant with access to retrieved context. Use it to answer the user's question.\n\nCONTEXT:\n${context || "(No relevant context)"}`
+
+                        if (thinkModeEnabled) {
+                            sysPrompt = `You are a helpful assistant. Think step by step before providing your final answer. Use the retrieved context to inform your response.\n\nCONTEXT:\n${context || "(No relevant context)"}\n\nWhen responding, first think through the problem in a structured way, then provide your final answer.`
+                        }
+
                         messages = [{ role: "system", content: sysPrompt }, { role: "user", content: text }];
                     }
 
@@ -1034,6 +1060,9 @@
                         finalContent = fullAnswer.replace(/<think>[\s\S]*?<\/think>/, "").trim();
                     }
 
+                    // Add assistant response to state
+                    state.messages.push({ role: "assistant", content: finalContent, timestamp: Date.now() });
+
                     if (state.autoSave) {
                         // 1. Save the Thought (Path)
                         if (thoughtContent) {
@@ -1050,6 +1079,9 @@
                 const msg = e.message || String(e) || "Unknown Error";
                 ui.log(`Error: ${msg}`, "error");
                 ui.append("assistant", `**Error:** ${msg}`);
+
+                // Add error message to state
+                state.messages.push({ role: "assistant", content: `**Error:** ${msg}`, timestamp: Date.now() });
             } finally {
                 input.disabled = false;
                 document.getElementById('send-btn').disabled = false;
@@ -1148,6 +1180,7 @@
 
 
                     // Custom App Config for Qwen-Coder and other new models not in the library default
+                    // CRITICAL: All models now use local bridge URLs for reliable file serving
                     const appConfig = {
                         // Disable all caching to prevent "Tracking Prevention" issues
                         useIndexedDBCache: false,
@@ -1460,9 +1493,10 @@
                     }
 
                     // Create appConfig using bridge redirect endpoint for model resolution
+                    // This allows the bridge to handle local/remote model resolution properly
                     const appConfig = {
                         model_list: [{
-                            model: window.location.origin + "/models/" + selectedModelId + "/resolve/main/",
+                            model: window.location.origin + "/models/" + selectedModelId.split('/').pop() + "/resolve/main/",
                             model_id: selectedModelId,
                             model_lib: modelLib,
                             vram_required_MB: 2000,
@@ -1472,7 +1506,7 @@
                                 context_window_size: gpuConfig.isConstrained ? 2048 : 4096
                             }
                         }],
-                        useIndexedDBCache: false, // Disable caching to prevent issues
+                        useIndexedDBCache: false, // Disable caching to prevent tracking prevention issues
                     };
 
                     // Initialize Engine with the new online-only approach
@@ -1997,6 +2031,167 @@
                 };
             } else if (bridgeWs) { bridgeWs.close(); bridgeWs = null; document.getElementById('bridge-status').innerText = "Disconnected"; }
         };
+
+        // Think Mode Toggle
+        let thinkModeEnabled = false;
+
+        function toggleThinkMode(enabled) {
+            thinkModeEnabled = enabled;
+            const status = enabled ? "enabled" : "disabled";
+            ui.log(`🤔 Think Mode ${status}`, "info");
+        }
+
+        // Add system prompt functionality
+        let systemPrompt = "You are a helpful AI assistant. Think step by step when solving complex problems.";
+
+        function setSystemPrompt(prompt) {
+            systemPrompt = prompt;
+            ui.log("📝 System prompt updated", "success");
+        }
+
+        // Add message editing functionality
+        function editLastMessage() {
+            if (state.messages.length === 0) {
+                ui.log("❌ No messages to edit", "error");
+                return;
+            }
+
+            const lastMessage = state.messages[state.messages.length - 1];
+            const newContent = prompt("Edit message:", lastMessage.content);
+            if (newContent !== null) {
+                lastMessage.content = newContent;
+                ui.log("✏️ Message edited", "success");
+                // Update UI display
+                updateChatDisplay();
+            }
+        }
+
+        // Add message deletion functionality
+        function deleteLastMessage() {
+            if (state.messages.length === 0) {
+                ui.log("❌ No messages to delete", "error");
+                return;
+            }
+
+            if (confirm("Delete last message?")) {
+                state.messages.pop();
+                ui.log("🗑️ Last message deleted", "success");
+                // Update UI display
+                updateChatDisplay();
+            }
+        }
+
+        // Update chat display function
+        function updateChatDisplay() {
+            // Clear the chat box
+            const chatBox = document.getElementById('chat-box');
+            chatBox.innerHTML = '';
+
+            // Rebuild chat from state
+            state.messages.forEach(msg => {
+                const msgHandle = ui.append(msg.role, msg.content);
+            });
+        }
+
+        // Add export chat functionality
+        function exportChat() {
+            const chatData = {
+                timestamp: new Date().toISOString(),
+                messages: state.messages,
+                model: selectedModelId
+            };
+
+            const dataStr = JSON.stringify(chatData, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+
+            const exportLink = document.createElement('a');
+            exportLink.setAttribute('href', dataUri);
+            exportLink.setAttribute('download', `chat-export-${Date.now()}.json`);
+            document.body.appendChild(exportLink);
+            exportLink.click();
+            document.body.removeChild(exportLink);
+
+            ui.log("📤 Chat exported", "success");
+        }
+
+        // Add import chat functionality
+        function importChat() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+
+            input.onchange = e => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+
+                reader.onload = function(e) {
+                    try {
+                        const chatData = JSON.parse(e.target.result);
+                        if (chatData.messages && Array.isArray(chatData.messages)) {
+                            state.messages = chatData.messages;
+                            ui.log(`📥 Chat imported (${chatData.messages.length} messages)`, "success");
+                            updateChatDisplay();
+                        } else {
+                            ui.log("❌ Invalid chat file format", "error");
+                        }
+                    } catch (error) {
+                        ui.log(`❌ Error importing chat: ${error.message}`, "error");
+                    }
+                };
+
+                reader.readAsText(file);
+            };
+
+            input.click();
+        }
+
+        // Add regenerate response functionality
+        async function regenerateResponse() {
+            if (state.messages.length === 0) {
+                ui.log("❌ No messages to regenerate", "error");
+                return;
+            }
+
+            // Find the last user message and the corresponding assistant message
+            let lastUserMsgIndex = -1;
+            for (let i = state.messages.length - 1; i >= 0; i--) {
+                if (state.messages[i].role === "user") {
+                    lastUserMsgIndex = i;
+                    break;
+                }
+            }
+
+            if (lastUserMsgIndex === -1) {
+                ui.log("❌ No user message found to regenerate", "error");
+                return;
+            }
+
+            // Remove all messages after the last user message
+            const lastUserMsg = state.messages[lastUserMsgIndex].content;
+            state.messages = state.messages.slice(0, lastUserMsgIndex + 1);
+
+            // Update UI to remove the assistant response
+            const chatBox = document.getElementById('chat-box');
+            chatBox.innerHTML = '';
+            state.messages.forEach(msg => {
+                ui.append(msg.role, msg.content);
+            });
+
+            // Send the last user message again to get a new response
+            const input = document.getElementById('input');
+            input.value = lastUserMsg;
+            await handleSend();
+        }
+
+        // Add clear chat functionality
+        function clearChat() {
+            if (confirm("Clear all chat history?")) {
+                state.messages = [];
+                const chatBox = document.getElementById('chat-box');
+                chatBox.innerHTML = '';
+                ui.log("🗑️ Chat cleared", "success");
+            }
+        }
 
         window.addEventListener('load', init);
     </script>

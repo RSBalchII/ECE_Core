@@ -28,6 +28,31 @@
 - [x] **Fallback Mechanism**: Implement regex fallback if FTS index is unavailable.
 - [x] **Stemming Support**: Enable English stemming for better word variation matching.
 
+### Phase 6: Text-Only + Watchdog Architecture (Completed)
+- [x] **Vision Removal**: Remove brittle Vision/Ollama dependencies to increase survival rate.
+- [x] **Watchdog Service**: Create `tools/watchdog.py` for passive text file monitoring.
+- [x] **File Ingestion**: Implement `/v1/memory/ingest` endpoint in bridge for text ingestion.
+- [x] **Debounce & Hash Check**: Add debounce and content hash checking to prevent duplicate ingestion.
+- [x] **Auto-Resurrection**: Enhance `ResurrectionManager` to kill existing browser processes before launching new ones.
+- [x] **Streaming CLI**: Update `anchor.py` to use streaming for better UX.
+- [x] **Documentation Update**: Update architecture specs and standards to reflect new approach.
+
+### Phase 7: Context Expansion & Persistence (Completed)
+- [x] **Code File Support**: Expand watchdog to monitor code extensions (.py, .js, .html, etc.)
+- [x] **Browser Profile Cleanup**: Add unique temp profiles and cleanup for browser processes
+- [x] **Chat Session Persistence**: Auto-save conversations to context/sessions/ directory
+- [x] **Ingestion Loop Closure**: Ensure chat sessions become ingested context automatically
+- [x] **Memory Leak Prevention**: Implement profile cleanup to prevent disk space issues
+- [x] **Documentation Update**: Create new standards 019-021 for new features
+
+### Phase 8: Session Recorder & Text-File Source of Truth (Completed)
+- [x] **Daily Session Files**: Create `chat_YYYY-MM-DD.md` files for each day's conversations
+- [x] **Text-File Source of Truth**: Implement "Database is Cache" philosophy
+- [x] **Cross-Machine Sync**: Enable file sync via Dropbox/Git for multi-device access
+- [x] **Infinite Loop**: Create feedback loop: Chat -> File -> Ingestion -> Memory -> Next Chat
+- [x] **Timestamped Entries**: Format messages with timestamps for better tracking
+- [x] **Session Tracking**: Add session file path display in CLI startup
+
 ### Completed - Root Refactor ✅
 - [x] **Kernel**: Implement `tools/modules/sovereign.js`.
 - [x] **Mic**: Refactor `root-mic.html` to use Kernel.

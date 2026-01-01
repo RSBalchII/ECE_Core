@@ -1,34 +1,116 @@
 # Context-Engine Changelog
 
-## [2.2.11] - 2025-12-31 "GPU Resource Queuing System"
+## [2.3.0] - 2026-01-01 "Stability & Passive Text Ingestion"
 
 ### Added
-- **GPU Management Endpoints**: Added comprehensive GPU resource management with queuing:
-  - `POST /v1/gpu/lock` - Acquire GPU lock with automatic queuing
-  - `POST /v1/gpu/unlock` - Release GPU lock and process next in queue
-  - `GET /v1/gpu/status` - Check GPU lock status and queue depth
-  - `POST /v1/gpu/reset` - Reset GPU state
-  - `POST /v1/gpu/force-release-all` - Force release all GPU locks
-- **Queuing System**: Implemented automatic queuing for GPU resource requests to prevent conflicts
-- **Resource Management**: Added proper GPU state tracking with owner identification
-- **Lock Token System**: Implemented token-based GPU lock system for secure access
-
-### Changed
-- **GPU Access**: All GPU operations now go through queuing system to prevent resource conflicts
-- **Error Handling**: Improved GPU resource error handling with proper queue management
-- **API Endpoints**: Enhanced with GPU resource management capabilities
-
-## [2.2.11] - 2025-12-31 "GPU Queue Management Fix"
+- **Auto-Resurrection System**: Ghost Engine (headless browser) automatically restarts on WebSocket disconnect
+  - `ResurrectionManager` class handles browser lifecycle
+  - Retry logic: 3 attempts with 2-second delays
+  - Comprehensive logging of resurrection events
+  - Works on Windows (Edge/Chrome) and Linux/Mac (Chrome)
+- **Passive Context Ingestion**: New `watchdog.py` service for continuous context growth
+  - Monitors `context/` folder for `.txt`, `.md`, `.markdown` files
+  - Batch processing with configurable interval (default 5s)
+  - Real-time mode (watchdog library) and polling mode (fallback)
+  - `/v1/memory/ingest` endpoint for receiving ingested files
+- **Model Server Improvements**: Enhanced `/models/{file_path:path}` endpoint
+  - Proper streaming for large binary files
+  - Correct MIME type handling (`.wasm`, `.safetensors`, `.json`, etc.)
+  - Path traversal protection
+  - Range request support with proper headers
+  - 1-week cache TTL for immutable model files
 
 ### Fixed
-- **Queue State Management**: Fixed issue where GPU queue length was not properly updated after lock acquisition
-- **Resource Handoff**: Corrected GPU resource handoff logic to properly clear queue when resources are available
-- **Status Reporting**: Fixed GPU status endpoint to accurately report queue state
-- **Immediate Acquisition**: Fixed logic so immediate lock acquisitions don't remain in queue
+- **Model Loading**: All `chat.html` appConfig instances now use local bridge URLs
+  - Ensures reliable local model loading
+  - Fallback to HuggingFace only when files not available locally
+  - Prevents 404 errors from hardcoded external URLs
+- **Connection Stability**: WebSocket handler properly triggers auto-resurrection
+  - Cleans up pending requests before restart
+  - Prevents orphaned request queues
+- **File Size Validation**: Watchdog service enforces max 1MB file size (configurable)
+- **Security**: Added path validation to prevent directory traversal attacks
 
 ### Changed
-- **GPU Queuing**: Improved GPU resource queuing with accurate state management
-- **Endpoint Responses**: Enhanced endpoint responses with correct queue status reporting
+- **Architecture**: Pivot from Vision/Ollama to Text-Only + Watchdog model
+  - Removed heavy Vision processing pipeline
+  - Simplified to pure text ingestion for stability
+  - Focus on reliable model serving and auto-recovery
+- **Model Configuration**: Unified model URL scheme across all UI components
+  - All models now served via local bridge redirect
+  - Consistent URL format: `window.location.origin + "/models/{model_id}/resolve/main/"`
+- **Logging**: Enhanced logging system with per-component log files
+  - `logs/webgpu_bridge.log`
+  - `logs/resurrection.log`
+  - `logs/memory_api.log`
+  - `logs/model_server.log`
+
+### Removed
+- Vision processing pipeline (Ollama integration)
+
+## [2.3.1] - 2026-01-01 "Process Management & Streaming UX"
+
+### Added
+- **Enhanced Process Management**: Improved `ResurrectionManager` with process cleanup
+  - `kill_existing_browsers()` method to terminate existing browser processes before launching new ones
+  - Explicit `--remote-debugging-port=9222` flag to prevent port conflicts
+  - Increased initialization wait time from 3 to 5 seconds
+- **File Ingestion Improvements**: Enhanced `watchdog.py` with debounce and hash checking
+  - Debounce functionality to wait for silence before processing file changes
+  - MD5 hash checking to prevent duplicate ingestion of unchanged files
+  - Proper cleanup of debounce timers
+- **Streaming CLI Client**: Updated `anchor.py` to use streaming for better UX
+  - Changed from `stream=False` to `stream=True` for real-time character display
+  - Added line-by-line processing of streaming responses
+  - Maintained conversation history accumulation while providing immediate feedback
+- **New Standards**: Added Standards 016-018 for process management, file ingestion, and streaming UX
+
+### Fixed
+- **Zombie Process Risk**: Fixed issue where browser resurrection would fail due to port conflicts
+- **Autosave Flood**: Fixed excessive database writes from editor autosave features
+- **CLI Latency**: Fixed hanging terminal during long model responses
+
+### Changed
+- **Process Management**: Enhanced browser process management with proper cleanup
+- **File Ingestion**: Improved file monitoring with debounce and hash checking
+- **CLI UX**: Enhanced terminal experience with streaming responses
+
+## [2.3.2] - 2026-01-01 "Ingestion Expansion & Memory Persistence"
+
+### Added
+- **Code File Support**: Extended `watchdog.py` to monitor code extensions
+  - Added `.py`, `.js`, `.html`, `.css`, `.json`, `.yaml`, `.yml`, `.sh`, `.bat`, `.ts`, `.tsx`, `.jsx`, `.xml`, `.sql`, `.rs`, `.go`, `.cpp`, `.c`, `.h`, `.hpp` to monitored extensions
+- **Browser Profile Cleanup**: Enhanced `ResurrectionManager` with temporary profile management
+  - Added `--user-data-dir` with unique timestamp to prevent profile conflicts
+  - Added `_cleanup_old_profiles()` method to remove old temporary directories
+  - Added performance optimization flags for headless browser
+- **Chat Session Persistence**: Updated `anchor.py` to auto-save conversations
+  - Created `context/sessions/` directory for chat logs
+  - Added `save_message_to_session()` to persist each message to markdown files
+  - Ensures conversation history survives CLI crashes and becomes ingested context
+
+### Fixed
+- **Ingestion Blind Spot**: Fixed system being blind to code files in user's context
+- **Memory Leak Risk**: Fixed potential disk space issues from temporary browser profiles
+- **Lost Context Risk**: Fixed loss of conversation history on CLI crashes
+
+## [2.3.3] - 2026-01-01 "Session Recorder & Text-File Source of Truth"
+
+### Added
+- **Daily Session Files**: Updated `anchor.py` to create daily markdown files (`chat_YYYY-MM-DD.md`)
+  - Uses `ensure_session_file()` to create dated session files
+  - Formats messages with timestamps: `### ROLE [HH:MM:SS]`
+  - Stores in `../context/sessions/` directory relative to tools/
+- **Text-File Source of Truth**: Implemented "Database is Cache" philosophy
+  - All chat history saved to text files for cross-machine sync
+  - Files automatically ingested by watchdog service
+  - Creates infinite feedback loop: Chat -> File -> Ingestion -> Memory -> Next Chat
+- **Session Tracking**: Added session file path display in CLI startup
+
+### Changed
+- **File Structure**: Changed from timestamped individual files to daily consolidated files
+- **Relative Pathing**: Uses relative path (`../context/sessions/`) for proper directory structure
+- **Markdown Format**: Improved formatting with headers and timestamps for better readability
 
 ## [2.2.12] - 2025-12-31 "UI Endpoint Fixes & Log File Verification"
 
@@ -48,6 +130,7 @@
 ### Fixed
 - **Async Warnings**: Fixed "coroutine was never awaited" warnings by properly implementing startup event handlers
 - **Event Loop Integration**: Corrected async function calls to work properly with FastAPI's event loop
+
 - **Resource Management**: Fixed resource cleanup in WebSocket handlers to prevent leaks
 - **Startup Sequence**: Ensured logging system initializes properly with the application lifecycle
 

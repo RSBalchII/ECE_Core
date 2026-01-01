@@ -1,7 +1,7 @@
-# Anchor Core Roadmap (V2.2)
+# Anchor Core Roadmap (V2.3)
 
-**Status:** Unified Architecture Deployed
-**Focus:** Model Loading Reliability & Endpoint Completeness.
+**Status:** Text-Only + Watchdog Deployed
+**Focus:** Stability & Passive Text Ingestion.
 
 ## Phase 1: Foundation (Completed)
 - [x] Pivot to WebLLM/WebGPU stack.
@@ -27,17 +27,27 @@
 - [x] **Temporal Awareness**: Ground the model in real-time.
 - [x] **Mobile Optimization**: Polish mobile UX for `model-server-chat.html`.
 
-## Phase 4: Ghost & Shell Architecture (Completed)
-- [x] **Phase 1:** "Stealth Mode" Cache Bypass (Completed).
-- [x] **Phase 2:** Headless Browser Script (`launch-ghost.ps1`) (Completed).
-- [x] **Phase 3:** `sov.py` Native Client Implementation.
-- [x] **Phase 4:** Neural Shell Protocol (`/v1/shell/exec` endpoint).
-- [x] **Phase 4.5:** Ghost Auto-Ignition (Auto-start with ?headless=true flag).
-- [x] **Phase 5:** Native Shell Implementation (Anchor terminal with spawn endpoint).
-- [x] **Phase 6:** Unified Anchor Core (Single-process architecture on port 8000).
-- [ ] **Phase 7:** Migration to C++ Native Runtime (Removing Chrome entirely).
+## Phase 4: Text-Only Architecture (Completed)
+- [x] **Vision Removal**: Remove brittle Vision/Ollama dependencies.
+- [x] **Watchdog Implementation**: Create passive text ingestion service.
+- [x] **Debounce & Hash Check**: Prevent duplicate file ingestion.
+- [x] **Auto-Resurrection**: Enhance browser process management.
+- [x] **Streaming CLI**: Improve terminal UX with streaming responses.
 
-## Phase 5: Model Loading Reliability (Completed)
+## Phase 5: Context Expansion & Persistence (Completed)
+- [x] **Code File Support**: Expand to monitor programming language extensions.
+- [x] **Browser Profile Management**: Implement temporary profile cleanup.
+- [x] **Chat Session Persistence**: Auto-save conversations to context directory.
+- [x] **Ingestion Loop Closure**: Ensure chat sessions become ingested context.
+
+## Phase 6: Session Recorder & Text-File Source of Truth (Completed)
+- [x] **Daily Session Files**: Create `chat_YYYY-MM-DD.md` files for each day's conversations.
+- [x] **Text-File Source of Truth**: Implement "Database is Cache" philosophy.
+- [x] **Cross-Machine Sync**: Enable file sync via Dropbox/Git for multi-device access.
+- [x] **Infinite Loop**: Create feedback loop: Chat -> File -> Ingestion -> Memory -> Next Chat.
+- [x] **Timestamped Entries**: Format messages with timestamps for better tracking.
+
+## Phase 7: Model Loading Reliability (Completed)
 - [x] **URL Construction Fix**: Implemented `/models/{model}/resolve/main/{file}` redirect for MLC-LLM compatibility.
 - [x] **File Renaming**: Standardized component names (`anchor-mic.html`, `memory-builder.html`, `db_builder.html`).
 - [x] **Server Stability**: Fixed hanging issues with problematic path parameter syntax.

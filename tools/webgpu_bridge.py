@@ -97,6 +97,165 @@ app.add_middleware(
 workers: Dict[str, WebSocket] = {"chat": None}
 active_requests: Dict[str, asyncio.Queue] = {}
 
+# --- AUTO-RESURRECTION STATE ---
+class ResurrectionManager:
+    """Manages automatic restart of Ghost Engine (headless browser)."""
+    def __init__(self):
+        self.browser_process = None
+        self.resurrection_task = None
+        self.max_retries = 3
+        self.retry_delay = 2  # seconds
+        self.launch_command = self._get_launch_command()
+
+    def _get_launch_command(self) -> list:
+        """Get the appropriate launch command for the headless browser."""
+        import tempfile
+        temp_dir = tempfile.gettempdir()
+
+        if sys.platform == "win32":
+            # Windows: Use Edge or Chrome with headless flag
+            return [
+                "msedge",
+                "--headless=new",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--disable-background-networking",
+                "--disable-extensions",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding",
+                "--disable-ipc-flooding-protection",
+                "--disable-background-media-suspend",
+                "--remote-debugging-port=9222",  # Explicitly set port to avoid conflicts
+                f"--user-data-dir={temp_dir}/anchor_ghost_{int(time.time())}",  # Unique temp profile
+                f"http://localhost:{PORT}/index.html"
+            ]
+        else:
+            # Linux/Mac: Use Chrome
+            return [
+                "google-chrome",
+                "--headless",
+                "--no-first-run",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding",
+                "--disable-ipc-flooding-protection",
+                "--disable-background-media-suspend",
+                "--remote-debugging-port=9222",  # Explicitly set port to avoid conflicts
+                f"--user-data-dir={temp_dir}/anchor_ghost_{int(time.time())}",  # Unique temp profile
+                f"http://localhost:{PORT}/index.html"
+            ]
+
+    async def kill_existing_browsers(self):
+        """Kill any existing browser processes to prevent port conflicts."""
+        import psutil
+        try:
+            for proc in psutil.process_iter(['pid', 'name']):
+                try:
+                    if proc.info['name'].lower() in ['msedge.exe', 'chrome.exe', 'chromium-browser']:
+                        await add_log_entry("Resurrection", "info", f"Killing existing browser process: {proc.info['name']} (PID: {proc.info['pid']})")
+                        proc.kill()
+                        proc.wait(timeout=5)
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+                    continue
+        except Exception as e:
+            await add_log_entry("Resurrection", "warning", f"Error killing existing browsers: {str(e)}")
+
+        # Clean up old temporary browser profiles
+        await self._cleanup_old_profiles()
+
+    async def _cleanup_old_profiles(self):
+        """Clean up old temporary browser profiles to prevent disk space issues."""
+        import tempfile
+        import shutil
+        import glob
+        from datetime import datetime, timedelta
+
+        try:
+            temp_dir = tempfile.gettempdir()
+            # Find all anchor_ghost temporary directories
+            pattern = os.path.join(temp_dir, "anchor_ghost_*")
+            temp_dirs = glob.glob(pattern)
+
+            # Remove directories older than 1 day
+            cutoff_time = datetime.now() - timedelta(days=1)
+            for temp_dir_path in temp_dirs:
+                try:
+                    # Extract timestamp from directory name
+                    dir_name = os.path.basename(temp_dir_path)
+                    if '_' in dir_name:
+                        timestamp_str = dir_name.split('_')[-1]
+                        try:
+                            dir_time = datetime.fromtimestamp(int(timestamp_str))
+                            if dir_time < cutoff_time:
+                                shutil.rmtree(temp_dir_path, ignore_errors=True)
+                                await add_log_entry("Resurrection", "info", f"Cleaned up old browser profile: {temp_dir_path}")
+                        except ValueError:
+                            # If timestamp parsing fails, just remove old directories
+                            shutil.rmtree(temp_dir_path, ignore_errors=True)
+                            await add_log_entry("Resurrection", "info", f"Cleaned up browser profile: {temp_dir_path}")
+                except Exception as e:
+                    await add_log_entry("Resurrection", "warning", f"Error cleaning up profile {temp_dir_path}: {str(e)}")
+        except Exception as e:
+            await add_log_entry("Resurrection", "warning", f"Error during profile cleanup: {str(e)}")
+
+    async def launch_browser(self):
+        """Launch the headless browser process."""
+        import subprocess
+        # Kill any existing browser processes first to prevent port conflicts
+        await self.kill_existing_browsers()
+
+        try:
+            self.browser_process = subprocess.Popen(
+                self.launch_command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            )
+            await add_log_entry("Resurrection", "success", f"Browser launched with PID {self.browser_process.pid}")
+            return True
+        except Exception as e:
+            await add_log_entry("Resurrection", "error", f"Failed to launch browser: {str(e)}")
+            return False
+
+    async def terminate_browser(self):
+        """Terminate the browser process."""
+        if self.browser_process:
+            try:
+                self.browser_process.terminate()
+                self.browser_process.wait(timeout=5)
+                await add_log_entry("Resurrection", "info", "Browser process terminated")
+            except Exception as e:
+                await add_log_entry("Resurrection", "warning", f"Error terminating browser: {str(e)}")
+                if self.browser_process.poll() is None:
+                    self.browser_process.kill()
+            self.browser_process = None
+    
+    async def resurrect_with_retry(self):
+        """Attempt to resurrect the browser with retry logic."""
+        global workers
+        for attempt in range(self.max_retries):
+            try:
+                # Kill any existing browser processes before attempting resurrection
+                await self.kill_existing_browsers()
+                await asyncio.sleep(self.retry_delay)
+
+                if await self.launch_browser():
+                    # Wait for browser to connect
+                    await asyncio.sleep(5)  # Increased wait time to allow for full initialization
+                    if workers["chat"] is not None:
+                        await add_log_entry("Resurrection", "success", f"Ghost Engine resurrected on attempt {attempt + 1}")
+                        return True
+                else:
+                    await asyncio.sleep(self.retry_delay)
+            except Exception as e:
+                await add_log_entry("Resurrection", "error", f"Resurrection attempt {attempt + 1} failed: {str(e)}")
+
+        await add_log_entry("Resurrection", "error", f"Failed to resurrect browser after {self.max_retries} attempts")
+        return False
+
+resurrection_manager = ResurrectionManager()
+
 # --- GPU RESOURCE MANAGEMENT ---
 import asyncio
 from collections import deque
@@ -110,32 +269,172 @@ gpu_state = {
 }
 
 # --- STATIC & MODELS ---
-class NoCacheFileResponse(FileResponse):
+import mimetypes
+from pathlib import Path
+from urllib.parse import unquote
+
+class BinaryFileResponse(FileResponse):
+    """Stream large binary files with proper headers and no caching."""
+    def __init__(self, path, **kwargs):
+        super().__init__(path, **kwargs)
+        self.media_type = self._get_mime_type(path)
+
+    @staticmethod
+    def _get_mime_type(path: str) -> str:
+        """Determine MIME type for model files."""
+        _, ext = os.path.splitext(path.lower())
+        mime_map = {
+            '.wasm': 'application/wasm',
+            '.json': 'application/json',
+            '.bin': 'application/octet-stream',
+            '.safetensors': 'application/octet-stream',
+            '.txt': 'text/plain',
+            '.md': 'text/markdown'
+        }
+        return mime_map.get(ext, 'application/octet-stream')
+
     async def __call__(self, scope, receive, send):
+        # Add no-cache headers for model files
         async def send_wrapper(message):
             if message['type'] == 'http.response.start':
-                headers = message.get('headers', [])
-                headers.extend([(b"Cache-Control", b"no-store, no-cache, must-revalidate")])
+                headers = list(message.get('headers', []))
+                # Remove any existing cache-control headers
+                headers = [(k, v) for k, v in headers if k.lower() != b'cache-control']
+                # Add proper headers for large files
+                headers.extend([
+                    (b"Cache-Control", b"public, max-age=604800"),  # Cache 1 week for immutable files
+                    (b"Accept-Ranges", b"bytes"),
+                    (b"X-Content-Type-Options", b"nosniff")
+                ])
                 message['headers'] = headers
             await send(message)
         await super().__call__(scope, receive, send_wrapper)
 
-models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
+models_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(__file__)), "models"))
 
 @app.get("/models/{file_path:path}")
-async def models_redirect(file_path: str):
-    local_path = os.path.join(models_dir, file_path)
-    if os.path.exists(local_path) and os.path.isfile(local_path):
-        return NoCacheFileResponse(local_path)
-    return RedirectResponse(url=f"https://huggingface.co/{file_path}", status_code=302)
+async def serve_model_file(file_path: str):
+    """Serve model files from local directory with fallback to HuggingFace.
+    
+    Expected structure:
+      models/Qwen2.5-7B-Instruct-q4f16_1-MLC/resolve/main/model.safetensors
+    """
+    try:
+        # Decode URL-encoded path
+        file_path = unquote(file_path)
+        
+        # Prevent directory traversal
+        requested_path = os.path.abspath(os.path.join(models_dir, file_path))
+        if not requested_path.startswith(models_dir):
+            await add_log_entry("Model-Server", "warning", f"Directory traversal attempt blocked: {file_path}")
+            return JSONResponse(status_code=403, content={"error": "Access denied"})
+        
+        # Serve from local directory if file exists
+        if os.path.exists(requested_path) and os.path.isfile(requested_path):
+            file_size = os.path.getsize(requested_path)
+            await add_log_entry("Model-Server", "info", f"Serving local model file: {file_path} ({file_size} bytes)")
+            return BinaryFileResponse(requested_path, media_type=BinaryFileResponse._get_mime_type(requested_path))
+        
+        # Fall back to HuggingFace for missing files
+        hf_url = f"https://huggingface.co/{file_path.replace('/resolve/main/', '/resolve/main/')}"
+        await add_log_entry("Model-Server", "info", f"File not found locally, redirecting to: {hf_url}")
+        return RedirectResponse(url=hf_url, status_code=307)
+        
+    except Exception as e:
+        await add_log_entry("Model-Server", "error", f"Error serving model file {file_path}: {str(e)}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.head("/models/{file_path:path}")
-async def models_redirect_head(file_path: str):
+async def check_model_file(file_path: str):
+    """Check model file availability and return headers."""
     from starlette.responses import Response
-    local_path = os.path.join(models_dir, file_path)
-    if os.path.exists(local_path) and os.path.isfile(local_path):
-        return Response(headers={"content-length": str(os.path.getsize(local_path))})
-    return RedirectResponse(url=f"https://huggingface.co/{file_path}", status_code=302)
+    try:
+        file_path = unquote(file_path)
+        requested_path = os.path.abspath(os.path.join(models_dir, file_path))
+
+        # Prevent directory traversal
+        if not requested_path.startswith(models_dir):
+            return Response(status_code=403)
+
+        # Return headers for local file
+        if os.path.exists(requested_path) and os.path.isfile(requested_path):
+            file_size = os.path.getsize(requested_path)
+            return Response(
+                status_code=200,
+                headers={
+                    "content-length": str(file_size),
+                    "content-type": BinaryFileResponse._get_mime_type(requested_path),
+                    "accept-ranges": "bytes"
+                }
+            )
+
+        # Check upstream
+        hf_url = f"https://huggingface.co/{file_path}"
+        return Response(status_code=307, headers={"location": hf_url})
+
+    except Exception as e:
+        return Response(status_code=500)
+
+# --- MODEL RESOLVE REDIRECT (for MLC-LLM compatibility) ---
+# Handle the /resolve/main/ pattern that MLC-LLM expects for local models
+@app.get("/models/{model_name}/resolve/main/{file_path:path}")
+async def model_resolve_redirect_get(model_name: str, file_path: str):
+    """Handle GET requests for MLC-LLM /resolve/main/ requests"""
+    from fastapi.responses import FileResponse, RedirectResponse
+
+    # Construct path to actual model file
+    actual_path = os.path.join(models_dir, model_name, file_path)
+
+    # Check if the file exists in the actual model directory
+    if os.path.exists(actual_path) and os.path.isfile(actual_path):
+        await add_log_entry("Model-Resolve", "info", f"Serving local model file: {model_name}/{file_path}")
+        return BinaryFileResponse(actual_path)
+    else:
+        # If file doesn't exist locally, redirect to HuggingFace (Standard 009 Bridge Redirect Logic)
+        await add_log_entry("Model-Resolve", "info", f"File not found locally, redirecting to HuggingFace: {model_name}/resolve/main/{file_path}")
+        hf_url = f"https://huggingface.co/mlc-ai/{model_name}/resolve/main/{file_path}"
+        return RedirectResponse(url=hf_url, status_code=307)
+
+@app.head("/models/{model_name}/resolve/main/{file_path:path}")
+async def model_resolve_redirect_head(model_name: str, file_path: str):
+    """Handle HEAD requests for MLC-LLM /resolve/main/ requests"""
+    from starlette.responses import Response
+
+    # Construct path to actual model file
+    actual_path = os.path.join(models_dir, model_name, file_path)
+
+    # Check if the file exists in the actual model directory
+    if os.path.exists(actual_path) and os.path.isfile(actual_path):
+        # Get file size for Content-Length header
+        file_size = os.path.getsize(actual_path)
+        await add_log_entry("Model-Resolve", "info", f"Model file exists locally: {model_name}/{file_path} ({file_size} bytes)")
+        return Response(
+            status_code=200,
+            headers={
+                "content-length": str(file_size),
+                "content-type": BinaryFileResponse._get_mime_type(actual_path),
+                "accept-ranges": "bytes"
+            }
+        )
+    else:
+        # If file doesn't exist locally, redirect to HuggingFace (Standard 009 Bridge Redirect Logic)
+        await add_log_entry("Model-Resolve", "info", f"HEAD request: File not found locally, redirecting to HuggingFace: {model_name}/resolve/main/{file_path}")
+        hf_url = f"https://huggingface.co/mlc-ai/{model_name}/resolve/main/{file_path}"
+        return Response(status_code=307, headers={"location": hf_url})
+
+@app.options("/models/{model_name}/resolve/main/{file_path:path}")
+async def model_resolve_redirect_options(model_name: str, file_path: str):
+    """Handle OPTIONS requests for MLC-LLM /resolve/main/ requests"""
+    # For OPTIONS requests (CORS preflight), return appropriate headers
+    return Response(
+        status_code=200,
+        headers={
+            "access-control-allow-origin": "*",
+            "access-control-allow-methods": "GET, HEAD, OPTIONS",
+            "access-control-allow-headers": "*",
+            "access-control-max-age": "86400"
+        }
+    )
 
 # --- GPU MANAGEMENT ENDPOINTS ---
 @app.post("/v1/gpu/lock")
@@ -360,6 +659,55 @@ async def memory_search(request: Request):
         if req_id in active_requests: del active_requests[req_id]
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+@app.post("/v1/memory/ingest")
+async def memory_ingest(request: Request):
+    """Ingest context files from the watchdog service.
+    
+    Accepts files from the context/ folder and forwards them to the Ghost Engine
+    for processing and memory storage.
+    """
+    if not workers["chat"]:
+        await add_log_entry("Memory-API", "error", "Memory ingest requested but Ghost Engine is disconnected")
+        return JSONResponse(status_code=503, content={"error": "Ghost Engine Disconnected"})
+
+    try:
+        body = await request.json()
+        source = body.get("source", "unknown")
+        content = body.get("content", "")
+        timestamp = body.get("timestamp", datetime.datetime.now().isoformat())
+        file_type = body.get("file_type", ".txt")
+        
+        req_id = str(uuid.uuid4())
+        active_requests[req_id] = asyncio.Queue()
+
+        await add_log_entry("Memory-API", "info", f"Forwarding memory ingest request from '{source}' (ID: {req_id}) to Ghost Engine")
+        
+        # Send to Ghost Engine for processing
+        await workers["chat"].send_json({
+            "type": "memory_ingest",
+            "id": req_id,
+            "source": source,
+            "content": content,
+            "timestamp": timestamp,
+            "file_type": file_type
+        })
+
+        # Wait for acknowledgment (with shorter timeout)
+        result = await asyncio.wait_for(active_requests[req_id].get(), timeout=10.0)
+        del active_requests[req_id]
+
+        await add_log_entry("Memory-API", "info", f"Memory ingest completed successfully for '{source}'")
+        return {"status": "success", "source": source, "result": result}
+    
+    except asyncio.TimeoutError:
+        await add_log_entry("Memory-API", "error", f"Memory ingest timed out for source '{body.get('source', '')}'")
+        if req_id in active_requests: del active_requests[req_id]
+        return JSONResponse(status_code=504, content={"error": "Ingest request timed out"})
+    except Exception as e:
+        await add_log_entry("Memory-API", "error", f"Memory ingest failed with error: {str(e)}")
+        if req_id in active_requests: del active_requests[req_id]
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 @app.get("/context", response_class=HTMLResponse)
 async def get_context():
     import os
@@ -437,6 +785,7 @@ async def ws_chat(websocket: WebSocket):
         error_msg = f"Ghost Engine Disconnected: {str(e)}"
         await add_log_entry("WebGPU-Bridge", "error", error_msg)
         print(error_msg)
+        
         # Attempt to clear any pending requests
         for req_id in list(active_requests.keys()):
             try:
@@ -444,12 +793,18 @@ async def ws_chat(websocket: WebSocket):
                 await active_requests[req_id].put({"error": "Ghost Engine disconnected", "done": True})
             except:
                 pass
+        
+        # Trigger auto-resurrection of the Ghost Engine
+        await add_log_entry("Resurrection", "info", "Triggering auto-resurrection of Ghost Engine...")
+        asyncio.create_task(resurrection_manager.resurrect_with_retry())
 
 app.mount("/", StaticFiles(directory=".", html=True), name="ui")
 
 async def startup_event():
-    """Initialize logging when the app starts"""
+    """Initialize logging and launch the Ghost Engine when the app starts"""
     await add_log_entry("System", "info", f"Anchor Core started on port {PORT}")
+    await add_log_entry("Resurrection", "info", "Launching Ghost Engine (headless browser)...")
+    asyncio.create_task(resurrection_manager.launch_browser())
 
 # Register the startup event
 app.on_event("startup")(startup_event)
