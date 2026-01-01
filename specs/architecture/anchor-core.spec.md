@@ -3,33 +3,40 @@
 **Status:** Active | **Component:** `tools/webgpu_bridge.py`
 
 ## Overview
-The Anchor Core unifies the Bridge, UI, and API into a single process running on port 8000, eliminating CORS issues and port conflicts.
+The Anchor Core unifies the Bridge, UI, and API into a single process running on port 8000, eliminating CORS issues and port conflicts. The system now uses an online-only model loading approach for reliable operation, with local model resolution as a fallback.
 
 ## Architecture Diagram
 
 ```mermaid
 graph TD
     User["👤 User"] --> Dashboard["🏠 Dashboard (index.html)"]
-    
+
     subgraph "ANCHOR CORE (Single Process)"
         Bridge["🔗 WebGPU Bridge (8000)"]
         API["⚡ API Endpoints"]
         UI["🌐 UI Server"]
         WS["📡 WebSocket Layer"]
+        ModelRedirect["🔄 Model Redirect"]
     end
-    
+
     Dashboard --> Bridge
     Bridge --> API
     Bridge --> UI
     Bridge --> WS
-    
+    Bridge --> ModelRedirect
+
     subgraph "SHELL PROTOCOL"
         API --> ShellExec["쉘 /v1/shell/exec"]
         API --> Spawn["🚀 /v1/system/spawn_shell"]
     end
-    
+
     ShellExec --> Host["🖥️ Host System"]
     Spawn --> PowerShell["🪟 PowerShell Window"]
+
+    subgraph "MODEL LOADING"
+        ModelRedirect --> Local["💾 Local Models (if available)"]
+        ModelRedirect --> Online["🌐 Online Models (fallback)"]
+    end
 ```
 
 ## Components
@@ -46,6 +53,11 @@ graph TD
 - **Context UI**: Read-only interface for quick context retrieval and copy-paste.
 - **Memory Search**: Query the Ghost Engine's Graph (Vector + BM25) for relevant context.
 - **Memory Builder**: Background processor using Qwen 1.5B in WebGPU for memory processing.
+
+### 4. Model Loading System
+- **Online-First**: Uses direct HuggingFace URLs for reliable loading (Standard 007)
+- **Local Fallback**: Redirects to local models when available, online when not
+- **Bridge Redirect**: `/models/{model}/resolve/main/{file}` endpoint handles resolution
 
 ## Endpoints
 

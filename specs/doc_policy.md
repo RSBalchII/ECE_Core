@@ -48,6 +48,8 @@
 3. **Editing:** Do not modify `specs/doc_policy.md` or `specs/spec.md` structure unless explicitly instructed.
 4. **Archival:** Move stale docs to `archive/` immediately.
 5. **Enforcement:** If a solution violates a Standard, reject it immediately.
+6. **Standards Evolution:** New standards should follow the "Triangle of Pain" format and be numbered sequentially (001, 002, etc.).
+7. **Cross-Reference:** When creating new standards, reference related existing standards to maintain consistency.
 
 ---
 *Verified by Architecture Council. Edited by Humans Only.*

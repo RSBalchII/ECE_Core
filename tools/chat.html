@@ -1459,10 +1459,10 @@
                         ui.log("Engine Unloaded", "success");
                     }
 
-                    // Create appConfig with online model URL format (like anchor-mic.html)
+                    // Create appConfig using bridge redirect endpoint for model resolution
                     const appConfig = {
                         model_list: [{
-                            model: "https://huggingface.co/" + selectedModelId + "/resolve/main/",
+                            model: window.location.origin + "/models/" + selectedModelId + "/resolve/main/",
                             model_id: selectedModelId,
                             model_lib: modelLib,
                             vram_required_MB: 2000,
@@ -1863,6 +1863,135 @@
                         } catch (err) {
                             bridgeWs.send(JSON.stringify({ id: msg.id, error: err.message }));
                             ui.log(`❌ Search Failed: ${err.message}`, "error");
+                        }
+                    }
+
+                    // 3. MEMORY INGESTION REQUEST (From Daemon Eyes) - adds content to memory graph
+                    else if (msg.type === 'memory_ingest') {
+                        const content = msg.data.content;
+                        const source = msg.data.source || 'daemon';
+                        const timestamp = msg.data.timestamp || Date.now();
+                        const tags = msg.data.tags || [];
+
+                        ui.log(`🧠 Bridge Memory Ingest: "${content.substring(0, 50)}..." from ${source}`, "info");
+
+                        try {
+                            // Save to memory graph using the same mechanism as user messages
+                            const id = 'daemon_' + timestamp + '_' + Math.random().toString(36).substr(2, 9);
+                            const candidate = {
+                                id,
+                                timestamp,
+                                role: 'memory',
+                                content,
+                                source,
+                                tags: tags.join(',')
+                            };
+
+                            // THE AUDIT (same as user messages)
+                            const audit = auditor.audit(candidate);
+                            if (!audit.passed) {
+                                ui.log(`🛑 Memory Rejected: ${audit.reason}`, "error");
+                                // Still send success response but log the rejection
+                                bridgeWs.send(JSON.stringify({
+                                    id: msg.id,
+                                    status: "rejected",
+                                    reason: audit.reason
+                                }));
+                                return;
+                            }
+
+                            // Commit to DB (same as saveTurn function)
+                            const query = ":put memory { id: $id, timestamp: $ts, role: $role, content: $content, source: $source, tags: $tags }";
+                            await window.db.run(query, JSON.stringify({
+                                id,
+                                ts: timestamp,
+                                role: 'memory',
+                                content,
+                                source,
+                                tags: tags.join(',')
+                            }));
+
+                            ui.log(`💾 Memory Saved from ${source} (${content.length} chars)`, "success");
+
+                            // Send success response back to daemon
+                            bridgeWs.send(JSON.stringify({
+                                id: msg.id,
+                                status: "success",
+                                message: "Memory ingested successfully"
+                            }));
+                        } catch (err) {
+                            bridgeWs.send(JSON.stringify({
+                                id: msg.id,
+                                status: "error",
+                                error: err.message
+                            }));
+                            ui.log(`❌ Ingest Failed: ${err.message}`, "error");
+                        }
+                    }
+
+                    // 4. MEMORY SEARCH REQUEST (From ask_memory.py tool) - searches memory graph
+                    else if (msg.type === 'memory_search') {
+                        const queryText = msg.query;
+                        const reqId = msg.id;
+                        ui.log(`🔍 External Memory Search: "${queryText}"`, "info");
+
+                        try {
+                            // Initialize context manager if not ready
+                            if (!contextManager) {
+                                await initializeContextManager();
+                            }
+
+                            // Check if context manager is available
+                            if (!contextManager) {
+                                const errorResponse = {
+                                    id: reqId,
+                                    type: 'memory_search_result',
+                                    status: 'error',
+                                    error: "Context manager not ready. Database may not be fully initialized."
+                                };
+                                bridgeWs.send(JSON.stringify(errorResponse));
+                                ui.log(`❌ Context manager not ready for search: ${queryText}`, "error");
+                                return;
+                            }
+
+                            // Use the existing ContextManager to find relevant memories
+                            const results = await contextManager.findRelevantMemories(queryText);
+
+                            // Format results for external consumption
+                            let formattedContext = `[ANCHOR MEMORY CONTEXT]\n`;
+                            formattedContext += `[Query: ${queryText}]\n\n`;
+
+                            if (results && results.length > 0) {
+                                formattedContext += `[FOUND ${results.length} RELEVANT MEMORIES]\n\n`;
+                                results.forEach((result, index) => {
+                                    formattedContext += `[MEMORY ${index + 1}]\n`;
+                                    formattedContext += `Source: ${result.source || 'unknown'}\n`;
+                                    formattedContext += `Content: ${result.content || result.text || ''}\n`;
+                                    formattedContext += `Timestamp: ${result.timestamp || 'unknown'}\n`;
+                                    formattedContext += `---\n\n`;
+                                });
+                            } else {
+                                formattedContext += `[NO RELEVANT MEMORIES FOUND]\n`;
+                            }
+
+                            // Send formatted result back to the bridge
+                            bridgeWs.send(JSON.stringify({
+                                id: reqId,
+                                type: 'memory_search_result',
+                                status: 'success',
+                                result: formattedContext
+                            }));
+
+                            ui.log(`✅ Returned ${results.length} memories for external search`, "success");
+                        } catch (err) {
+                            const errorResponse = {
+                                id: reqId,
+                                type: 'memory_search_result',
+                                status: 'error',
+                                error: err.message
+                            };
+                            bridgeWs.send(JSON.stringify(errorResponse));
+                            ui.log(`❌ External search failed: ${err.message}`, "error");
                         }
                     }
                 };

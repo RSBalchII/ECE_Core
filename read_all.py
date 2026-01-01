@@ -5,6 +5,8 @@ Root Reader: Aggregates content from relevant project files for orchestration.
 This script scans the project directory and combines the content of source code,
 configuration, and documentation files into a single text file (combined_text.txt).
 
+It ignores files with more than 2000 lines, and skips common combined outputs and package manifest files.
+
 It respects the current project structure:
 - Root level scripts and docs
 - tools/: Sovereign Core (JS/HTML/CSS)
@@ -36,6 +38,24 @@ def find_project_root(start_path: str | None = None) -> str:
             return os.getcwd()
         path = parent
 
+def file_has_too_many_lines(file_path: str, max_lines: int = 2000) -> bool:
+    """
+    Return True if file has more than max_lines lines.
+    Counted efficiently by reading in binary and summing newline bytes.
+    """
+    try:
+        with open(file_path, 'rb') as f:
+            lines = 0
+            for chunk in iter(lambda: f.read(8192), b''):
+                lines += chunk.count(b'\n')
+                if lines > max_lines:
+                    return True
+    except Exception:
+        # If we can't read the file, be conservative and skip it
+        return True
+    return False
+
+
 def get_allowed_files(project_root: str) -> List[Tuple[str, str]]:
     """
     Returns list of (file_path, section_name) for all relevant project files.
@@ -48,10 +68,14 @@ def get_allowed_files(project_root: str) -> List[Tuple[str, str]]:
     # Directories to completely ignore
     ignored_dirs = {'.git', '.venv', 'browser_data', 'archive', '__pycache__', 'node_modules', '.github'}
     
-    # Files to ignore
+    # Files to ignore (add common package manifests and combined outputs)
     ignored_files = {
-        'package-lock.json', 
-        'combined_text.txt', 
+        'package-lock.json',
+        'package.json',
+        'yarn.lock',
+        'pnpm-lock.yaml',
+        'combined_text.txt',
+        'combined_text.json',
         'cozo_lib_wasm_bg.wasm',
         'combined_memory.json',
         'cozo_import_memory.json'
@@ -65,12 +89,18 @@ def get_allowed_files(project_root: str) -> List[Tuple[str, str]]:
         section = "ROOT" if rel_root == "." else rel_root.replace(os.sep, "_").upper()
 
         for f in files:
-            if f in ignored_files:
+            fname_lower = f.lower()
+            # Skip explicitly ignored files and common combined outputs
+            if fname_lower in ignored_files or 'combined_text' in fname_lower or 'combined_memory' in fname_lower:
                 continue
             
             ext = os.path.splitext(f)[1].lower()
             if ext in code_exts:
                 full_path = os.path.join(root, f)
+                # Skip files that are too large (more than 2000 lines)
+                if file_has_too_many_lines(full_path, 2000):
+                    print(f"Skipping '{os.path.relpath(full_path, project_root)}' — exceeds 2000 lines.")
+                    continue
                 allowed_files.append((full_path, section))
                 
     return allowed_files
