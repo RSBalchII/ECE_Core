@@ -20,3 +20,5 @@ browser_data/
 edge_profile_vulkan/
 launch-edge-unsafe.bat
 launch-edge-vulkan.bat
+combined_text.txt  
+combined_memory.json 
