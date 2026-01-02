@@ -1,184 +1,137 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <title>Anchor Context UI</title>
+    <title>Anchor Context Console</title>
     <style>
-        :root { 
-            --bg: #0f172a; 
-            --panel: #1e293b; 
-            --text: #e2e8f0; 
-            --accent: #38bdf8; 
-            --success: #4ade80;
+        :root {
+            --bg: #0f172a;
+            --panel: #1e293b;
+            --text: #e2e8f0;
+            --accent: #38bdf8;
         }
-        body { 
-            background: var(--bg); 
-            color: var(--text); 
-            font-family: -apple-system, system-ui, sans-serif; 
-            margin: 0; 
-            height: 100vh; 
-            display: flex; 
-            flex-direction: column; 
-            padding: 20px; 
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: system-ui;
+            margin: 0;
+            padding: 20px;
+            height: 100vh;
+            display: flex;
+            gap: 20px;
             box-sizing: border-box;
         }
 
-        /* SEARCH BAR */
-        .search-container {
+        .sidebar {
+            width: 300px;
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
+            flex-direction: column;
+            gap: 20px;
         }
-        input[type="text"] {
-            flex: 1;
-            background: #000;
-            border: 1px solid #334155;
-            color: #fff;
-            padding: 15px;
-            border-radius: 8px;
-            font-size: 16px;
-            outline: none;
-        }
-        input[type="text"]:focus { border-color: var(--accent); }
-        
-        button.primary {
-            background: var(--accent);
-            color: #000;
-            border: none;
-            padding: 0 25px;
-            border-radius: 8px;
-            font-weight: bold;
-            font-size: 16px;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
-        button.primary:hover { opacity: 0.9; }
 
-        /* CONTEXT DISPLAY AREA */
-        .context-panel {
+        .main {
             flex: 1;
+            display: flex;
+            flex-direction: column;
             background: var(--panel);
             border-radius: 12px;
             border: 1px solid #334155;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden; /* Contains the scrollable area */
-            position: relative;
-        }
-
-        .panel-header {
-            padding: 15px;
-            background: #00000050;
-            border-bottom: 1px solid #334155;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .panel-title { font-size: 14px; color: #94a3b8; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
-
-        /* SCROLLABLE TEXT FIELD */
-        textarea#context-display {
-            flex: 1;
-            background: transparent;
-            border: none;
-            color: #a5f3fc; /* Cyan tint for data */
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 14px;
-            line-height: 1.6;
             padding: 20px;
+        }
+
+        input,
+        button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            background: #000;
+            color: #fff;
+            box-sizing: border-box;
+        }
+
+        button {
+            background: var(--accent);
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        textarea {
+            flex: 1;
+            background: #000;
+            color: #a5f3fc;
+            border: none;
+            padding: 15px;
+            font-family: monospace;
             resize: none;
             outline: none;
+            border-radius: 8px;
         }
-        /* Custom Scrollbar */
-        textarea::-webkit-scrollbar { width: 10px; }
-        textarea::-webkit-scrollbar-track { background: #0f172a; }
-        textarea::-webkit-scrollbar-thumb { background: #334155; border-radius: 5px; }
-        textarea::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
-        /* COPY BUTTON overlay */
-        .copy-btn {
-            background: #334155;
-            color: #fff;
-            border: 1px solid #475569;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            transition: all 0.2s;
+        .slider-group {
+            background: var(--panel);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #334155;
         }
-        .copy-btn:hover { background: #475569; }
-        .copy-btn.copied { background: var(--success); color: #000; border-color: var(--success); }
 
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+            color: #94a3b8;
+        }
     </style>
 </head>
+
 <body>
-
-    <div class="search-container">
-        <input type="text" id="queryInput" placeholder="Enter topic to retrieve context (e.g., 'Project Specs')..." onkeydown="if(event.key==='Enter') fetchContext()">
-        <button class="primary" onclick="fetchContext()">Fetch Context</button>
-    </div>
-
-    <div class="context-panel">
-        <div class="panel-header">
-            <span class="panel-title">Active Context Memory</span>
-            <button class="copy-btn" onclick="copyContext()" id="copyBtn">
-                📋 Copy to Clipboard
-            </button>
+    <div class="sidebar">
+        <div>
+            <label>🔎 Search Memory</label>
+            <input type="text" id="query" placeholder="Type keyword..." onkeyup="if(event.key==='Enter') search()">
         </div>
-        
-        <textarea id="context-display" readonly placeholder="Context will load here..."></textarea>
+        <div class="slider-group">
+            <label>Volume: <span id="vol-val">5000</span> chars</label>
+            <input type="range" id="vol" min="1000" max="50000" step="1000" value="5000"
+                oninput="document.getElementById('vol-val').innerText=this.value">
+        </div>
+        <button onclick="search()">Fetch Context</button>
+        <button onclick="copy()" style="background: #334155; color: #fff; border: 1px solid #475569">📋 Copy to
+            Clipboard</button>
     </div>
-
-<script>
-    const display = document.getElementById('context-display');
-    const copyBtn = document.getElementById('copyBtn');
-
-    async function fetchContext() {
-        const query = document.getElementById('queryInput').value.trim();
-        if(!query) return;
-
-        display.value = "🔍 Searching Graph...";
-        display.style.opacity = "0.5";
-
-        try {
-            const res = await fetch('/v1/memory/search', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ query })
-            });
-            const data = await res.json();
-            
-            display.style.opacity = "1";
-            if(data.context) {
-                display.value = data.context;
-            } else {
-                display.value = "No relevant context found in memory graph.";
-            }
-        } catch(e) {
-            display.value = "Error connecting to Anchor Bridge: " + e;
+    <div class="main">
+        <textarea id="output" readonly placeholder="Context results will appear here..."></textarea>
+    </div>
+    <script>
+        async function search() {
+            const query = document.getElementById('query').value;
+            const limit = document.getElementById('vol').value;
+            const out = document.getElementById('output');
+            if (!query) return;
+            out.value = "Searching...";
+            try {
+                const res = await fetch('/v1/memory/search', {
+                    method: 'POST',
+                    body: JSON.stringify({ query, max_chars: parseInt(limit) })
+                });
+                const data = await res.json();
+                out.value = data.context || "No results.";
+            } catch (e) { out.value = "Error: " + e; }
         }
-    }
-
-    function copyContext() {
-        if(!display.value) return;
-        
-        display.select();
-        document.execCommand('copy');
-        
-        // Visual Feedback
-        const originalText = copyBtn.innerHTML;
-        copyBtn.innerHTML = "✅ Copied!";
-        copyBtn.classList.add('copied');
-        
-        setTimeout(() => {
-            copyBtn.innerHTML = originalText;
-            copyBtn.classList.remove('copied');
-        }, 2000);
-    }
-</script>
-
+        function copy() {
+            const el = document.getElementById('output');
+            el.select();
+            document.execCommand('copy');
+        }
+    </script>
 </body>
+
 </html>

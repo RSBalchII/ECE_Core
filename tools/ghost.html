@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Ghost Engine (Headless)</title>
+    <script type="module">
+        import initCozo from './cozo_lib_wasm.js';
+
+        const BRIDGE_URL = `ws://${window.location.host}/ws/chat`;
+        let socket = null;
+        let db = null;
+
+        async function init() {
+            console.log("[Ghost] Initializing...");
+            try {
+                const CozoDb = await initCozo();
+                // Try persistent storage, fallback to memory
+                try {
+                    db = await CozoDb.new_from_indexed_db("coda_memory", "cozo_store", () => { });
+                    console.log("[Ghost] ✅ CozoDB (Persistent) Loaded");
+                } catch (e) {
+                    console.warn("[Ghost] Persistence failed, using memory", e);
+                    db = CozoDb.new();
+                }
+
+                await ensureSchema();
+                connectWebSocket();
+            } catch (e) {
+                console.error("[Ghost] Init Error: " + e.message);
+            }
+        }
+
+        async function ensureSchema() {
+            const query = `
+                :create memory {
+                    id: String =>
+                    timestamp: Int,
+                    content: String,
+                    source: String,
+                    type: String
+                } if not exists;
+                
+                ::fts create memory:content_fts { 
+                    extractor: content, 
+                    tokenizer: Simple, 
+                    filters: [Lowercase] 
+                } if not exists;
+            `;
+            await runQuery(query);
+        }
+
+        async function runQuery(datalog, params = {}) {
+            try {
+                const res = await db.run(datalog, JSON.stringify(params));
+                const json = JSON.parse(res);
+                return json;
+            } catch (e) {
+                return { ok: false, error: e.message };
+            }
+        }
+
+        function connectWebSocket() {
+            socket = new WebSocket(BRIDGE_URL);
+
+            socket.onopen = () => {
+                console.log("[Ghost] 🟢 Bridge Connected");
+                socket.send(JSON.stringify({ type: "engine_ready" }));
+            };
+
+            socket.onmessage = async (e) => {
+                const msg = JSON.parse(e.data);
+                if (msg.type === "ingest" || msg.type === "memory_ingest") await handleIngest(msg);
+                if (msg.type === "direct_search_request") await handleSearch(msg);
+            };
+
+            socket.onclose = () => setTimeout(connectWebSocket, 3000);
+        }
+
+        async function handleIngest(msg) {
+            console.log(`[Ghost] 📥 Ingesting: ${msg.filename}`);
+            const id = `doc_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+            const ts = Date.now();
+            const query = `?[id, timestamp, content, source, type] <- $data :put memory { id, timestamp, content, source, type }`;
+            await runQuery(query, { data: [[id, ts, msg.content, msg.filename, msg.filetype || "text"]] });
+        }
+
+        async function handleSearch(msg) {
+            console.log(`[Ghost] 🔍 Searching: "${msg.query}"`);
+            const limit = msg.limit || 10;
+            let results = [];
+
+            // 1. Try FTS
+            try {
+                const ftsQuery = `?[source, content] := *memory{source, content}, ~memory:content_fts{content | query: $q} :limit $limit`;
+                const ftsRes = await runQuery(ftsQuery, { q: msg.query, limit });
+                if (ftsRes.rows && ftsRes.rows.length > 0) results = ftsRes.rows;
+            } catch (e) { }
+
+            // 2. Fallback Regex
+            if (results.length === 0) {
+                const scanQuery = `?[source, content] := *memory{source, content}, regex_matches($q, content) :limit $limit`;
+                const scanRes = await runQuery(scanQuery, { q: msg.query, limit });
+                if (scanRes.rows) results = scanRes.rows;
+            }
+
+            // 3. Format Markdown
+            let output = "";
+            let charCount = 0;
+            const maxChars = msg.max_chars || 10000;
+
+            for (const [source, content] of results) {
+                if (charCount + content.length > maxChars) break;
+                output += `### Source: ${source}\n${content}\n\n`;
+                charCount += content.length;
+            }
+
+            if (!output) output = "No relevant context found.";
+
+            socket.send(JSON.stringify({
+                type: "direct_search_result",
+                id: msg.id,
+                result: output
+            }));
+        }
+
+        init();
+    </script>
+</head>
+
+<body></body>
+
+</html>

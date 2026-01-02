@@ -67,7 +67,7 @@ graph TD
 ### 3. Context System
 - **Context UI**: Read-only interface for quick context retrieval and copy-paste.
 - **Memory Search**: Query the Ghost Engine's Graph (Vector + BM25) for relevant context.
-- **Memory Builder**: Background processor using Qwen 1.5B in WebGPU for memory processing.
+
 
 ### 4. Model Loading System
 - **Online-First**: Uses direct HuggingFace URLs for reliable loading (Standard 007)
@@ -140,7 +140,7 @@ graph TD
 ## Search Architecture
 
 ### Hybrid Retrieval System
-* **Vector Search**: Semantic search using cosine similarity (`vec_l2`)
+
 * **BM25 FTS**: Lexical search using CozoDB Full Text Search with stemming
 * **Context Manager**: Intelligent retrieval in `ContextManager.findRelevantMemories()`
 * **Fallback Mechanism**: Regex-based search when FTS index unavailable

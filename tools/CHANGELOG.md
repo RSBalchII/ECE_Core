@@ -1,5 +1,14 @@
 # Tools Changelog
 
+## [2.4.0] - 2026-01-01 "Anchor Lite Refactor"
+### Changed
+- Renamed `chat.html` to `ghost.html` (Headless Engine).
+- Refactored `context.html` to be the primary Search Dashboard.
+### Removed
+- Archived `db_builder.html`, `memory-builder.html`, `mobile-chat.html`.
+- Removed auto-loading of WebLLM to save resources.
+
+
 ## [Unreleased] - 2025-12-26
 
 ### Added
