@@ -95,28 +95,21 @@
 
 <body>
 
-    <h1>ANCHOR <span style="color:var(--accent); font-weight:600;">CORE</span></h1>
+    <h1>ANCHOR <span style="color:var(--accent); font-weight:600;">LITE</span></h1>
 
     <div class="grid">
-        <a href="chat.html" class="card">
-            <div class="icon">💬</div>
-            <div class="title">Anchor Chat</div>
-            <div class="desc">The core WebGPU interface. Run LLMs locally with memory integration.</div>
+        <a href="context.html" class="card">
+            <div class="icon">�</div>
+            <div class="title">Context Console</div>
+            <div class="desc">Primary Interface. Search and retrieve memory from the Ghost Engine.</div>
             <div class="status">Active</div>
         </a>
 
         <a href="log-viewer.html" class="card">
             <div class="icon">📊</div>
             <div class="title">Log Viewer</div>
-            <div class="desc">Monitor engine performance, VRAM usage, and debug events.</div>
+            <div class="desc">Monitor engine performance and debug events.</div>
             <div class="status">Utility</div>
-        </a>
-
-        <a href="db_builder.html" class="card">
-            <div class="icon">🧠</div>
-            <div class="title">DB Builder</div>
-            <div class="desc">Manage and build the CozoDB memory store.</div>
-            <div class="status">Admin</div>
         </a>
 
         <a href="anchor-mic.html" class="card">
@@ -124,13 +117,6 @@
             <div class="title">Root Mic</div>
             <div class="desc">Dictate directly to the engine using Whisper.</div>
             <div class="status">Input</div>
-        </a>
-
-        <a href="memory-builder.html" class="card">
-            <div class="icon">🧠</div>
-            <div class="title">Memory Builder</div>
-            <div class="desc">Background memory consolidation and association.</div>
-            <div class="status">Subconscious</div>
         </a>
 
         <a href="terminal.html" class="card">
@@ -144,46 +130,32 @@
             <div class="icon">⚓</div>
             <div class="title">Anchor Shell</div>
             <div class="desc">Launch the native PowerShell client connected to the Ghost Engine.</div>
-            <div class="status">Offline</div>
+            <div class="status">Launcher</div>
         </div>
-
-        <a href="context.html" class="card">
-            <div class="icon">📋</div>
-            <div class="title">Context UI</div>
-            <div class="desc">Simplified context retrieval with scrollable display and one-click copy.</div>
-            <div class="status">Active</div>
-        </a>
-
-        <a href="mobile-chat.html" class="card">
-            <div class="icon">📱</div>
-            <div class="title">Mobile Chat</div>
-            <div class="desc">Lightweight, mobile-friendly UI for on-the-go access.</div>
-            <div class="status">Active</div>
-        </a>
     </div>
 
     <div style="margin-top: 50px; color: #555; font-size: 0.8rem;">
-        Running on Localhost • WebGPU Enabled
+        Running on Localhost • Anchor Lite Refactor
     </div>
 
     <script>
-    async function spawnAnchorShell() {
-        try {
-            const res = await fetch('http://localhost:8000/v1/system/spawn_shell', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer sovereign-secret' },
-                body: JSON.stringify({})
-            });
-            if (res.ok) {
-                console.log("Anchor Shell Spawned");
-                alert("Anchor terminal launched in new PowerShell window!");
-            } else {
-                alert("Failed to spawn. Is Bridge running?");
+        async function spawnAnchorShell() {
+            try {
+                const res = await fetch('http://localhost:8000/v1/system/spawn_shell', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer sovereign-secret' },
+                    body: JSON.stringify({})
+                });
+                if (res.ok) {
+                    console.log("Anchor Shell Spawned");
+                    alert("Anchor terminal launched in new PowerShell window!");
+                } else {
+                    alert("Failed to spawn. Is Bridge running?");
+                }
+            } catch (e) {
+                alert("Error: " + e.message);
             }
-        } catch (e) {
-            alert("Error: " + e.message);
         }
-    }
     </script>
 
 </body>

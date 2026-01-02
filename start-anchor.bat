@@ -21,22 +21,16 @@ if "%LOW_RESOURCE_MODE%"=="true" (
     )
 )
 
+REM 1.5 Start Watchdog (File Monitor)
+start "Anchor Watchdog" /min cmd /c "cd tools && python anchor_watchdog.py"
+
 REM 2. Wait for Server to initialize
 echo Waiting for server to initialize...
 timeout /t 5 /nobreak >nul
 
-REM 3. Launch the Ghost Engine (Truly Background - no window)
-REM Points to the new chat.html on the single port in headless mode (FIXED: JavaScript Enabled)
-echo 👻 Launching Ghost Engine...
-if "%LOW_RESOURCE_MODE%"=="true" (
-    start "Ghost Engine" /min cmd /c "msedge --app=http://localhost:8000/chat.html?headless=true --start-minimized --remote-debugging-port=9222 --no-first-run --no-default-browser-check --disable-extensions --disable-plugins --disable-images --disable-web-security --user-data-dir=%TEMP%\anchor_ghost --max-active-webgl-contexts=1 --max-webgl-contexts-per-group=1 --disable-gpu-memory-buffer-compositor-resources --force-gpu-mem-available-mb=64 --force-low-power-gpu"
-) else (
-    if "%CPU_ONLY_MODE%"=="true" (
-        start "Ghost Engine" /min cmd /c "msedge --app=http://localhost:8000/chat.html?headless=true --start-minimized --remote-debugging-port=9222 --no-first-run --no-default-browser-check --disable-extensions --disable-plugins --disable-images --disable-web-security --user-data-dir=%TEMP%\anchor_ghost --force-low-power-gpu --disable-gpu-sandbox --disable-features=VizDisplayCompositor"
-    ) else (
-        start "Ghost Engine" /min cmd /c "msedge --app=http://localhost:8000/chat.html?headless=true --start-minimized --remote-debugging-port=9222 --no-first-run --no-default-browser-check --disable-extensions --disable-plugins --disable-images --disable-web-security --user-data-dir=%TEMP%\anchor_ghost"
-    )
-)
+REM 3. Launch the Ghost Engine
+REM Handled automatically by the Bridge (Resurrection Manager)
+echo 👻 Ghost Engine managed by Bridge...
 
 echo.
 echo ✅ Anchor System Started in Background

@@ -30,7 +30,7 @@ logs_dir = os.path.join(os.path.dirname(__file__), "..", "logs")
 os.makedirs(logs_dir, exist_ok=True)
 
 # Global log buffer for collecting system logs
-MAX_LOG_ENTRIES = 1000
+MAX_LOG_ENTRIES = 5000
 log_buffer = deque(maxlen=MAX_LOG_ENTRIES)
 log_buffer_lock = asyncio.Lock()
 
@@ -55,9 +55,9 @@ async def add_log_entry(source: str, log_type: str, message: str):
                 with open(log_file_path, 'r', encoding='utf-8') as f:
                     lines = f.readlines()
 
-                # Keep only last 1000 lines
-                if len(lines) >= 1000:
-                    lines = lines[-500:]  # Keep last 500 to have room for new entries
+                # Keep only last 5000 lines
+                if len(lines) >= 5000:
+                    lines = lines[-4500:]  # Keep last 4500 to have room for new entries
 
                 # Write back truncated content plus new entry
                 with open(log_file_path, 'w', encoding='utf-8') as f:
@@ -84,7 +84,22 @@ def initialize_logging():
     # This will be called when the app starts up
     pass
 
-app = FastAPI(title="Anchor Core (Text-Only)")
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await add_log_entry("System", "info", f"Anchor Core started on port {PORT}")
+    await add_log_entry("Resurrection", "info", "Launching Ghost Engine (headless browser)...")
+    asyncio.create_task(resurrection_manager.launch_browser())
+    
+    yield
+    
+    # Shutdown
+    await add_log_entry("System", "info", "Shutting down Anchor Core...")
+    await resurrection_manager.terminate_browser()
+
+app = FastAPI(title="Anchor Core (Text-Only)", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -113,9 +128,20 @@ class ResurrectionManager:
         temp_dir = tempfile.gettempdir()
 
         if sys.platform == "win32":
-            # Windows: Use Edge or Chrome with headless flag
-            return [
-                "msedge",
+            # Detect Edge Path
+            edge_path = "msedge" # Fallback
+            possible_paths = [
+                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+            ]
+            for path in possible_paths:
+                if os.path.exists(path):
+                    edge_path = path
+                    break
+            
+            # Base Windows Command
+            base_cmd = [
+                edge_path,
                 "--headless=new",
                 "--no-first-run",
                 "--no-default-browser-check",
@@ -126,10 +152,30 @@ class ResurrectionManager:
                 "--disable-renderer-backgrounding",
                 "--disable-ipc-flooding-protection",
                 "--disable-background-media-suspend",
-                "--remote-debugging-port=9222",  # Explicitly set port to avoid conflicts
-                f"--user-data-dir={temp_dir}/anchor_ghost_{int(time.time())}",  # Unique temp profile
-                f"http://localhost:{PORT}/index.html"
+                "--remote-debugging-port=9222",
+                f"--user-data-dir={temp_dir}/anchor_ghost_{int(time.time())}"
             ]
+
+            # Append mode-specific flags
+            if os.environ.get("LOW_RESOURCE_MODE") == "true":
+                base_cmd.extend([
+                    "--max-active-webgl-contexts=1",
+                    "--max-webgl-contexts-per-group=1",
+                    "--disable-gpu-memory-buffer-compositor-resources",
+                    "--force-gpu-mem-available-mb=64",
+                    "--force-low-power-gpu"
+                ])
+            elif os.environ.get("CPU_ONLY_MODE") == "true":
+                base_cmd.extend([
+                    "--force-low-power-gpu",
+                    "--disable-gpu-sandbox",
+                    "--disable-features=VizDisplayCompositor"
+                ])
+
+            # Append Target URL
+            base_cmd.append(f"http://localhost:{PORT}/ghost.html?headless=true")
+            return base_cmd
+
         else:
             # Linux/Mac: Use Chrome
             return [
@@ -143,7 +189,7 @@ class ResurrectionManager:
                 "--disable-background-media-suspend",
                 "--remote-debugging-port=9222",  # Explicitly set port to avoid conflicts
                 f"--user-data-dir={temp_dir}/anchor_ghost_{int(time.time())}",  # Unique temp profile
-                f"http://localhost:{PORT}/index.html"
+                f"http://localhost:{PORT}/ghost.html?headless=true"
             ]
 
     async def kill_existing_browsers(self):
@@ -534,8 +580,80 @@ async def gpu_force_release_all(request: Request):
             item = gpu_state["queue"].popleft()
             # Don't set acquired event since we're cancelling
         gpu_state["queue"].clear()
-    await add_log_entry("GPU-Manager", "info", "All GPU locks force released")
-    return {"status": "all_released"}
+@app.post("/v1/system/spawn_shell")
+async def spawn_shell():
+    """Launch the native PowerShell Anchor Terminal."""
+    import subprocess
+    try:
+        # Determine the correct path to anchor.py
+        anchor_script = os.path.join(os.path.dirname(__file__), "anchor.py")
+        
+        if sys.platform == "win32":
+            # Launch in a new command window
+            subprocess.Popen(
+                f'start "Anchor Terminal" cmd /k python "{anchor_script}"', 
+                shell=True,
+                cwd=os.path.dirname(__file__)
+            )
+        else:
+            # Linux/Mac fallback (attempt to use xterm or similar, though strictly Windows OS env for this user)
+            subprocess.Popen(
+                ["x-terminal-emulator", "-e", f"python3 {anchor_script}"],
+                cwd=os.path.dirname(__file__)
+            )
+            
+        await add_log_entry("System-API", "success", "Spawned Anchor Shell")
+        return {"status": "success", "message": "Terminal spawned"}
+    except Exception as e:
+        await add_log_entry("System-API", "error", f"Failed to spawn shell: {str(e)}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/v1/shell/exec")
+async def shell_exec(request: Request):
+    """Execute a system command and return output."""
+    import subprocess
+    
+    try:
+        body = await request.json()
+        
+        # Handle "Neural Mode" where terminal asks for "prompt" instead of "cmd"
+        if "prompt" in body:
+             # Just a placeholder for now as the logic for "Brain" connection isn't fully migrated 
+             # to the bridge yet, but we need to prevent 500 error.
+             # In a full implementation, this would query the LLM to get a command.
+             return JSONResponse(content={"error": "Neural Shell requires an active LLM session. Feature pending migration."})
+
+        cmd = body.get("cmd", "").strip()
+        if not cmd:
+            return JSONResponse(status_code=400, content={"error": "Command required"})
+
+        await add_log_entry("Shell-API", "info", f"Executing: {cmd}")
+        
+        # Execute command
+        process = subprocess.Popen(
+            cmd,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=os.getcwd() 
+        )
+        
+        stdout, stderr = process.communicate(timeout=30)
+        
+        return {
+            "cmd": cmd,
+            "stdout": stdout,
+            "stderr": stderr,
+            "code": process.returncode
+        }
+
+    except subprocess.TimeoutExpired:
+        process.kill()
+        return JSONResponse(status_code=408, content={"error": "Command timed out","stdout": "", "stderr": "Timeout"})
+    except Exception as e:
+        await add_log_entry("Shell-API", "error", f"Shell execution failed: {str(e)}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 # --- CHAT COMPLETION WITH GPU QUEUING ---
 @app.post("/v1/chat/completions")
@@ -760,14 +878,15 @@ async def ws_chat(websocket: WebSocket):
             msg = json.loads(data)
 
             # Route messages to waiting requests
-            if "id" in msg and msg["id"] in active_requests:
-                await active_requests[msg["id"]].put(msg)
-
             # Special case for memory search results
             if msg.get("type") == "direct_search_result":
                 rid = msg.get("id")
                 if rid in active_requests:
                     await active_requests[rid].put(msg.get("result"))
+            
+            # Route other response messages to waiting requests
+            elif "id" in msg and msg["id"] in active_requests:
+                await active_requests[msg["id"]].put(msg)
             # Handle other message types that might come from the Ghost Engine
             elif msg.get("type") == "engine_ready":
                 await add_log_entry("Ghost-Engine", "success", "Ghost Engine Ready - Model loaded and ready for requests")
@@ -776,6 +895,9 @@ async def ws_chat(websocket: WebSocket):
                 status = msg.get('status', 'Loading...')
                 await add_log_entry("Ghost-Engine", "info", f"Ghost Engine Loading: {status}")
                 print(f"⚙️ Ghost Engine Loading: {status}")
+            elif msg.get("type") == "log":
+                log_msg = msg.get('message', '')
+                await add_log_entry("Ghost-Engine", "info", f"{log_msg}")
             elif msg.get("type") == "error":
                 error_msg = msg.get('message', 'Unknown error')
                 await add_log_entry("Ghost-Engine", "error", f"Ghost Engine Error: {error_msg}")
@@ -800,14 +922,9 @@ async def ws_chat(websocket: WebSocket):
 
 app.mount("/", StaticFiles(directory=".", html=True), name="ui")
 
-async def startup_event():
-    """Initialize logging and launch the Ghost Engine when the app starts"""
-    await add_log_entry("System", "info", f"Anchor Core started on port {PORT}")
-    await add_log_entry("Resurrection", "info", "Launching Ghost Engine (headless browser)...")
-    asyncio.create_task(resurrection_manager.launch_browser())
-
-# Register the startup event
-app.on_event("startup")(startup_event)
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse(os.path.join(os.path.dirname(__file__), "favicon.ico")) if os.path.exists("favicon.ico") else JSONResponse({"status": "ok"})
 
 if __name__ == "__main__":
     uvicorn.run(app, host=HOST, port=PORT, log_level="error")

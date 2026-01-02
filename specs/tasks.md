@@ -125,6 +125,13 @@
 - [x] **File-based Logging**: Implement persistent logging to `logs/` directory with truncation
 - [x] **Documentation**: Update specs and standards to reflect new architecture
 
+### Phase 9: Anchor Lite Refactor (Completed)
+- [x] **Consolidation**: Simplified system to Single Source of Truth (`context/`) -> Single Index (CozoDB) -> Single UI (`context.html`).
+- [x] **Cleanup**: Archived unused tools (`db_builder`, `memory-builder`, `sidecar`, `mobile-chat`).
+- [x] **Engine Refactor**: Created headless `ghost.html` engine with WebSocket bridge.
+- [x] **Launch Logic**: Unified startup in `start-anchor.bat` and `webgpu_bridge.py`.
+- [x] **Standard 023**: Documented "Anchor Lite" architecture and "Triangle of Pain".
+
 ## Backlog
 - [ ] **Federation Protocol**: P2P sync.
 - [ ] **Android App**: Wrapper for Root Coda.

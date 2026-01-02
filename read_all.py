@@ -66,7 +66,7 @@ def get_allowed_files(project_root: str) -> List[Tuple[str, str]]:
     code_exts = {'.py', '.js', '.ts', '.html', '.css', '.json', '.md', '.bat', '.ps1', '.sh', '.yaml', '.yml'}
     
     # Directories to completely ignore
-    ignored_dirs = {'.git', '.venv', 'browser_data', 'archive', '__pycache__', 'node_modules', '.github'}
+    ignored_dirs = {'context','.git', '.venv', 'browser_data', 'archive', '__pycache__', 'node_modules', '.github'}
     
     # Files to ignore (add common package manifests and combined outputs)
     ignored_files = {
