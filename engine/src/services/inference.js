@@ -27,7 +27,9 @@ function listModels() {
             console.warn(`Models directory not found: ${MODELS_DIR}`);
             return [];
         }
-        return fs.readdirSync(MODELS_DIR).filter(f => f.endsWith('.gguf'));
+        const models = fs.readdirSync(MODELS_DIR).filter(f => f.endsWith('.gguf'));
+        console.log(`[Inference] Found ${models.length} models in ${MODELS_DIR}`);
+        return models;
     } catch (e) {
         console.error('Error listing models:', e.message);
         return [];

@@ -18,8 +18,8 @@ if (isPkg) {
     basePath = path.join(__dirname, '..', '..', '..');
 }
 
-// Allow env override for MODELS_DIR, default to project/models
-const MODELS_DIR = process.env.MODELS_DIR || path.join(basePath, 'models');
+// Allow env override for MODELS_DIR, default to parent project/models (../../models from project root)
+const MODELS_DIR = process.env.MODELS_DIR || path.join(basePath, '..', 'models');
 
 module.exports = {
     IS_PKG: isPkg,
