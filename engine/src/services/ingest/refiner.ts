@@ -190,7 +190,7 @@ export async function refineContent(rawBuffer: Buffer | string, filePath: string
     }
 
     const { processInBatches } = await import('../../core/batch.js');
-    const BATCH_SIZE = config.EMBEDDING_BATCH_SIZE;
+    const BATCH_SIZE = 50;
     console.log(`[Refiner] Generating embeddings for ${rawAtoms.length} atoms (Batch size: ${BATCH_SIZE})...`);
 
     const chunkResults = await processInBatches(rawAtoms, async (chunkTexts, batchIndex) => {
@@ -217,7 +217,7 @@ export async function refineContent(rawBuffer: Buffer | string, filePath: string
                 .digest('hex')
                 .substring(0, 16);
 
-            let embedding = new Array(config.MODELS.EMBEDDING.DIM).fill(0.0);
+            let embedding = new Array(config.MODELS.EMBEDDING_DIM).fill(0.1);
             if (batchEmbeddings && batchEmbeddings[j] && batchEmbeddings[j].length > 0) {
                 embedding = batchEmbeddings[j];
             }
@@ -249,7 +249,7 @@ export async function enrichAtoms(atoms: Atom[]): Promise<Atom[]> {
     if (atoms.length === 0) return atoms;
 
     const { processInBatches } = await import('../../core/batch.js');
-    const BATCH_SIZE = config.EMBEDDING_BATCH_SIZE;
+    const BATCH_SIZE = 50;
     console.log(`[Refiner] Enriching ${atoms.length} atoms with embeddings...`);
 
     const totalBatches = Math.ceil(atoms.length / BATCH_SIZE);

@@ -29,7 +29,7 @@ interface Config {
   SIMILARITY_THRESHOLD: number;
   TOKEN_LIMIT: number;
   DREAMER_BATCH_SIZE: number;
-  EMBEDDING_BATCH_SIZE: number;
+
   VECTOR_INGEST_BATCH: number;
 
   // Extrapolated Settings
@@ -63,17 +63,13 @@ interface Config {
 
   // Models
   MODELS: {
+    EMBEDDING_DIM: number;
     MAIN: {
       PATH: string;
       CTX_SIZE: number;
       GPU_LAYERS: number;
     };
-    EMBEDDING: {
-      PATH: string | null;
-      CTX_SIZE: number;
-      GPU_LAYERS: number;
-      DIM: number;
-    };
+
     ORCHESTRATOR: {
       PATH: string;
       CTX_SIZE: number;
@@ -103,7 +99,7 @@ const DEFAULT_CONFIG: Config = {
   SIMILARITY_THRESHOLD: parseFloat(process.env['SIMILARITY_THRESHOLD'] || "0.8"),
   TOKEN_LIMIT: 1000000,
   DREAMER_BATCH_SIZE: parseInt(process.env['DREAMER_BATCH_SIZE'] || "5"),
-  EMBEDDING_BATCH_SIZE: parseInt(process.env['EMBEDDING_BATCH_SIZE'] || "50"),
+
   VECTOR_INGEST_BATCH: parseInt(process.env['VECTOR_INGEST_BATCH'] || "500"),
 
   // Extrapolated Settings
@@ -137,17 +133,13 @@ const DEFAULT_CONFIG: Config = {
 
   // Models
   MODELS: {
+    EMBEDDING_DIM: parseInt(process.env['LLM_EMBEDDING_DIM'] || "768"),
     MAIN: {
       PATH: process.env['LLM_MODEL_PATH'] || "gemma-3-4b-it-abliterated-v2.i1-Q4_K_S.gguf",
       CTX_SIZE: parseInt(process.env['LLM_CTX_SIZE'] || "4096"),
       GPU_LAYERS: parseInt(process.env['LLM_GPU_LAYERS'] || "33")
     },
-    EMBEDDING: {
-      PATH: process.env['LLM_EMBEDDING_MODEL_PATH'] || "embeddinggemma-300m.Q8_0.gguf",
-      CTX_SIZE: parseInt(process.env['LLM_EMBEDDING_CTX_SIZE'] || "2048"),
-      GPU_LAYERS: parseInt(process.env['EMBEDDING_GPU_LAYERS'] || "0"), // Default to 0 for stability
-      DIM: parseInt(process.env['LLM_EMBEDDING_DIM'] || "768")
-    },
+
     ORCHESTRATOR: {
       PATH: process.env['ORCHESTRATOR_MODEL_PATH'] || "Qwen3-4B-Function-Calling-Pro.gguf",
       CTX_SIZE: parseInt(process.env['ORCHESTRATOR_CTX_SIZE'] || "8192"),

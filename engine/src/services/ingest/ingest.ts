@@ -15,6 +15,8 @@ interface IngestOptions {
 
 
 
+
+
 /**
  * Determines the provenance of content based on its source
  */
@@ -79,7 +81,7 @@ export async function ingestContent(
   const insertQuery = `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] <- $data :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}`;
 
   await db.run(insertQuery, {
-    data: [[id, timestamp, content, source, source, 0, type, hash, bucketsArray, epochsJson, tagsJson, provenance, new Array(config.MODELS.EMBEDDING.DIM).fill(0.0)]]
+    data: [[id, timestamp, content, source, source, 0, type, hash, bucketsArray, epochsJson, tagsJson, provenance, new Array(config.MODELS.EMBEDDING_DIM).fill(0.1)]]
   });
 
   // Strict Read-After-Write Verification (Standard 059)
@@ -115,6 +117,7 @@ export async function ingestAtoms(
   buckets: string[] = ['core'],
   tags: string[] = []
 ): Promise<number> {
+
   if (atoms.length === 0) return 0;
 
   const rows = atoms.map(atom => {
@@ -132,7 +135,7 @@ export async function ingestAtoms(
       [], // epochs
       tags,
       atom.provenance,
-      atom.embedding || new Array(config.MODELS.EMBEDDING.DIM).fill(0.0)
+      atom.embedding || new Array(config.MODELS.EMBEDDING_DIM).fill(0.1)
     ];
   });
 
@@ -152,8 +155,8 @@ export async function ingestAtoms(
     try {
       if (chunk.length > 0) {
         const sampleEmbedding = chunk[0][12] as number[];
-        if (sampleEmbedding.length !== config.MODELS.EMBEDDING.DIM) {
-          console.warn(`[Ingest] WARNING: Embedding dimension mismatch! Schema: ${config.MODELS.EMBEDDING.DIM}, Actual: ${sampleEmbedding.length}`);
+        if (sampleEmbedding.length !== config.MODELS.EMBEDDING_DIM) {
+          console.warn(`[Ingest] WARNING: Embedding dimension mismatch! Schema: ${config.MODELS.EMBEDDING_DIM}, Actual: ${sampleEmbedding.length}`);
         }
       }
       await db.run(`

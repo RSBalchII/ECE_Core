@@ -6,24 +6,15 @@ import config from '../../config/index.js';
 
 // Global State
 let clientWorker: Worker | null = null;
-let embeddingWorker: Worker | null = null;
 let orchestratorWorker: Worker | null = null;
 let currentChatModelName = "";
-let currentEmbeddingModelName = "";
 let currentOrchestratorModelName = "";
-
-// Embedding wrapper to abstract whether we are using shared or dedicated worker
-// If config.MODELS.EMBEDDING.PATH is null, this will just point to clientWorker
-let activeEmbeddingWorker: Worker | null = null;
 
 // ESM __dirname fix
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const CHAT_WORKER_PATH = path.resolve(__dirname, '../../core/inference/ChatWorker.js');
-const EMBEDDING_WORKER_PATH = path.resolve(__dirname, '../../core/inference/EmbeddingWorker.js');
 const HYBRID_WORKER_PATH = path.resolve(__dirname, '../../core/inference/llamaLoaderWorker.js');
-
-// ... (rest of imports)
 
 export interface LoadModelOptions {
   ctxSize?: number;
@@ -32,43 +23,18 @@ export interface LoadModelOptions {
   gpuLayers?: number;
 }
 
-// Queue for embeddings ... (unchanged)
-interface EmbeddingQueueItem {
-  type: 'batch';
-  data: string[];
-  resolve: (value: number[][] | PromiseLike<number[][] | null> | null) => void;
-  reject: (reason?: any) => void;
-}
-const embeddingQueue: EmbeddingQueueItem[] = [];
-let isProcessingEmbeddings = false;
-
 // Initialize workers based on configuration
 export async function initWorker() {
-  const useDedicatedEmbedding = !!config.MODELS.EMBEDDING.PATH;
+  // TAG-WALKER MODE (Lightweight)
+  // We strictly skip embedding workers to save RAM. 
+  // All embedding calls return zero-stubs.
 
-  if (useDedicatedEmbedding) {
-    // Dedicated Mode: Specialized Workers
-    if (!clientWorker) {
-      clientWorker = await spawnWorker("ChatWorker", CHAT_WORKER_PATH, {
-        gpuLayers: config.MODELS.MAIN.GPU_LAYERS
-      });
-    }
-    // Only spawn embedding worker if we have a path
-    if (!embeddingWorker) {
-      embeddingWorker = await spawnWorker("EmbeddingWorker", EMBEDDING_WORKER_PATH, {
-        gpuLayers: config.MODELS.EMBEDDING.GPU_LAYERS,
-        forceCpu: config.MODELS.EMBEDDING.GPU_LAYERS === 0
-      });
-    }
-    activeEmbeddingWorker = embeddingWorker;
-  } else {
-    // Shared Mode: Hybrid Worker (Legacy)
-    if (!clientWorker) {
-      clientWorker = await spawnWorker("HybridWorker", HYBRID_WORKER_PATH, {
-        gpuLayers: config.MODELS.MAIN.GPU_LAYERS
-      });
-    }
-    activeEmbeddingWorker = clientWorker;
+  if (!clientWorker) {
+    console.log(`[Provider] Tag-Walker Mode Active. Spawning Chat Worker...`);
+    // Use Hybrid Worker for Main Chat (Legacy compatibility)
+    clientWorker = await spawnWorker("HybridWorker", HYBRID_WORKER_PATH, {
+      gpuLayers: config.MODELS.MAIN.GPU_LAYERS
+    });
   }
 
   // Spawn Orchestrator (Side Channel) Worker - CPU Optimized
@@ -124,19 +90,6 @@ export async function initAutoLoad() {
         gpuLayers: config.MODELS.ORCHESTRATOR.GPU_LAYERS
       }, 'orchestrator');
 
-      // Load Embedding Model (if dedicated)
-      if (config.MODELS.EMBEDDING.PATH && activeEmbeddingWorker !== clientWorker) {
-        await loadModel(config.MODELS.EMBEDDING.PATH, {
-          ctxSize: config.MODELS.EMBEDDING.CTX_SIZE,
-          gpuLayers: config.MODELS.EMBEDDING.GPU_LAYERS
-        }, 'embedding');
-      } else if (!config.MODELS.EMBEDDING.PATH) {
-        // If shared, we rely on the main model having an embedding context
-        // The worker creates 'embeddingContext' automatically in handleLoadModel
-        console.log("[Provider] Using Main Model for Embeddings (Shared Mode).");
-        currentEmbeddingModelName = config.MODELS.MAIN.PATH;
-      }
-
     } catch (e) {
       console.error("[Provider] Auto-load failed:", e);
       // Reset promise on failure to allow retry
@@ -149,28 +102,23 @@ export async function initAutoLoad() {
 }
 
 // Model Loading Logic
-// Updated to target specific workers
 let chatLoadingPromise: Promise<any> | null = null;
-let embedLoadingPromise: Promise<any> | null = null;
 let orchLoadingPromise: Promise<any> | null = null;
 
-export async function loadModel(modelPath: string, options: LoadModelOptions = {}, target: 'chat' | 'embedding' | 'orchestrator' = 'chat') {
+export async function loadModel(modelPath: string, options: LoadModelOptions = {}, target: 'chat' | 'orchestrator' = 'chat') {
   if (!clientWorker) await initWorker();
 
   let targetWorker = clientWorker;
-  if (target === 'embedding') targetWorker = activeEmbeddingWorker;
   if (target === 'orchestrator') targetWorker = orchestratorWorker;
 
   if (!targetWorker) throw new Error("Worker not initialized");
 
   // Check if already loaded
   if (target === 'chat' && modelPath === currentChatModelName) return { status: "ready" };
-  if (target === 'embedding' && modelPath === currentEmbeddingModelName) return { status: "ready" };
   if (target === 'orchestrator' && modelPath === currentOrchestratorModelName) return { status: "ready" };
 
   // Prevent parallel loads for *same target*
   if (target === 'chat' && chatLoadingPromise) return chatLoadingPromise;
-  if (target === 'embedding' && embedLoadingPromise) return embedLoadingPromise;
   if (target === 'orchestrator' && orchLoadingPromise) return orchLoadingPromise;
 
   const loadTask = new Promise((resolve, reject) => {
@@ -183,9 +131,6 @@ export async function loadModel(modelPath: string, options: LoadModelOptions = {
         if (target === 'chat') {
           currentChatModelName = modelPath;
           chatLoadingPromise = null;
-        } else if (target === 'embedding') {
-          currentEmbeddingModelName = modelPath;
-          embedLoadingPromise = null;
         } else {
           currentOrchestratorModelName = modelPath;
           orchLoadingPromise = null;
@@ -194,7 +139,6 @@ export async function loadModel(modelPath: string, options: LoadModelOptions = {
       } else if (msg.type === 'error') {
         targetWorker!.off('message', handler);
         if (target === 'chat') chatLoadingPromise = null;
-        else if (target === 'embedding') embedLoadingPromise = null;
         else orchLoadingPromise = null;
         reject(new Error(msg.error));
       }
@@ -208,7 +152,6 @@ export async function loadModel(modelPath: string, options: LoadModelOptions = {
   });
 
   if (target === 'chat') chatLoadingPromise = loadTask;
-  else if (target === 'embedding') embedLoadingPromise = loadTask;
   else orchLoadingPromise = loadTask;
 
   return loadTask;
@@ -255,96 +198,16 @@ export async function runSideChannel(prompt: string, systemInstruction = "You ar
   });
 }
 
-// Embeddings - Uses activeEmbeddingWorker
+// Embeddings - STUBBED (Tech Debt Removal)
 export async function getEmbedding(text: string): Promise<number[] | null> {
-  // For single embedding, we can just wrap it in an array and call getEmbeddings
   const result = await getEmbeddings([text]);
   return result ? result[0] : null;
 }
 
 export async function getEmbeddings(texts: string[]): Promise<number[][] | null> {
-  // Ensure appropriate model is loaded
-  if (!activeEmbeddingWorker || (activeEmbeddingWorker === embeddingWorker && !currentEmbeddingModelName)) {
-    await initAutoLoad();
-  }
-
-  // Double check
-  if (!activeEmbeddingWorker) {
-    console.error("[Provider] Cannot get embeddings: Worker not init.");
-    return null;
-  }
-
-  // If dedicated worker, check strict name. If shared, check chat name.
-  const isReady = activeEmbeddingWorker === embeddingWorker
-    ? !!currentEmbeddingModelName
-    : !!currentChatModelName;
-
-  if (!isReady) {
-    console.error("[Provider] Cannot get embeddings: Model not loaded.");
-    return null;
-  }
-
-  return new Promise((resolve, reject) => {
-    embeddingQueue.push({ type: 'batch', data: texts, resolve, reject });
-    processEmbeddingQueue();
-  });
-}
-
-async function processEmbeddingQueue() {
-  if (isProcessingEmbeddings || embeddingQueue.length === 0) return;
-  isProcessingEmbeddings = true;
-
-  const item = embeddingQueue.shift();
-  if (!item) {
-    isProcessingEmbeddings = false;
-    return;
-  }
-
-  const { data: texts, resolve, reject } = item;
-
-  // Use activeEmbeddingWorker
-  const worker = activeEmbeddingWorker;
-
-  if (!worker) {
-    reject(new Error("Worker vanished"));
-    isProcessingEmbeddings = false;
-    processEmbeddingQueue();
-    return;
-  }
-
-  const handler = (msg: any) => {
-    if (msg.type === 'embeddingsGenerated') {
-      worker.off('message', handler);
-      clearTimeout(timeoutId);
-      console.log(`[Provider] Batch processed in ${(Date.now() - startTime)}ms`);
-      resolve(msg.data);
-      isProcessingEmbeddings = false;
-      processEmbeddingQueue();
-    } else if (msg.type === 'error') {
-      worker.off('message', handler);
-      clearTimeout(timeoutId);
-      console.error("Embedding Error:", msg.error);
-      resolve(null);
-      isProcessingEmbeddings = false;
-      processEmbeddingQueue();
-    }
-  };
-
-  const startTime = Date.now();
-  // 2 Minute Timeout Safety Valve
-  const timeoutId = setTimeout(() => {
-    worker.off('message', handler);
-    console.error(`[Provider] Worker TIMEOUT processing batch of ${texts.length} texts after 120s.`);
-    resolve(null); // Return null so Refiner skips embedding but continues
-    isProcessingEmbeddings = false;
-    processEmbeddingQueue();
-  }, 120000);
-
-  worker.on('message', handler);
-  worker.postMessage({
-    type: 'getEmbeddings',
-    data: { texts }
-  });
+  // Return stubbed zero-vectors to satisfy DB schema
+  const dim = config.MODELS.EMBEDDING_DIM || 768; // Fallback to 768
+  return texts.map(() => new Array(dim).fill(0.1));
 }
 
 // Stub for now to match interface compatibility with rest of system

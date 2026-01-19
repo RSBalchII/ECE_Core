@@ -73,7 +73,7 @@ export class Database {
             epochs: [String],
             tags: [String],
             provenance: String,
-            embedding: <F32; ${config.MODELS.EMBEDDING.DIM}>
+            embedding: <F32; ${config.MODELS.EMBEDDING_DIM}>
           }
         `);
 
@@ -99,7 +99,7 @@ export class Database {
               [], // tags
               [], // epochs
               row[4] || "{}", // provenance
-              new Array(config.MODELS.EMBEDDING.DIM).fill(0.0) // embedding (reset to zero to force re-embed)
+              new Array(config.MODELS.EMBEDDING_DIM).fill(0.0) // embedding (reset to zero to force re-embed)
             ];
           });
 
@@ -136,32 +136,20 @@ export class Database {
                 epochs: [String],
                 tags: [String],
                 provenance: String,
-                embedding: <F32; ${config.MODELS.EMBEDDING.DIM}>
+                embedding: <F32; ${config.MODELS.EMBEDDING_DIM}>
             }
         `);
           console.log('Memory table initialized');
 
-          // Create vector index
+          // REMOVED: Vector index (HNSW) is no longer used. Tag-Walker is the primary retrieval method.
+          // Explicitly remove it if it exists to save resources and prevent zero-vector errors.
           try {
-            const dim = config.MODELS.EMBEDDING.DIM;
-            await this.db.run(`
-                ::hnsw create memory:knn {
-                    dim: ${dim},
-                    m: 50,
-                    ef_construction: 200,
-                    fields: [embedding],
-                    dtype: F32,
-                    distance: L2
-                }
-            `);
-            console.log('Vector index initialized');
-          } catch (e: any) {
-            // Ignore if index already exists (Cozo throws on duplicate index)
-            if (!e.message?.includes('DuplicateIndex') && !e.display?.includes('DuplicateIndex')) {
-              console.warn('Vector index creation warning:', e.message || e.display);
-              console.warn('[DB] Continuing without vector index (Full Scan Mode). Performance will be degraded.');
-            }
+            await this.db.run('::remove memory:knn');
+            console.log('[DB] Legacy vector index (memory:knn) removed.');
+          } catch (e) {
+            // Ignore if index doesn't exist
           }
+
         } catch (createError: any) {
           console.error(`[DB] Failed to create memory table: ${createError.message}`);
 
