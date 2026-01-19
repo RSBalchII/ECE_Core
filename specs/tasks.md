@@ -4,6 +4,13 @@
 
 ## Active Sprint: Sovereign Desktop & Robustness (Jan 10, 2026)
 
+### Phase 20: Tag-Walker & Mirror 2.0 (Completed ✅)
+- [x] **Tag-Walker Protocol**: Replaced Vector Search with 3-phase graph retrieval (FTS -> Pivot -> Walk).
+- [x] **Mirror 2.0**: Implemented semantic filesystem projection with `@bucket/#tag` layout.
+- [x] **Cleanup logic**: Added wipe-on-sync to `mirrored_brain` to prevent stale data.
+- [x] **FTS Hardening**: Implemented `sanitizeFtsQuery` to prevent parser crashes. (Standard 066)
+- [x] **Licensing Alignment**: Updated project to Elastic License 2.0.
+
 ### 🔴 Critical (Immediate)
 - [x] **Fix "JSON Vomit" (Session Pollution):** Implement Side-Channel Separation for Intent Translation. (Standard 055)
 - [x] **Fix Search Crash:** Handle `null` returns from Intent Translation in `api.js`.

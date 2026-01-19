@@ -1,10 +1,3 @@
-Based on the comprehensive context provided—specifically the transition to **Tag-Walker (Standard 065)**, the removal of the embedding infrastructure to reduce technical debt, and the updated `provider.ts` logic—here is the fully updated `README.md`.
-
-This version replaces the outdated "UniversalRAG/Vector" terminology with the new "Graph-Native/Tag-Walker" architecture.
-
-### Updated `README.md`
-
-```markdown
 # ECE_Core - Sovereign Context Engine
 
 > **Sovereign Context Engine (SCE)** - A local-first, graph-native memory system for cognitive augmentation.
@@ -63,10 +56,9 @@ The engine runs as a single, efficient Node.js process managing three distinct l
 
 ### 1. Installation
 ```bash
-git clone [https://github.com/External-Context-Engine/ECE_Core.git](https://github.com/External-Context-Engine/ECE_Core.git)
+git clone https://github.com/External-Context-Engine/ECE_Core.git
 cd ECE_Core
 pnpm install
-
 ```
 
 ### 2. Configuration
@@ -75,7 +67,6 @@ Copy the example configuration:
 
 ```bash
 cp .env.example .env
-
 ```
 
 Ensure your `.env` is configured for **Tag-Walker Mode** (Embeddings Disabled):
@@ -91,14 +82,12 @@ LLM_GPU_LAYERS=33
 
 # Tech Debt Removal (Disable Embeddings)
 EMBEDDING_GPU_LAYERS=0
-
 ```
 
 ### 3. Run Engine
 
 ```bash
 pnpm start
-
 ```
 
 * **Server**: `http://localhost:3000`
@@ -110,7 +99,6 @@ pnpm start
 cd desktop-overlay
 pnpm install
 pnpm start
-
 ```
 
 ---
@@ -134,9 +122,9 @@ pnpm start
 
 This project follows strict engineering standards documented in `specs/standards/`. Key references:
 
-* **Standard 065**: [Graph-Based Associative Retrieval](https://www.google.com/search?q=specs/standards/065-graph-associative-retrieval.md)
-* **Standard 059**: [Reliable Ingestion (Ghost Data Protocol)](https://www.google.com/search?q=specs/standards/059_reliable_ingestion.md)
-* **Standard 058**: [UniversalRAG API](https://www.google.com/search?q=specs/standards/058_universal_rag_api.md)
+* **Standard 065**: [Graph-Based Associative Retrieval](./specs/standards/065-graph-associative-retrieval.md)
+* **Standard 059**: [Reliable Ingestion (Ghost Data Protocol)](./specs/standards/059_reliable_ingestion.md)
+* **Standard 058**: [UniversalRAG API](./specs/standards/058_universal_rag_api.md)
 
 ---
 
@@ -148,7 +136,6 @@ Consolidate an entire project into a digestable corpus for the engine.
 
 ```bash
 node read_all.js <path_to_project_root>
-
 ```
 
 **Output**: `codebase/combined_context.yaml`
@@ -158,8 +145,4 @@ node read_all.js <path_to_project_root>
 
 ## License
 
-Elastic License 2.0. Copyright (c) 2026 External Context Engine. See [LICENSE](file:///LICENSE) for full terms.
-
-```
-
-```
+Elastic License 2.0. Copyright (c) 2026 External Context Engine. See [LICENSE](LICENSE) for full terms.

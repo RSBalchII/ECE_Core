@@ -101,6 +101,7 @@ export interface IngestAtom {
   id: string;
   content: string;
   sourceId: string;
+  sourcePath: string; // Preservation of original context
   sequence: number;
   timestamp: number;
   provenance: 'sovereign' | 'external';

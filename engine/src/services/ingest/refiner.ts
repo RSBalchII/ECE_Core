@@ -10,6 +10,7 @@ export interface Atom {
     id: string;
     content: string;
     sourceId: string;
+    sourcePath: string;
     sequence: number;
     timestamp: number;
     provenance: 'sovereign' | 'external';
@@ -181,6 +182,7 @@ export async function refineContent(rawBuffer: Buffer | string, filePath: string
                 id: `atom_${idHash}`,
                 content: content,
                 sourceId: sourceId,
+                sourcePath: normalizedPath,
                 sequence: index,
                 timestamp: timestamp,
                 provenance: provenance,
@@ -226,6 +228,7 @@ export async function refineContent(rawBuffer: Buffer | string, filePath: string
                 id: `atom_${idHash}`,
                 content: content,
                 sourceId: sourceId,
+                sourcePath: normalizedPath,
                 sequence: atomIndex,
                 timestamp: timestamp,
                 provenance: provenance,

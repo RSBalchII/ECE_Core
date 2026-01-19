@@ -57,3 +57,13 @@ We replace the Vector Layer with a **Graph-Based Associative Retrieval** protoco
 
 ### The "Lazy Tax" Mitigation
 To ensure graph connectivity even when users fail to tag notes manually, the **Dreamer Service** should be employed to auto-tag atoms during idle cycles, ensuring a dense node-edge-node graph.
+
+## The Projection: Mirror 2.0 (The Tangible Graph)
+To audit and browse the graph without database tools, the engine projects its internal state onto the filesystem.
+
+1. **Structure**: `@bucket/#tag/[Source_Name]_[PathHash].md`
+2. **Bundling**: Atoms are bundled by source and tag to prevent file explosion. 
+3. **Pagination**: Each bundle is limited to **100 atoms** (approx. 150-300KB) to ensure high readability and fast loading.
+4. **Sync Trigger**: Mirror synchronizes immediately after every successful ingestion and during every Dreamer cycle.
+5. **Wipe Policy**: The `mirrored_brain` directory is explicitly wiped before synchronization.
+6. **Navigation**: Uses `## [ID] Snippet` headers and horizontal rules to separate atoms within a bundle.

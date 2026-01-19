@@ -74,7 +74,7 @@ export async function lookupByEngram(key: string): Promise<string[]> {
  * 1. Anchor (70%): Find direct text matches (FTS).
  * 2. Walk (30%): Find neighbors that share specific tags with the Anchors.
  */
-async function tagWalkerSearch(
+export async function tagWalkerSearch(
   query: string,
   buckets: string[] = [],
   _maxChars: number = 524288

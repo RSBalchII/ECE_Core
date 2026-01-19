@@ -175,6 +175,14 @@ async function processFile(filePath: string, event: string) {
 
         if (atomsToIngest.length > 0 || idsToDelete.length > 0) {
             console.log(`[Watchdog] Sync Complete: ${relativePath}`);
+
+            // Trigger Mirror Protocol for Near-Real-Time visibility
+            try {
+                const { createMirror } = await import('../mirror/mirror.js');
+                await createMirror();
+            } catch (mirrorError: any) {
+                console.error(`[Watchdog] Mirror Protocol trigger failed:`, mirrorError.message);
+            }
         } else {
             console.log(`[Watchdog] No atom changes detected (Metadata update only).`);
         }
