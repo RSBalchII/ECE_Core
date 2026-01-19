@@ -107,7 +107,8 @@ export function setupRoutes(app: Application) {
         undefined,
         body.buckets,
         body.max_chars || 5000,
-        body.deep || false
+        body.deep || false,
+        body.provenance || 'all'
       );
 
       // Construct standard response
