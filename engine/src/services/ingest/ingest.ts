@@ -111,7 +111,7 @@ export interface IngestAtom {
   sourcePath: string; // Preservation of original context
   sequence: number;
   timestamp: number;
-  provenance: 'sovereign' | 'external';
+  provenance: 'sovereign' | 'external' | 'quarantine';
   embedding?: number[];
   hash?: string; // Explicit hash to avoid ID-based guessing
   tags?: string[]; // <--- NEW FIELD
@@ -162,13 +162,17 @@ export async function ingestAtoms(
   console.log(`[Ingest] Starting DB Write for ${rows.length} atoms (${totalBatches} batches)...`);
 
   for (let i = 0; i < rows.length; i += chunkSize) {
-    // const batchNum = Math.floor(i / chunkSize) + 1;
+    const batchNum = Math.floor(i / chunkSize) + 1;
     const chunk = rows.slice(i, i + chunkSize);
     try {
       await db.run(`
         ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] <- $data
         :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}
       `, { data: chunk });
+
+      if (batchNum % 10 === 0 || batchNum === totalBatches) {
+        console.log(`[Ingest] Batch ${batchNum}/${totalBatches} written.`);
+      }
     } catch (e: any) {
       console.error(`[Ingest] Batch insert failed: ${e.message}`);
       throw e;

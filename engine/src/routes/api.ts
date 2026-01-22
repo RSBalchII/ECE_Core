@@ -92,6 +92,61 @@ export function setupRoutes(app: Application) {
     }
   });
 
+  // POST Quarantine Atom (Standard 073)
+  app.post('/v1/atoms/:id/quarantine', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      if (!id) {
+        res.status(400).json({ error: 'Atom ID is required' });
+        return;
+      }
+
+      console.log(`[API] Quarantining Atom: ${id}`);
+
+      // Update Provenance + Add Tag
+      // We use a transaction-like update: Read -> Modify -> Write
+      // 1. Get current record
+      const check = await db.run(`?[tags] := *memory{id, tags}, id = $id`, { id });
+      if (!check.rows || check.rows.length === 0) {
+        res.status(404).json({ error: 'Atom not found' });
+        return;
+      }
+
+      const currentTags = check.rows[0][0] as string[];
+      const newTags = [...new Set([...currentTags, '#manually_quarantined'])];
+
+      // 2. Update Record (CozoDB :put overwrites existing key)
+      // We only update provenance and tags. Other fields remain same?
+      // No, :put replaces the whole tuple. We must read ALL fields first.
+
+      const fullRecord = await db.run(`?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] := *memory{id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}, id = $id`, { id });
+
+      if (!fullRecord.rows || fullRecord.rows.length === 0) {
+        res.status(500).json({ error: 'Read-Modify-Write failed' });
+        return;
+      }
+
+      const row = fullRecord.rows[0];
+      // row indices: 0:id, 1:ts, 2:content, 3:source, 4:sid, 5:seq, 6:type, 7:hash, 8:buckets, 9:epochs, 10:tags, 11:provenance, 12:embedding
+
+      const updatedRow = [...row];
+      updatedRow[10] = newTags;      // Update Tags
+      updatedRow[11] = 'quarantine'; // Update Provenance
+
+      await db.run(
+        `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] <- $data 
+         :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}`,
+        { data: [updatedRow] }
+      );
+
+      res.status(200).json({ status: 'success', message: `Atom ${id} quarantined.` });
+
+    } catch (e: any) {
+      console.error(`[API] Quarantine Failed: ${e.message}`);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // POST Search endpoint (Standard UniversalRAG)
   app.post('/v1/memory/search', async (req: Request, res: Response) => {
     try {

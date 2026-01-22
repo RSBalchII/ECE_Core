@@ -19,7 +19,7 @@ export interface Atom {
     sourcePath: string;
     sequence: number;
     timestamp: number;
-    provenance: 'sovereign' | 'external';
+    provenance: 'sovereign' | 'external' | 'quarantine';
     embedding?: number[];
     tags: string[]; // <--- NEW: Supports Project Root Extraction
 }
@@ -142,6 +142,14 @@ function cleanseJsonArtifacts(text: string, filePath: string): string {
     clean = clean.replace(/___CODE_BLOCK_PLACEHOLDER___(\d+)___/g, (match, index) => {
         return codeBlocks[parseInt(index)] || match;
     });
+
+    // 8. Slash Compressor (Context Hygiene)
+    // Collapses "C:\\\\\\\\Users" -> "C:/Users" to save tokens
+    const beforeSlash = clean.length;
+    clean = clean.replace(/\\{2,}/g, '/');
+    if (clean.length < beforeSlash) {
+        // console.log(`[Refiner] Slash Compressor saved ${beforeSlash - clean.length} chars.`);
+    }
 
     if (stats.metaKeys > 0 || stats.wrappers > 0 || stats.escapes > 0) {
         console.log(`[Refiner] Key Assassin Report for ${filePath}: Removed ${stats.metaKeys} Metadata Keys, ${stats.wrappers} Wrappers, and processed ${stats.escapes} escape chars.`);
@@ -281,6 +289,8 @@ export async function refineContent(rawBuffer: Buffer | string, filePath: string
         provenance = 'external';
     }
 
+    // ... inside refineContent loop
+
     return rawAtoms.map((content, index) => {
         const idHash = crypto.createHash('sha256')
             .update(sourceId + index.toString() + content)
@@ -289,7 +299,28 @@ export async function refineContent(rawBuffer: Buffer | string, filePath: string
 
         // DYNAMIC SCAN: Check this specific atom's content for keywords
         const contentTags = scanForSovereignTags(content, keywords);
-        const finalTags = [...new Set([...autoTags, ...contentTags])];
+        let finalTags = [...new Set([...autoTags, ...contentTags])];
+
+        // QUARANTINE HEURISTICS
+        let atomProvenance: 'sovereign' | 'external' | 'quarantine' = provenance;
+
+        // 1. "Processing..." Log Spam Detection
+        const lines = content.split('\n');
+        const processingLines = lines.filter(l => l.trim().startsWith("Processing '") || l.trim().includes("... Processing '"));
+        if (processingLines.length > 5 || (lines.length > 0 && processingLines.length / lines.length > 0.3)) {
+            atomProvenance = 'quarantine';
+            finalTags.push('#needs_review', '#log_spam');
+            // console.log(`[Refiner] Quarantined atom_${idHash} (Log Spam)`);
+        }
+
+        // 2. Excessive File Path Lists (Generic)
+        // If > 50% of lines look like file paths
+        const pathLines = lines.filter(l => l.includes('/') || l.includes('\\'));
+        if (lines.length > 10 && (pathLines.length / lines.length > 0.6)) {
+            // Slightly weaker check, so maybe just tag it for now unless it's obviously junk
+            // atomProvenance = 'quarantine'; 
+            // finalTags.push('#potential_junk'); 
+        }
 
         return {
             id: `atom_${idHash}`,
@@ -298,9 +329,9 @@ export async function refineContent(rawBuffer: Buffer | string, filePath: string
             sourcePath: normalizedPath,
             sequence: index,
             timestamp: timestamp,
-            provenance: provenance,
+            provenance: atomProvenance,
             embedding: [],
-            tags: finalTags // <--- INJECT DYNAMICALLY SCANNED TAGS
+            tags: finalTags
         };
     });
 }

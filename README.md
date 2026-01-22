@@ -149,6 +149,37 @@ node read_all.js <path_to_project_root>
 *   Auto-tags them with `#code`, `#doc`, and `#project:{name}`.
 *   Enables precise filtering (Code vs. Docs) even for massive codebases.
 
+## 🛡️ Data Hygiene & Tagging (Standard 073)
+
+The engine implements a rigorous "Immune System" to ensure your context remains clean and high-signal.
+
+### 1. The Dual Inboxes (Provenance)
+*   **`notebook/inbox/`**: For **Sovereign Data** (Your notes, code, thoughts).
+    *   **Trust Score**: High (2.0x - 3.0x Boost).
+    *   **Use Case**: Manual drops, Obsidian vault sync.
+*   **`notebook/external-inbox/`**: For **External Data** (Web scrapes, news, documentation).
+    *   **Trust Score**: Low (supporting evidence only).
+    *   **Use Case**: News Agent outputs, documentation dumps.
+
+### 2. Sovereign Tags (`context/sovereign_tags.json`)
+You can define specific keywords that should ALWAYS trigger a tag, regardless of context.
+*   **Config**: Edit `context/sovereign_tags.json`.
+*   **Behavior**: If the Refiner sees the word "Sybil" in an atom, it stamps it with `#Sybil`.
+*   **Benefit**: Ensures your core terminology is always indexed for retrieval.
+
+### 3. Automatic Project Tagging
+The engine reads your file paths to generate context.
+*   Path: `notebook/inbox/Job-Context/Resume.md`
+*   Resulting Tags: `#project:Job-Context`, `#inbox`, `#Sovereign`
+*   **Tip**: Organize your files into named folders to automatically categorize them.
+
+### 4. The Refiner's "Key Assassin"
+The engine automatically strips:
+*   JSON Metadata wrappers (`"response_content": "..."`)
+*   Excessive backslashes (`C:\\\\Users` -> `C:/Users`)
+*   "Thinking" logs from LLM outputs.
+*   **Result**: You can dump raw logs into the inbox, and the engine will distill the actual content.
+
 ---
 
 ## 🧠 Querying Best Practices

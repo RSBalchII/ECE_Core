@@ -58,6 +58,21 @@ const SearchPage = () => {
     }
   };
 
+  const handleQuarantine = async (id: string) => {
+    if (!confirm('Quarantine this atom? It will be tagged #manually_quarantined.')) return;
+
+    // Optimistic UI Update
+    setResults(prev => prev.filter(r => r.id !== id));
+    setMetadata((prev: any) => prev ? ({ ...prev, atomCount: prev.atomCount - 1 }) : null);
+
+    try {
+      await fetch(`/v1/atoms/${id}/quarantine`, { method: 'POST' });
+    } catch (e) {
+      console.error('Quarantine failed', e);
+      alert('Failed to quarantine atom server-side.');
+    }
+  };
+
   const handleSearch = async () => {
     if (!query.trim()) return;
     setLoading(true);
@@ -103,6 +118,11 @@ const SearchPage = () => {
     <div className="glass-panel" style={{ margin: '2rem', padding: '2rem', height: 'calc(100% - 4rem)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Memory Search</h2>
+        {/* ... (Previous header content) ... */}
+
+// ... (Skip down to line 253 inside the map loop) ...
+
+
 
         {/* Helper Controls */}
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -259,9 +279,18 @@ const SearchPage = () => {
                   {(r.score || 0).toFixed(2)}
                 </span>
               </div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
-                {r.source}
-              </span>
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                  {r.source}
+                </span>
+                <button
+                  onClick={() => handleQuarantine(r.id)}
+                  title="Quarantine this atom"
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1rem', opacity: 0.6 }}
+                >
+                  🚫
+                </button>
+              </div>
             </div>
             <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', lineHeight: '1.5', maxHeight: '300px', overflowY: 'auto' }}>
               {r.content}
