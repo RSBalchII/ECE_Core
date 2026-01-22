@@ -70,6 +70,12 @@ async function startServer() {
     await db.init();
     console.log('Database initialized successfully');
 
+    // Start the server immediately (Standard: Localhost Load First)
+    app.listen(PORT, () => {
+      console.log(`Sovereign Context Engine running on port ${PORT}`);
+      console.log(`Health check available at http://localhost:${PORT}/health`);
+    });
+
     // Auto-Restore logic
     try {
       const { listBackups, restoreBackup } = await import('./services/backup/backup.js');
@@ -96,6 +102,15 @@ async function startServer() {
     const { config } = await import('./config/index.js');
 
     console.log(`[Startup] Initializing Dreamer (Interval: ${config.DREAM_INTERVAL_MS}ms)...`);
+
+    // Trigger immediately on startup (Standard 072)
+    try {
+      console.log('[Startup] Triggering immediate Dreamer cycle...');
+      await dream();
+    } catch (e: any) {
+      console.error(`[Startup] Immediate Dreamer cycle failed: ${e.message}`);
+    }
+
     setInterval(async () => {
       try {
         const result = await dream();
@@ -107,11 +122,7 @@ async function startServer() {
       }
     }, config.DREAM_INTERVAL_MS);
 
-    // Start the server
-    app.listen(PORT, () => {
-      console.log(`Sovereign Context Engine running on port ${PORT}`);
-      console.log(`Health check available at http://localhost:${PORT}/health`);
-    });
+    // Start the server (Moved to top)
   } catch (error) {
     console.error('Failed to start the Sovereign Context Engine:', error);
     process.exit(1);

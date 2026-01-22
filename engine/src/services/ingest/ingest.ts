@@ -21,17 +21,24 @@ interface IngestOptions {
  * Determines the provenance of content based on its source
  */
 function determineProvenance(source: string, type?: string): 'sovereign' | 'external' | 'system' {
-  // If source comes from context/inbox/ or API with type 'user', it's sovereign
-  if (source.includes('context/inbox/') || type === 'user') {
+  const normalizedSource = source.replace(/\\/g, '/');
+
+  // 1. Explicit Trusted Inbox
+  if (normalizedSource.includes('internal-inbox/') || normalizedSource.includes('/sovereign/') || type === 'user') {
     return 'sovereign';
   }
 
-  // If source is from web scraping or bulk import, it's external
-  if (source.includes('web_scrape') || source.includes('bulk_import')) {
+  // 2. Explicit External Inbox
+  if (normalizedSource.includes('external-inbox/') || normalizedSource.includes('web_scrape') || normalizedSource.includes('news_agent') || type === 'external') {
     return 'external';
   }
 
-  // Default to external for most cases
+  // 3. Main Inbox Fallback (Treat as Sovereign for manual user drops)
+  if (normalizedSource.includes('/inbox/')) {
+    return 'sovereign';
+  }
+
+  // Default to external for unknown sources
   return 'external';
 }
 
@@ -107,6 +114,7 @@ export interface IngestAtom {
   provenance: 'sovereign' | 'external';
   embedding?: number[];
   hash?: string; // Explicit hash to avoid ID-based guessing
+  tags?: string[]; // <--- NEW FIELD
 }
 
 /**
@@ -116,12 +124,16 @@ export async function ingestAtoms(
   atoms: IngestAtom[],
   source: string,
   buckets: string[] = ['core'],
-  tags: string[] = []
+  tags: string[] = [] // Batch-level tags (e.g., "inbox")
 ): Promise<number> {
 
   if (atoms.length === 0) return 0;
 
   const rows = atoms.map(atom => {
+    // MERGE: Combine Batch Tags + Atom-Specific Tags (Deduplicated)
+    const atomSpecificTags = atom.tags || [];
+    const finalTags = [...new Set([...tags, ...atomSpecificTags])];
+
     // Schema: id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding
     return [
       atom.id,
@@ -131,12 +143,14 @@ export async function ingestAtoms(
       atom.sourceId,
       atom.sequence,
       'text', // Type
-      atom.hash || atom.id.replace('atom_', ''), // Use explicit hash or fallback
+      atom.hash || atom.id.replace('atom_', ''),
       buckets,
       [], // epochs
-      tags,
+      finalTags, // <--- Use the merged tags
       atom.provenance,
-      atom.embedding || new Array(config.MODELS.EMBEDDING_DIM).fill(0.1)
+      (atom.embedding && atom.embedding.length === config.MODELS.EMBEDDING_DIM)
+        ? atom.embedding
+        : new Array(config.MODELS.EMBEDDING_DIM).fill(0.1) // Zero-stub if embeddings disabled
     ];
   });
 
@@ -148,46 +162,34 @@ export async function ingestAtoms(
   console.log(`[Ingest] Starting DB Write for ${rows.length} atoms (${totalBatches} batches)...`);
 
   for (let i = 0; i < rows.length; i += chunkSize) {
-    const batchNum = Math.floor(i / chunkSize) + 1;
-    if (batchNum % 10 === 0 || batchNum === 1 || batchNum === totalBatches) {
-      console.log(`[Ingest] Writing batch ${batchNum}/${totalBatches}...`);
-    }
+    // const batchNum = Math.floor(i / chunkSize) + 1;
     const chunk = rows.slice(i, i + chunkSize);
     try {
-      if (chunk.length > 0) {
-        const sampleEmbedding = chunk[0][12] as number[];
-        if (sampleEmbedding.length !== config.MODELS.EMBEDDING_DIM) {
-          console.warn(`[Ingest] WARNING: Embedding dimension mismatch! Schema: ${config.MODELS.EMBEDDING_DIM}, Actual: ${sampleEmbedding.length}`);
-        }
-      }
       await db.run(`
-                ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] <- $data
-                :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}
-             `, { data: chunk });
+        ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] <- $data
+        :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}
+      `, { data: chunk });
     } catch (e: any) {
       console.error(`[Ingest] Batch insert failed: ${e.message}`);
-      throw e; // RETHROW to abort Watchdog update
+      throw e;
     }
 
-    // Standard 059: Batch Read-After-Write Verification
+    // Standard 059: Verification
     try {
-      const chunkIds = chunk.map(row => row[0]); // row[0] is id
+      const chunkIds = chunk.map(row => row[0]);
       const chunkIdsStr = JSON.stringify(chunkIds);
       const verifyQuery = `?[id] := *memory{id}, id in ${chunkIdsStr}`;
       const verifyResult = await db.run(verifyQuery);
-
       const count = verifyResult.rows ? verifyResult.rows.length : 0;
 
       if (count !== chunk.length) {
-        const errorMsg = `[Ingest] CRITICAL: Batch Verification Failed! Inserted: ${chunk.length}, Verified: ${count}. Potential Ghost Data.`;
-        console.error(errorMsg);
-        throw new Error(errorMsg); // STRICT MODE: Fail fast.
+        throw new Error(`[Ingest] CRITICAL: Verification Failed! Inserted: ${chunk.length}, Verified: ${count}.`);
       } else {
         inserted += count;
       }
     } catch (verifyError: any) {
       console.error(`[Ingest] Verification Query Failed: ${verifyError.message}`);
-      throw verifyError; // RETHROW
+      throw verifyError;
     }
   }
 

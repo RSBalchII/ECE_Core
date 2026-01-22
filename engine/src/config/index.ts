@@ -104,7 +104,7 @@ const DEFAULT_CONFIG: Config = {
   TOKEN_LIMIT: 1000000,
   DREAMER_BATCH_SIZE: parseInt(process.env['DREAMER_BATCH_SIZE'] || "5"),
 
-  VECTOR_INGEST_BATCH: parseInt(process.env['VECTOR_INGEST_BATCH'] || "500"),
+  VECTOR_INGEST_BATCH: parseInt(process.env['VECTOR_INGEST_BATCH'] || "50"),
 
   // Extrapolated Settings
   WATCHER_DEBOUNCE_MS: parseInt(process.env['WATCHER_DEBOUNCE_MS'] || "2000"),

@@ -26,14 +26,21 @@ export async function startWatchdog() {
     }
 
     const inbox = path.join(NOTEBOOK_DIR, 'inbox');
-    console.log(`[Watchdog] Starting watch on: ${inbox}`);
+    const externalInbox = path.join(NOTEBOOK_DIR, 'external-inbox');
+
+    console.log(`[Watchdog] Starting watch on: ${inbox} and ${externalInbox}`);
 
     if (!fs.existsSync(inbox)) {
         console.warn(`[Watchdog] Inbox directory not found: ${inbox}. Skipping watch.`);
         return;
     }
 
-    watcher = chokidar.watch(inbox, {
+    // Auto-create external inbox if missing
+    if (!fs.existsSync(externalInbox)) {
+        fs.mkdirSync(externalInbox, { recursive: true });
+    }
+
+    watcher = chokidar.watch([inbox, externalInbox], {
         ignored: IGNORE_PATTERNS,
         persistent: true,
         ignoreInitial: false, // Force scan on start to ingest existing files

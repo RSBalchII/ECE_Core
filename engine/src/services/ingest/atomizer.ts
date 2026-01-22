@@ -58,16 +58,16 @@ export function atomizeContent(text: string, strategy: 'code' | 'prose' | 'blob'
     for (const block of rawBlocks) {
         if (block.trim().length === 0) continue;
 
-        // 2. Secondary Split: Length Constraint (1000 chars)
+        // 2. Secondary Split: Length Constraint (800 chars)
         // If a paragraph is massive, we chop it by sentence.
-        if (block.length > 1000) {
+        if (block.length > 800) {
             // Split by sentence endings (. ! ? ) followed by space or end of string
             const sentences = block.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) || [block];
 
             let currentChunk = "";
 
             for (const sentence of sentences) {
-                if ((currentChunk + sentence).length > 1000) {
+                if ((currentChunk + sentence).length > 800) {
                     if (currentChunk.trim().length > 0) {
                         atoms.push(currentChunk.trim());
                     }

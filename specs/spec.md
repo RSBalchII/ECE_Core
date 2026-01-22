@@ -28,7 +28,8 @@ graph TD
         Watcher --> Refiner[Refiner Service]
         
         subgraph "Ingestion Pipeline"
-            Refiner -->|Sanitize| Atomizer[Atomizer]
+            Refiner -->|Sanitize| Assassin[Key Assassin]
+            Assassin -->|Clean| Atomizer[Atomizer]
             Atomizer -->|Zero-Vector Stub| Cozo
         end
         

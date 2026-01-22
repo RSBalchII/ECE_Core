@@ -11,6 +11,11 @@
 import { db } from '../../core/db.js';
 import { createHash } from 'crypto';
 import { composeRollingContext } from '../../core/inference/context_manager.js';
+import wink from 'wink-nlp';
+import model from 'wink-eng-lite-web-model';
+
+// Initialize NLP (Fast CPU-based)
+const nlp = wink(model);
 
 interface SearchResult {
   id: string;
@@ -89,6 +94,31 @@ function sanitizeFtsQuery(query: string): string {
 }
 
 /**
+ * Natural Language Parser (Standard 070)
+ * Uses NLP to extract "Meaningful Tags" (Nouns, Proper Nouns, Important Verbs).
+ * This prevents common words ("lately", "been", "working") from killing FTS recall.
+ */
+function parseNaturalLanguage(query: string): string {
+  const doc = nlp.readDoc(query);
+
+  // Extract Nouns and Proper Nouns (The "Subjects")
+  // We treat these as the core search tags.
+  const nouns = doc.tokens().filter((t: any) => {
+    const tag = t.out(nlp.its.pos);
+    return tag === 'NOUN' || tag === 'PROPN' || tag === 'ADJ';
+  }).out((nlp as any).its.text);
+
+  // If we extracted valid tags, use them. 
+  // Otherwise fallback to the original query (sanitized).
+  if (nouns.length > 0) {
+    // Deduplicate and join
+    return [...new Set(nouns)].join(' ').toLowerCase();
+  }
+
+  return sanitizeFtsQuery(query);
+}
+
+/**
  * Create or update an engram (lexical sidecar) for fast entity lookup
  */
 export async function createEngram(key: string, memoryIds: string[]): Promise<void> {
@@ -124,6 +154,7 @@ export async function lookupByEngram(key: string): Promise<string[]> {
 export async function tagWalkerSearch(
   query: string,
   buckets: string[] = [],
+  tags: string[] = [],
   _maxChars: number = 524288
 ): Promise<SearchResult[]> {
   try {
@@ -137,10 +168,11 @@ export async function tagWalkerSearch(
             *memory{id, content, source, timestamp, buckets, tags, epochs, provenance},
             score = 70.0 * fts_score
             ${buckets.length > 0 ? ', length(intersection(buckets, $buckets)) > 0' : ''}
+            ${tags.length > 0 ? ', length(intersection(tags, $tags)) > 0' : ''}
             :limit 20
         `;
 
-    const anchorResult = await db.run(anchorQuery, { query: sanitizedQuery, buckets });
+    const anchorResult = await db.run(anchorQuery, { query: sanitizedQuery, buckets, tags });
     if (!anchorResult.rows || anchorResult.rows.length === 0) return [];
 
     // Map Anchors
@@ -167,11 +199,12 @@ export async function tagWalkerSearch(
             *memory{id, content, source, timestamp, buckets, tags, epochs, provenance},
             tag in tags,
             id != anchor_id,
+            ${tags.length > 0 ? 'length(intersection(tags, $tags)) > 0,' : ''} 
             score = 30.0
             :limit 10
         `;
 
-    const walkResult = await db.run(walkQuery, { anchorIds });
+    const walkResult = await db.run(walkQuery, { anchorIds, tags });
     const neighbors = (walkResult.rows || []).map((row: any[]) => ({
       id: row[0],
       content: row[1],
@@ -197,7 +230,7 @@ export async function tagWalkerSearch(
  */
 export async function executeSearch(
   query: string,
-  bucket?: string,
+  _bucket?: string,
   buckets?: string[],
   maxChars: number = 524288,
   _deep: boolean = false,
@@ -205,36 +238,74 @@ export async function executeSearch(
 ): Promise<{ context: string; results: SearchResult[]; toAgentString: () => string; metadata?: any }> {
   console.log(`[Search] executeSearch (Expanded Tag-Walker) called with provenance: ${provenance}`);
 
-  // 0. QUERY EXPANSION (Phase 0 - Standard 069)
-  const expansionTags = await expandQuery(query);
-  const expandedQuery = expansionTags.length > 0 ? `${query} ${expansionTags.join(' ')}` : query;
+  // 0. PRE-PROCESS: Extract Scope Tags (e.g., #code, #doc)
+  // We manually extract them because NLP strips them as noise.
+  const scopeTags: string[] = [];
+  const queryParts = query.split(/\s+/);
+  const cleanQueryParts: string[] = [];
+
+  for (const part of queryParts) {
+    if (part.startsWith('#')) {
+      scopeTags.push(part); // Keep the hash!
+    } else {
+      cleanQueryParts.push(part);
+    }
+  }
+  const cleanQuery = cleanQueryParts.join(' ');
+
+  // Separate actual Buckets (folders) from Tags (hashtags)
+  const realBuckets = buckets || [];
+
+  // Log the split
+  console.log(`[Search] Query: "${cleanQuery}", Tags: [${scopeTags.join(', ')}], Buckets: [${realBuckets.join(', ')}]`);
+
+  // 0. NATURAL LANGUAGE PARSING (Standard 070)
+  // Strip stop words from the query for better FTS performance
+  // Use the CLEANED query (without tags)
+  const parsedQuery = parseNaturalLanguage(cleanQuery);
+  if (parsedQuery !== cleanQuery) {
+    console.log(`[Search] NLP Parsed Query: "${cleanQuery}" -> "${parsedQuery}"`);
+  }
+
+  // 0.5. QUERY EXPANSION (Phase 0 - Standard 069)
+  const expansionTags = await expandQuery(cleanQuery);
+  const expandedQuery = expansionTags.length > 0 ? `${parsedQuery} ${expansionTags.join(' ')}` : parsedQuery;
   console.log(`[Search] Optimized Query: ${expandedQuery}`);
 
-  const targetBuckets = buckets || (bucket ? [bucket] : []);
-
   // 1. ENGRAM LOOKUP
-  const engramResults = await lookupByEngram(query);
+  const engramResults = await lookupByEngram(cleanQuery);
   let finalResults: SearchResult[] = [];
   const includedIds = new Set<string>();
 
   if (engramResults.length > 0) {
-    console.log(`[Search] Found ${engramResults.length} via Engram: ${query}`);
+    // ... (logic remains same)
+    console.log(`[Search] Found ${engramResults.length} via Engram: ${cleanQuery}`);
     const engramContextQuery = `?[id, content, source, timestamp, buckets, tags, epochs, provenance] := *memory{id, content, source, timestamp, buckets, tags, epochs, provenance}, id in $ids`;
     const engramContentResult = await db.run(engramContextQuery, { ids: engramResults });
     if (engramContentResult.rows) {
       engramContentResult.rows.forEach((row: any[]) => {
         if (!includedIds.has(row[0])) {
-          finalResults.push({
-            id: row[0], content: row[1], source: row[2], timestamp: row[3], buckets: row[4], tags: row[5], epochs: row[6], provenance: row[7], score: 200
-          });
-          includedIds.add(row[0]);
+          // Basic check: Does this engram result match the tags?
+          const rowTags = row[5] as string[];
+          const rowBuckets = row[4] as string[];
+
+          const matchesTags = scopeTags.every(t => rowTags.includes(t));
+          const matchesBuckets = realBuckets.every(b => rowBuckets.includes(b));
+
+          if ((scopeTags.length === 0 || matchesTags) && (realBuckets.length === 0 || matchesBuckets)) {
+            finalResults.push({
+              id: row[0], content: row[1], source: row[2], timestamp: row[3], buckets: row[4], tags: row[5], epochs: row[6], provenance: row[7], score: 200
+            });
+            includedIds.add(row[0]);
+          }
         }
       });
     }
   }
 
   // 2. TAG-WALKER SEARCH (Hybrid FTS + Graph)
-  const walkerResults = await tagWalkerSearch(expandedQuery, targetBuckets, maxChars);
+  // Pass both buckets and tags explicitely
+  const walkerResults = await tagWalkerSearch(expandedQuery, realBuckets, scopeTags, maxChars);
 
   // Merge and Apply Provenance Boosting
   walkerResults.forEach(r => {

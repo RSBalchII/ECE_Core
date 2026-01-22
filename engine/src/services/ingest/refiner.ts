@@ -1,10 +1,16 @@
+// engine/src/services/ingest/refiner.ts
 
+import * as fs from 'fs';
+import * as path from 'path';
 import * as crypto from 'crypto';
+import { fileURLToPath } from 'url';
 import { atomizeContent as rawAtomize } from './atomizer.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Atom Interface
- * Represents a single unit of thought/memory.
  */
 export interface Atom {
     id: string;
@@ -14,142 +20,277 @@ export interface Atom {
     sequence: number;
     timestamp: number;
     provenance: 'sovereign' | 'external';
-    embedding?: number[]; // Deprecated, kept for schema compatibility (zero-filled)
+    embedding?: number[];
+    tags: string[]; // <--- NEW: Supports Project Root Extraction
+}
+
+// Variable to cache sovereign keywords
+let cachedSovereignKeywords: string[] | null = null;
+
+/**
+ * Helper: Load Sovereign Keywords from context/sovereign_tags.json
+ */
+function loadSovereignKeywords(): string[] {
+    if (cachedSovereignKeywords) return cachedSovereignKeywords;
+
+    try {
+        const possiblePaths = [
+            path.join(process.cwd(), 'context', 'sovereign_tags.json'),
+            path.join(process.cwd(), '..', 'context', 'sovereign_tags.json'),
+            path.join(__dirname, '../../../../context/sovereign_tags.json')
+        ];
+
+        for (const p of possiblePaths) {
+            if (fs.existsSync(p)) {
+                const content = fs.readFileSync(p, 'utf-8');
+                const json = JSON.parse(content);
+                if (Array.isArray(json.keywords)) {
+                    console.log(`[Refiner] Loaded ${json.keywords.length} Sovereign Keywords from ${p}`);
+                    cachedSovereignKeywords = json.keywords;
+                    return cachedSovereignKeywords!;
+                }
+            }
+        }
+
+        console.warn(`[Refiner] sovereign_tags.json not found in expected paths.`);
+        cachedSovereignKeywords = [];
+        return [];
+    } catch (e) {
+        console.error(`[Refiner] Failed to load sovereign_tags.json:`, e);
+        return [];
+    }
+}
+
+/**
+ * Helper: Scan content for keywords and return relevant tags
+ */
+function scanForSovereignTags(content: string, keywords: string[]): string[] {
+    const foundTags: string[] = [];
+    const lowerContent = content.toLowerCase();
+
+    for (const keyword of keywords) {
+        // Simple case-insensitive check.
+        if (lowerContent.includes(keyword.toLowerCase())) {
+            foundTags.push(`#${keyword}`);
+        }
+    }
+    return foundTags;
+}
+
+/**
+ * HELPER: The Key Assassin
+ * Surgically removes JSON wrapper noise without breaking code brackets.
+ */
+function cleanseJsonArtifacts(text: string, filePath: string): string {
+    let clean = text;
+    const stats = {
+        metaKeys: 0,
+        wrappers: 0,
+        escapes: 0
+    };
+
+    // 1. Recursive Un-escape (Run this FIRST to reveal hidden keys and fix code formatting)
+    let pass = 0;
+    while (clean.includes('\\') && pass < 3) {
+        pass++;
+        const beforeLen = clean.length;
+        clean = clean.replace(/\\"/g, '"');
+        clean = clean.replace(/\\n/g, '\n');
+        clean = clean.replace(/\\t/g, '\t');
+        if (clean.length < beforeLen) stats.escapes += (beforeLen - clean.length);
+    }
+
+    // 2. Code Block Protection (Masking)
+    const codeBlocks: string[] = [];
+    const PLACEHOLDER = '___CODE_BLOCK_PLACEHOLDER___';
+
+    clean = clean.replace(/```[\s\S]*?```/g, (match) => {
+        codeBlocks.push(match);
+        return `${PLACEHOLDER}${codeBlocks.length - 1}___`;
+    });
+
+    // Helper to count and replace
+    const purge = (pattern: RegExp, type: 'metaKeys' | 'wrappers' | 'escapes') => {
+        const matches = clean.match(pattern);
+        if (matches) {
+            stats[type] += matches.length;
+            clean = clean.replace(pattern, '');
+        }
+    };
+
+    // 3. Remove known metadata keys (Only from non-code text)
+    purge(/"type"\s*:\s*"[^"]*",?/g, 'metaKeys');
+    purge(/"timestamp"\s*:\s*"[^"]*",?/g, 'metaKeys');
+    purge(/"source"\s*:\s*"[^"]*",?/g, 'metaKeys');
+
+    // 4. Remove the wrapper keys
+    purge(/"response_content"\s*:\s*/g, 'wrappers');
+    purge(/"thinking_content"\s*:\s*/g, 'wrappers');
+    purge(/"content"\s*:\s*/g, 'wrappers');
+
+    // 5. Structural cleanup
+    // Matches: }, {  OR  },{
+    clean = clean.replace(/\}\s*,\s*\{/g, '\n\n');
+
+    // 6. Clean up outer brackets
+    clean = clean.trim();
+    if (clean.startsWith('[') && clean.endsWith(']')) {
+        clean = clean.substring(1, clean.length - 1);
+    }
+
+    // 7. Restore Code Blocks (Unmasking)
+    clean = clean.replace(/___CODE_BLOCK_PLACEHOLDER___(\d+)___/g, (match, index) => {
+        return codeBlocks[parseInt(index)] || match;
+    });
+
+    if (stats.metaKeys > 0 || stats.wrappers > 0 || stats.escapes > 0) {
+        console.log(`[Refiner] Key Assassin Report for ${filePath}: Removed ${stats.metaKeys} Metadata Keys, ${stats.wrappers} Wrappers, and processed ${stats.escapes} escape chars.`);
+    }
+
+    return clean;
+}
+
+/**
+ * NEW: Project Root Extractor
+ * Automatically derives context tags from the file path.
+ */
+function extractProjectTags(filePath: string): string[] {
+    const tags: string[] = [];
+    const normalized = filePath.replace(/\\/g, '/');
+    const parts = normalized.split('/');
+
+    // 1. Project Tag (Root Folder)
+    // Assumption: path is relative to notebook/inbox or project root
+    if (parts[0] === 'codebase' && parts[1]) {
+        tags.push(`#project:${parts[1]}`);
+    }
+    // Fallback: If we are in ECE_Core root
+    else if (process.cwd().includes('ECE_Core')) {
+        tags.push(`#project:ECE_Core`);
+    }
+
+    // 2. Structural Tags (src, specs, tests)
+    if (normalized.includes('/src/') || normalized.startsWith('src/')) tags.push('#src');
+    if (normalized.includes('/specs/') || normalized.startsWith('specs/')) tags.push('#specs');
+    if (normalized.includes('/tests/') || normalized.startsWith('tests/')) tags.push('#test');
+    if (normalized.includes('/docs/') || normalized.startsWith('docs/')) tags.push('#docs');
+
+    // 3. File Type Tags
+    if (normalized.endsWith('.ts') || normalized.endsWith('.js')) tags.push('#code');
+    if (normalized.endsWith('.md')) tags.push('#doc');
+
+    return tags;
 }
 
 /**
  * Refine Content
- * 
- * The Orchestrator for ingestion:
- * 1. Sanitizes Input (BOM, Encoding)
- * 2. Selects Strategy (Code vs Prose)
- * 3. Atomizes (via Atomizer)
- * 4. Enriches (Metadata injection)
  */
-
 export async function refineContent(rawBuffer: Buffer | string, filePath: string, options: { skipEmbeddings?: boolean } = {}): Promise<Atom[]> {
-    // Force skip embeddings per user directive (Tag-Walker architecture)
-    options.skipEmbeddings = true;
+    options.skipEmbeddings = true; // Tag-Walker Standard
 
     let cleanText = '';
 
+    // --- PHASE 1: BASIC DECODING ---
     if (Buffer.isBuffer(rawBuffer)) {
-        // DEBUG: Check raw buffer for nulls
-        let bufferNulls = 0;
-        for (let k = 0; k < Math.min(rawBuffer.length, 2000); k++) {
-            if (rawBuffer[k] === 0) bufferNulls++;
-        }
-        console.log(`[Refiner] Raw Buffer Analysis: Size=${rawBuffer.length}, First 2000 Nulls=${bufferNulls}`);
-
-        // 1. Check for BOM (Byte Order Mark)
-        if (rawBuffer.length >= 2) {
-            if (rawBuffer[0] === 0xFF && rawBuffer[1] === 0xFE) {
-                console.log(`[Refiner] Detected UTF-16 LE BOM. Decoding as UTF-16LE...`);
-                cleanText = rawBuffer.toString('utf16le');
-            } else if (rawBuffer[0] === 0xFE && rawBuffer[1] === 0xFF) {
-                console.log(`[Refiner] Detected UTF-16 BE BOM. Decoding as UTF-16BE...`);
-                // Node.js doesn't natively support utf16be in toString, swap bytes
-                const swapped = Buffer.alloc(rawBuffer.length);
-                for (let i = 0; i < rawBuffer.length; i += 2) {
-                    swapped[i] = rawBuffer[i + 1];
-                    swapped[i + 1] = rawBuffer[i];
-                }
-                cleanText = swapped.toString('utf16le');
-            } else {
-                // 2. Heuristic: Check for High Null Density (UTF-16 without BOM)
-                let nullCount = 0;
-                // Check start, middle, and end segments to be sure
-                const checkLen = Math.min(rawBuffer.length, 1000);
-                const midStart = Math.floor(rawBuffer.length / 2);
-                const midLen = Math.min(rawBuffer.length - midStart, 1000);
-
-                // Scan start
-                for (let i = 0; i < checkLen; i++) {
-                    if (rawBuffer[i] === 0x00) nullCount++;
-                }
-                // Scan middle
-                if (midLen > 0) {
-                    for (let i = midStart; i < midStart + midLen; i++) {
-                        if (rawBuffer[i] === 0x00) nullCount++;
-                    }
-                }
-
-                const totalChecked = checkLen + midLen;
-                const ratio = nullCount / totalChecked;
-
-                // If > 20% nulls, assume UTF-16LE
-                if (totalChecked > 10 && ratio > 0.2) {
-                    console.log(`[Refiner] Auto-detected UTF-16LE (Null Density: ${ratio.toFixed(2)}). Decoding as UTF-16LE...`);
-                    cleanText = rawBuffer.toString('utf16le');
-                } else {
-                    cleanText = rawBuffer.toString('utf8');
-                }
-            }
-        } else {
-            cleanText = rawBuffer.toString('utf8');
-        }
+        cleanText = rawBuffer.toString('utf8');
     } else {
         cleanText = rawBuffer;
     }
 
-    if (cleanText.charCodeAt(0) === 0xFEFF) {
-        cleanText = cleanText.slice(1);
-    }
-
-    // Encoding Correction: Aggressive Cleanup
-    cleanText = cleanText.replace(/[\u0000\uFFFD]/g, '');
-
-    // Normalize line endings
-    cleanText = cleanText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-    // 3. Heuristic Strategy Selection
-    const lineCount = cleanText.split('\n').length;
-    const avgLineLength = cleanText.length / (lineCount || 1);
+    // Remove BOM and Binary Trash
+    cleanText = cleanText.replace(/^\uFEFF/, '').replace(/[\u0000\uFFFD]/g, '');
+    cleanText = cleanText.replace(/\r\n/g, '\n');
 
     let strategy: 'code' | 'prose' | 'blob' = 'prose';
 
-    if (avgLineLength > 300 || cleanText.length > 50000 && lineCount < 50) {
-        console.log(`[Refiner] Detected BLOB content (Avg Line Len: ${avgLineLength.toFixed(0)}). Using 'blob' strategy.`);
+    // HEURISTIC FIX: Check for the specific schema keys
+    const isSourceCode = /\.(ts|tsx|js|jsx|py|rs|go|java|cpp|h|c)$/.test(filePath);
+
+    const isJsonLog = !isSourceCode && (
+        cleanText.includes('"response_content":') ||
+        (cleanText.includes('"type":') && cleanText.includes('"Coda')) ||
+        cleanText.includes('"thinking_content":')
+    );
+
+    if (isJsonLog || filePath.endsWith('.json')) {
+        console.log(`[Refiner] Detected JSON artifacts in ${filePath}. Attempting extraction...`);
+
+        try {
+            // STRATEGY A: Try Parsing (Perfect extraction)
+            let jsonText = cleanText;
+            if (!jsonText.trim().startsWith('[')) {
+                const arrayStart = jsonText.indexOf('[');
+                const arrayEnd = jsonText.lastIndexOf(']');
+                if (arrayStart !== -1 && arrayEnd !== -1) {
+                    jsonText = jsonText.substring(arrayStart, arrayEnd + 1);
+                }
+            }
+
+            const json = JSON.parse(jsonText);
+            const messages = Array.isArray(json) ? json : (json.messages || []);
+
+            if (Array.isArray(messages)) {
+                cleanText = messages.map((m: any) => {
+                    const role = (m.role || m.type || 'unknown').toUpperCase();
+                    // Prefer response_content, fallback to content
+                    const content = m.response_content || m.content || '';
+                    const ts = m.timestamp ? ` [${m.timestamp}]` : '';
+                    return `### ${role}${ts}\n${content}`;
+                }).join('\n\n');
+
+                // DOUBLE-TAP: Run the Assassin on the extracted text to catch nested artifacts
+                cleanText = cleanseJsonArtifacts(cleanText, filePath);
+            } else {
+                console.warn(`[Refiner] JSON Structure Mismatch for ${filePath}. Running Key Assassin...`);
+                cleanText = cleanseJsonArtifacts(cleanText, filePath);
+            }
+        } catch (e) {
+            // STRATEGY B: The Key Assassin (Fallback)
+            console.warn(`[Refiner] JSON Parse failed for ${filePath}. Running Key Assassin...`);
+            cleanText = cleanseJsonArtifacts(cleanText, filePath);
+        }
+    }
+
+    // --- PHASE 3: STRATEGY SELECTION ---
+    const lineCount = cleanText.split('\n').length;
+    const avgLineLength = cleanText.length / (lineCount || 1);
+
+    if (avgLineLength > 300 || (cleanText.length > 50000 && lineCount < 50)) {
         strategy = 'blob';
-    } else if (filePath.endsWith('.ts') || filePath.endsWith('.js') || filePath.endsWith('.py') || filePath.endsWith('.rs') || filePath.endsWith('.cpp')) {
+    } else if (/\.(ts|js|py|rs|cpp|c|h|go|java)$/.test(filePath)) {
         strategy = 'code';
     }
 
-    // 4. Atomize
+    // --- PHASE 4: ATOMIZATION ---
     const rawAtoms = rawAtomize(cleanText, strategy);
 
-    // FILTER: Remove atoms that look like garbage/binary (Last Line of Defense)
-    const validAtoms = rawAtoms.filter(atom => {
-        if (atom.indexOf('\u0000') !== -1) return false;
-        const badCharCount = (atom.match(/[\uFFFD]/g) || []).length;
-        if (badCharCount > 0 && (badCharCount / atom.length) > 0.05) return false;
-        const controlCharCount = (atom.match(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g) || []).length;
-        if (controlCharCount > 0 && (controlCharCount / atom.length) > 0.1) return false;
-        return true;
-    });
+    // GENERATE FILE-LEVEL TAGS ONCE
+    const autoTags = extractProjectTags(filePath);
 
-    if (rawAtoms.length !== validAtoms.length) {
-        console.warn(`[Refiner] GARBAGE COLLECTION: Dropped ${rawAtoms.length - validAtoms.length} atoms from ${filePath} (contained nulls or binary data).`);
-    }
+    // LOAD KEYWORDS ONCE (Cached)
+    const keywords = loadSovereignKeywords();
 
     const sourceId = crypto.createHash('md5').update(filePath).digest('hex');
     const timestamp = Date.now();
     const normalizedPath = filePath.replace(/\\/g, '/');
-    let provenance: 'sovereign' | 'external' = 'external';
 
-    if (normalizedPath.includes('/inbox') ||
-        normalizedPath.includes('/chat_logs') ||
-        normalizedPath.includes('/diary') ||
-        normalizedPath.includes('sovereign')) {
+    let provenance: 'sovereign' | 'external' = 'external';
+    if (normalizedPath.includes('/internal-inbox/') || normalizedPath.includes('sovereign/') || normalizedPath.includes('/inbox/')) {
         provenance = 'sovereign';
+    } else if (normalizedPath.includes('/external-inbox/') || normalizedPath.includes('news_agent')) {
+        provenance = 'external';
     }
 
-    // Return atoms without embeddings (Standard 071)
-    return validAtoms.map((content, index) => {
+    return rawAtoms.map((content, index) => {
         const idHash = crypto.createHash('sha256')
             .update(sourceId + index.toString() + content)
             .digest('hex')
             .substring(0, 16);
+
+        // DYNAMIC SCAN: Check this specific atom's content for keywords
+        const contentTags = scanForSovereignTags(content, keywords);
+        const finalTags = [...new Set([...autoTags, ...contentTags])];
+
         return {
             id: `atom_${idHash}`,
             content: content,
@@ -158,17 +299,12 @@ export async function refineContent(rawBuffer: Buffer | string, filePath: string
             sequence: index,
             timestamp: timestamp,
             provenance: provenance,
-            embedding: [] // Explicitly empty
+            embedding: [],
+            tags: finalTags // <--- INJECT DYNAMICALLY SCANNED TAGS
         };
     });
 }
 
-/**
- * Enriches a list of atoms with embeddings.
- * Used for differential ingestion (only embedding new/changed atoms).
- */
 export async function enrichAtoms(atoms: Atom[]): Promise<Atom[]> {
-    // Standard 071: No Embeddings. Return atoms as-is (embeddings are optional/zeros).
-    // This aligns with "Tag-Walker" architecture where we rely on Tags, not Vectors.
     return atoms;
 }

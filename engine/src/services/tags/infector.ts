@@ -83,6 +83,34 @@ function infectAtom(atom: { id: string, content: string, tags: string[] }, patte
         }
     });
 
+    // --- ENHANCEMENT: Temporal Auto-Tagging ---
+
+    // 1. Years (1900 - 2099)
+    // Regex matches 4 digits starting with 19 or 20, surrounded by boundaries
+    const yearMatches = text.match(/\b((?:19|20)\d{2})\b/g);
+    if (yearMatches) {
+        yearMatches.forEach(year => (!currentTags.has(year)) && (currentTags.add(year), changed = true));
+    }
+
+    // 2. Months (Full Names)
+    const months = [
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december"
+    ];
+
+    // Simple inclusion check for months (since we normalized text to lowercase)
+    // We check for word boundaries to avoid matching "may" inside "maybe"
+    months.forEach(month => {
+        // Create regex for word boundary match
+        const regex = new RegExp(`\\b${month}\\b`, 'i');
+        if (!currentTags.has(month) && regex.test(text)) {
+            // Capitalize first letter for the tag
+            const tag = month.charAt(0).toUpperCase() + month.slice(1);
+            currentTags.add(tag);
+            changed = true;
+        }
+    });
+
     return changed ? Array.from(currentTags) : null;
 }
 
@@ -109,18 +137,29 @@ export async function runInfectionLoop() {
 
         if (newTags) {
             // Persist the infection
-            // We update the 'tags' column. In Cozo, :update needs keys. 
-            // Memory table key is typically 'id'.
-            try {
-                await db.run(`
-                    ?[id, tags] <- [[$id, $tags]]
-                    :update memory {id, tags}
-                `, { id: atom.id, tags: newTags });
+            // We update the 'tags' column. In Cozo, :update needs keys.
+            // Using a retry loop to handle potential lock contention with Ingest
+            let attempts = 0;
+            const maxAttempts = 3;
+            while (attempts < maxAttempts) {
+                try {
+                    await db.run(`
+                        ?[id, tags] <- [[$id, $tags]]
+                        :update memory {id, tags}
+                    `, { id: atom.id, tags: newTags });
 
-                infectedCount++;
-                if (infectedCount % 100 === 0) process.stdout.write(`.`);
-            } catch (error: any) {
-                console.warn(`[Infector] Failed to update atom ${atom.id}:`, error.message);
+                    infectedCount++;
+                    if (infectedCount % 100 === 0) process.stdout.write(`.`);
+                    break; // Success
+                } catch (error: any) {
+                    attempts++;
+                    if (attempts >= maxAttempts) {
+                        console.warn(`[Infector] Failed to update atom ${atom.id} after ${maxAttempts} attempts:`, error.message);
+                    } else {
+                        // Small backoff
+                        await new Promise(r => setTimeout(r, 100 * attempts));
+                    }
+                }
             }
         }
     }

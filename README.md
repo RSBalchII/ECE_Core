@@ -29,6 +29,7 @@ The engine runs as a single, efficient Node.js process managing three distinct l
 
 1.  **Ingestion (The Refiner)**:
     * **Atomizer**: Splits text/code into logical units.
+    * **Key Assassin**: Surgically removes JSON artifacts from code (Data Hygiene).
     * **Enricher**: Assigns `source_id`, `sequence`, and `provenance`.
     * **Zero-Vector**: Stubs embedding slots to maintain schema compatibility without VRAM cost.
 
@@ -125,21 +126,52 @@ This project follows strict engineering standards documented in `specs/standards
 * **Standard 065**: [Graph-Based Associative Retrieval](./specs/standards/065-graph-associative-retrieval.md)
 * **Standard 059**: [Reliable Ingestion (Ghost Data Protocol)](./specs/standards/059_reliable_ingestion.md)
 * **Standard 058**: [UniversalRAG API](./specs/standards/058_universal_rag_api.md)
+* **Standard 073**: [Data Hygiene Protocol (The Immune System)](./specs/standards/073-data-hygiene-protocol.md)
 
 ---
 
 ## 🧰 Utility Tools
 
 ### Codebase Scraper (`read_all.js`)
+**The Official Ingestion Bridge**
 
-Consolidate an entire project into a digestable corpus for the engine.
+Consolidate an entire project into a digestable corpus for the engine. 
 
 ```bash
 node read_all.js <path_to_project_root>
 ```
 
 **Output**: `codebase/combined_context.yaml`
-**Usage**: Drop the result into `notebook/inbox` to instantly ingest a project.
+**Usage**: Drop the result into `notebook/inbox`.
+**Mechanism**: The Refiner detects this YAML format and performs **Virtual Atomization**:
+*   Decomposes the YAML back into virtual files (e.g., `src/index.ts`).
+*   **Hygiene Check**: Filters binaries and circular logs.
+*   Auto-tags them with `#code`, `#doc`, and `#project:{name}`.
+*   Enables precise filtering (Code vs. Docs) even for massive codebases.
+
+---
+
+## 🧠 Querying Best Practices
+
+The **Tag-Walker** engine interprets intents differently than vector databases. Use these patterns for optimal results:
+
+### 1. Concept Recall (The Net)
+*   **Pattern**: Single Keyword / Concept
+*   **Example**: `"Memory"` or `"WebGPU"`
+*   **Mechanism**: Triggers **Tag-Walker**. The engine treats the query as a conceptual node and "walks" the graph to find everything related to it, even if the exact word isn't present in the target.
+*   **Use Case**: "Tell me everything about X."
+
+### 2. Precision Intersection (The Laser)
+*   **Pattern**: Multi-Keyword Constraint
+*   **Example**: `"WebGPU buffer mapping"`
+*   **Mechanism**: Triggers **FTS Intersection**. The engine demands that *all* terms (or highly correlated concepts) be present. It filters out broad associations to give you the specific implementation details.
+*   **Use Case**: "How do I implement X?" or "Find the specific error log."
+
+### 3. Natural Language (The Conversation)
+*   **Pattern**: Questions or Sentences
+*   **Example**: `"How is Coda doing today?"`
+*   **Mechanism**: Uses **Wink-NLP** to extract the core intent (`Coda` + `Status`). It strips stop words ("How", "is", "doing") and executes a graph query on the entities.
+*   **Use Case**: Chatting with the system or asking about high-level status.
 
 ---
 

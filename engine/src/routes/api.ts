@@ -146,6 +146,18 @@ export function setupRoutes(app: Application) {
     }
   });
 
+  // Get all tags
+  app.get('/v1/tags', async (_req: Request, res: Response) => {
+    try {
+      const result = await db.run('?[tag] := *memory{tags}, tag in tags');
+      const tags = result.rows ? [...new Set(result.rows.map((row: any) => row[0]))].sort() : [];
+      res.status(200).json(tags);
+    } catch (error) {
+      console.error('Tag retrieval error:', error);
+      res.status(500).json({ error: 'Failed to retrieve tags' });
+    }
+  });
+
   // Backup Endpoints
   // POST /v1/backup - Create a new backup
   app.post('/v1/backup', async (_req: Request, res: Response) => {

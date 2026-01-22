@@ -272,8 +272,10 @@ async function clusterAndSummarize(): Promise<void> {
 
     // We look for memories that are NOT a child in 'parent_of'
     // Cozo: `?[id] := *memory{id}, not *parent_of{child_id: id}`
+    // We look for memories that are NOT a child in 'parent_of'
+    // Cozo: `?[id] := *memory{id}, not *parent_of{child_id: id}`
     const unboundQuery = `
-            ?[id, timestamp, content] := *memory{id, timestamp, content},
+            ?[id, timestamp, content, tags] := *memory{id, timestamp, content, tags},
             not *parent_of{child_id: id},
             :order timestamp
     :limit ${limit}
@@ -285,7 +287,12 @@ async function clusterAndSummarize(): Promise<void> {
       return;
     }
 
-    const atoms = result.rows.map((r: any[]) => ({ id: r[0], timestamp: r[1], content: r[2] }));
+    const atoms = result.rows.map((r: any[]) => ({
+      id: r[0],
+      timestamp: r[1],
+      content: r[2],
+      tags: r[3] || [] // Fetch tags
+    }));
     console.log(`🌙 Dreamer: Found ${atoms.length} unbound atoms.Clustering...`);
 
     // 2. Temporal Clustering (Gap > 15 minutes = New Cluster)
@@ -327,7 +334,7 @@ async function clusterAndSummarize(): Promise<void> {
       const endTime = cluster[cluster.length - 1].timestamp;
 
       // B. Concatenate content for Wink Analysis
-      const fullText = cluster.map(a => a.content).join('\n');
+      const fullText = cluster.map((a: any) => a.content).join('\n');
 
       // C. Extract Entities & Keywords using Wink
       const doc = nlp.readDoc(fullText);
@@ -339,14 +346,31 @@ async function clusterAndSummarize(): Promise<void> {
         .slice(0, 10)
         .map((e: any) => e[0]);
 
-      // Get top nouns (topics)
-      // Filter: Must be > 3 chars, exclude common junk
-      const topics = doc.tokens()
-        .filter((t: any) => t.out(nlp.its.pos) === 'NOUN' && !t.out((nlp.its as any).stopWord))
-        .out(nlp.its.normal, nlp.as.freqTable)
-        .filter((t: any) => t[0].length > 3 && !/^[0-9]+$/.test(t[0])) // Filter numbers and short words
-        .slice(0, 5)
-        .map((t: any) => t[0]);
+      // D. Aggregate Tags (The "Sovereign" Context)
+      // Instead of weak NLP nouns, we harvest the high-quality tags from the atoms themselves.
+      const tagCounts = new Map<string, number>();
+      cluster.forEach((atom: any) => {
+        atom.tags.forEach((tag: string) => {
+          tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+        });
+      });
+
+      // Sort tags by frequency
+      const topics = Array.from(tagCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(entry => entry[0]);
+
+      // Fallback: If no tags, try basic NLP nouns
+      if (topics.length === 0) {
+        const nouns = doc.tokens()
+          .filter((t: any) => t.out(nlp.its.pos) === 'NOUN' && !t.out((nlp.its as any).stopWord))
+          .out(nlp.its.normal, nlp.as.freqTable)
+          .filter((t: any) => t[0].length > 3 && !/^[0-9]+$/.test(t[0]))
+          .slice(0, 5)
+          .map((t: any) => t[0]);
+        topics.push(...nouns);
+      }
 
       // D. Construct Metadata-Rich Content
       const episodeContent = `

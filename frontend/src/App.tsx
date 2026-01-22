@@ -31,6 +31,7 @@ const SearchPage = () => {
   const [activeMode, setActiveMode] = useState(false);
   const [sovereignBias, setSovereignBias] = useState(true);
   const [metadata, setMetadata] = useState<any>(null); // { tokenCount, filledPercent, atomCount }
+  const [scope, setScope] = useState<'all' | 'code' | 'docs'>('all'); // <--- NEW SCOPE STATE
 
   // Feature 7 State
   const [backupStatus, setBackupStatus] = useState('');
@@ -66,7 +67,7 @@ const SearchPage = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query,
+          query: scope === 'all' ? query : `${query} ${scope === 'code' ? '#code' : '#doc'}`, // <--- INJECT TAGS
           // buckets: ['notebook'], // Removed to allow global search (inbox, journals, etc.)
           max_chars: tokenBudget * 4, // Approx chars
           token_budget: tokenBudget, // For backend slicer if supported
@@ -141,6 +142,27 @@ const SearchPage = () => {
 
       {/* RAG IDE Controls (Features 8 & 9 & 10) */}
       <div className="glass-panel" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'var(--bg-secondary)' }}>
+
+        {/* Scope Filters (New UI) */}
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          {['all', 'code', 'docs'].map(s => (
+            <button
+              key={s}
+              className="btn-primary"
+              style={{
+                fontSize: '0.8rem',
+                padding: '0.3rem 0.8rem',
+                background: scope === s ? 'var(--accent-primary)' : 'transparent',
+                border: scope === s ? 'none' : '1px solid var(--border-subtle)',
+                opacity: scope === s ? 1 : 0.7
+              }}
+              onClick={() => setScope(s as any)}
+            >
+              {s.toUpperCase()}
+            </button>
+          ))}
+        </div>
+
         <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
           {/* Active Mode Toggle */}
           <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', cursor: 'pointer' }}>
