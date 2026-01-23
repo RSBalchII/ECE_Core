@@ -43,7 +43,9 @@ The engine runs as a single, efficient Node.js process managing three distinct l
 
 ### 2. The Application Layer
 * **API**: RESTful interface at `http://localhost:3000/v1/`.
-* **Frontend**: Modern React + Vite dashboard for managing memories.
+* **Frontend**: Modern React + Vite dashboard.
+    *   **Dual Copy**: "Copy Limit" (Context Window) vs "Copy All" (Full Results).
+    *   **Visual Context**: Visual indicators for when atoms fall outside the token budget.
 * **Desktop Overlay**: Electron "Thin Client" for Always-on-Top assistance.
 
 ---

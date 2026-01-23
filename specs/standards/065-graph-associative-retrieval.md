@@ -19,24 +19,29 @@ We replace the Vector Layer with a **Graph-Based Associative Retrieval** protoco
 
 ### The Algorithm (70/30 Split)
 
-#### Phase 1: Anchor Search (70% Budget)
-**Goal:** Find "Direct Hits" using Weighted Keyword Search (BM25).
-1.  **Execute FTS**: Search for atoms matching the user query.
-    *   **Rule**: All FTS queries MUST be passed through `sanitizeFtsQuery` to prevent parser crashes on special characters (e.g., `.org`).
-2.  **Boosting**: Boost results that contain query terms in `tags` or `buckets` (2x boost).
-3.  **Selection**: Allocate **70%** of the context character budget to these results.
+#### Phase 1: Iterative Anchor Search (Precision First)
+**Goal:** Address "Low Recall" by progressively simplifying the query.
+1.  **Standard Execution**: Run 70/30 Tag-Walker with the full user query (expanded with NLP).
+2.  **Recall Check**: If results < 10 atoms:
+    *   **Fallback 1 (Strict Nouns/Dates)**: Strip Verbs/Adjectives, keep only Nouns and Temporal markers ("2025").
+    *   **Fallback 2 (Entities Only)**: Strip everything but Proper Nouns ("Rob", "Sovereign").
+3.  **Result**: Returns the best possible set of anchors.
 
-#### Phase 2: Tag Harvest
-**Goal:** Identify "Bridge Tags" to find hidden context.
-1.  **Extract**: Collect all unique `tags` and `buckets` from the top X results of Phase 1.
-2.  **Filter**: Exclude generic system tags if necessary (though strict filtering is often not needed).
-3.  **Bridge**: These tags represent the *structural* context of the query.
+#### Phase 2: Smart Multi-Context (The "Markovian" Split)
+**Goal:** Ensure broad coverage for complex, multi-subject queries (e.g., "chain of events in Rob's life").
+1.  **Trigger**: If Iterative Search still yields **< 10 atoms** (Low Recall).
+2.  **Split**: The query is decomposed into its top 3 semantic entities (e.g., "Rob", "Life", "Events").
+3.  **Parallel Execution**:
+    *   Spawn 3 independent Tag-Walker searches (one per entity).
+    *   Allocate sub-budgets to each.
+4.  **Merge**: Deduplicate and combine results into a single context window.
+5.  **Effect**: The LLM receives context about "Rob" AND "Life", even if they never appear in the same file together.
 
-#### Phase 3: Neighbor Walk (30% Budget)
-**Goal:** Find "Associative Hits" (Hidden connections).
-1.  **Query**: Find atoms that share the **Harvested Tags** but *do not* contain the original query keywords (or are duplicates of Phase 1).
-    *   *Logic*: `atom -> has_tag -> tag -> has_tag -> neighbor_atom`
-2.  **Selection**: Allocate the remaining **30%** of the budget to these associative neighbors.
+#### Phase 3: Tag Harvest & Neighbor Walk (Associative)
+**Goal:** Find hidden context using "Bridge Tags" from the anchored results.
+1.  **Harvest**: Collect unique `tags` from Phase 1 & 2 results.
+2.  **Walk**: Find atoms that share these tags but lack the keywords.
+3.  **Selection**: Fill the remaining ~30% of the token budget.
 
 ### Implementation Guidelines (CozoDB)
 
