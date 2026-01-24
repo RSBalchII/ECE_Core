@@ -26,7 +26,8 @@
             "GCC_ENABLE_CPP_EXCEPTIONS": "NO",
             "CLANG_CXX_LIBRARY": "libc++",
             "MACOSX_DEPLOYMENT_TARGET": "10.15",
-            "CLANG_CXX_LANGUAGE_STANDARD": "c++17"
+            "CLANG_CXX_LANGUAGE_STANDARD": "c++17",
+            "OTHER_CPLUSPLUSFLAGS": ["-std=c++17", "-stdlib=libc++", "-mmacosx-version-min=10.15"]
           }
         }]
       ]

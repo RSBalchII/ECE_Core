@@ -1,7 +1,7 @@
 
 import { db } from '../engine/src/core/db.js';
-import { config } from '../engine/src/config/index.js';
-
+// import { config } from '../engine/src/config/index.js';
+// TODO: is this being used?
 async function listTags() {
     try {
         console.log('Initializing DB...');
