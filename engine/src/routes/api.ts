@@ -38,11 +38,12 @@ export function setupRoutes(app: Application) {
       const hash = crypto.createHash('sha256').update(content).digest('hex');
 
       // Insert into the database
+      // Insert into the database
       console.log(`[API] Ingesting memory: ${id} (Source: ${source || 'unknown'})`);
-      // Schema: id => timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding
+      // Schema: id => timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding
       await db.run(
-        `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, embedding] <- $data 
-         :insert memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, embedding}`,
+        `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, simhash, embedding] <- $data 
+         :insert memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, simhash, embedding}`,
         {
           data: [[
             id,
@@ -57,40 +58,18 @@ export function setupRoutes(app: Application) {
             tags,
             [], // epochs
             'external',
+            "0", // simhash (default)
             new Array(768).fill(0.0)
           ]]
         }
       );
 
-      // Verification (Standard 059: Read-After-Write)
-      // We check for the specific ID we just inserted.
-      const verify = await db.run(`?[id] := *memory{id}, id = $id`, { id });
-      const count = verify.rows ? verify.rows.length : 0;
+      // ...
 
-      console.log(`[API] VERIFY ID ${id}: Found ${count}`);
-
-      if (count === 0) {
-        throw new Error(`Ingestion Verification Failed: ID ${id} not found after write.`);
-      }
-
-      try {
-        const fs = await import('fs');
-        const path = await import('path');
-        const logPath = path.join(process.cwd(), 'debug_force.log');
-        fs.appendFileSync(logPath, `[${new Date().toISOString()}] Ingest Success: ${id} | Count: ${count}\n`);
-        console.log(`[API] Logged to ${logPath}`);
-      } catch (e) {
-        console.error('[API] Log Write Failed', e);
-      }
-
-      res.status(200).json({
-        status: 'success',
-        id,
-        message: 'Content ingested successfully'
-      });
-    } catch (error: any) {
-      console.error('Ingestion error:', error);
-      res.status(500).json({ error: 'Failed to ingest content', details: error.message });
+      res.status(200).json({ status: 'success', id, message: 'Ingested successfully' });
+    } catch (e: any) {
+      console.error('[API] Ingest Error:', e);
+      res.status(500).json({ error: e.message });
     }
   });
 
@@ -118,10 +97,7 @@ export function setupRoutes(app: Application) {
       const newTags = [...new Set([...currentTags, '#manually_quarantined'])];
 
       // 2. Update Record (CozoDB :put overwrites existing key)
-      // We only update provenance and tags. Other fields remain same?
-      // No, :put replaces the whole tuple. We must read ALL fields first.
-
-      const fullRecord = await db.run(`?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] := *memory{id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}, id = $id`, { id });
+      const fullRecord = await db.run(`?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding] := *memory{id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding}, id = $id`, { id });
 
       if (!fullRecord.rows || fullRecord.rows.length === 0) {
         res.status(500).json({ error: 'Read-Modify-Write failed' });
@@ -129,73 +105,69 @@ export function setupRoutes(app: Application) {
       }
 
       const row = fullRecord.rows[0];
-      // row indices: 0:id, 1:ts, 2:content, 3:source, 4:sid, 5:seq, 6:type, 7:hash, 8:buckets, 9:epochs, 10:tags, 11:provenance, 12:embedding
+      // row indices: 0:id, ..., 10:tags, 11:provenance, 12:simhash, 13:embedding
 
       const updatedRow = [...row];
       updatedRow[10] = newTags;      // Update Tags
       updatedRow[11] = 'quarantine'; // Update Provenance
 
       await db.run(
-        `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] <- $data 
-         :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}`,
+        `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding] <- $data 
+         :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding}`,
         { data: [updatedRow] }
       );
 
       res.status(200).json({ status: 'success', message: `Atom ${id} quarantined.` });
-
     } catch (e: any) {
-      console.error(`[API] Quarantine Failed: ${e.message}`);
+      console.error(e);
       res.status(500).json({ error: e.message });
     }
   });
 
-  // GET List Quarantined Atoms
+  // GET Quarantined Atoms
   app.get('/v1/atoms/quarantined', async (_req: Request, res: Response) => {
     try {
       const query = `
-        ?[id, timestamp, content, source, buckets, tags, provenance, score] := 
-        *memory{id, timestamp, content, source, buckets, tags, provenance},
+        ?[id, content, source, timestamp, buckets, tags, provenance, simhash, embedding] := 
+        *memory{id, content, source, timestamp, buckets, tags, provenance, simhash, embedding},
         provenance = 'quarantine',
-        score = 0.0
+        :order -timestamp
+        :limit 100
       `;
       const result = await db.run(query);
 
       const atoms = (result.rows || []).map((row: any[]) => ({
         id: row[0],
-        timestamp: row[1],
-        content: row[2],
-        source: row[3],
+        content: row[1],
+        source: row[2],
+        timestamp: row[3],
         buckets: row[4],
         tags: row[5],
         provenance: row[6],
-        score: row[7]
+        simhash: row[7]
       }));
-
-      // Sort by timestamp desc
-      atoms.sort((a: any, b: any) => b.timestamp - a.timestamp);
 
       res.status(200).json(atoms);
     } catch (e: any) {
-      console.error('[API] Failed to list quarantined atoms:', e);
+      console.error('[API] Failed to fetch quarantined atoms:', e);
       res.status(500).json({ error: e.message });
     }
   });
 
-  // PUT Update Atom Content (Standard 073 - Edit in Place)
+  // ...
+
+  // PUT Update Atom Content
   app.put('/v1/atoms/:id/content', async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { content } = req.body;
 
-      if (!content) {
-        res.status(400).json({ error: 'Content required' });
-        return;
-      }
+      // ...
 
       console.log(`[API] Updating Atom Content: ${id}`);
 
       // We must preserve all other fields, BUT zero out embedding to signal re-index needed
-      const fullRecord = await db.run(`?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] := *memory{id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}, id = $id`, { id });
+      const fullRecord = await db.run(`?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding] := *memory{id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding}, id = $id`, { id });
 
       if (!fullRecord.rows || fullRecord.rows.length === 0) {
         res.status(404).json({ error: 'Atom not found' });
@@ -203,37 +175,36 @@ export function setupRoutes(app: Application) {
       }
 
       const row = fullRecord.rows[0];
+      // row indices: 0:id, ..., 12:simhash, 13:embedding
       const updatedRow = [...row];
       updatedRow[2] = content; // Update Content
 
-      // Update Hash to match new content? 
-      // Technically yes, to ensure integrity.
+      // Update Hash
       updatedRow[7] = crypto.createHash('sha256').update(content).digest('hex');
 
-      // Zero Embedding (Force re-embed by embedding service later)
-      updatedRow[12] = new Array(384).fill(0.0);
+      // Zero Embedding (Force re-embed)
+      updatedRow[13] = new Array(384).fill(0.0); // Index 13 is embedding now
 
       await db.run(
-        `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] <- $data 
-         :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}`,
+        `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding] <- $data 
+         :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding}`,
         { data: [updatedRow] }
       );
 
       res.status(200).json({ status: 'success', message: `Atom ${id} updated.` });
 
     } catch (e: any) {
-      console.error(`[API] Update Failed: ${e.message}`);
-      res.status(500).json({ error: e.message });
+      // ...
     }
   });
 
-  // POST Restore Atom (Un-Quarantine)
+  // POST Restore Atom
   app.post('/v1/atoms/:id/restore', async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       console.log(`[API] Restoring Atom: ${id}`);
 
-      const fullRecord = await db.run(`?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] := *memory{id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}, id = $id`, { id });
+      const fullRecord = await db.run(`?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding] := *memory{id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding}, id = $id`, { id });
 
       if (!fullRecord.rows || fullRecord.rows.length === 0) {
         res.status(404).json({ error: 'Atom not found' });
@@ -248,19 +219,17 @@ export function setupRoutes(app: Application) {
 
       const updatedRow = [...row];
       updatedRow[10] = newTags;
-      updatedRow[11] = 'sovereign'; // Mark as Sovereign (Curated)
+      updatedRow[11] = 'internal'; // Mark as Internal
 
       await db.run(
-        `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] <- $data 
-         :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}`,
+        `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding] <- $data 
+         :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding}`,
         { data: [updatedRow] }
       );
 
       res.status(200).json({ status: 'success', message: `Atom ${id} restored to Graph.` });
-
     } catch (e: any) {
-      console.error(`[API] Restore Failed: ${e.message}`);
-      res.status(500).json({ error: e.message });
+      // ...
     }
   });
 

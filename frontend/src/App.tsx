@@ -1,6 +1,7 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import './index.css';
+import PerformanceMonitor from './components/PerformanceMonitor';
 
 // Simple Router
 const Dashboard = () => (
@@ -35,7 +36,7 @@ interface SearchColumnProps {
   isOnly: boolean;
 }
 
-const SearchColumn = ({ id, availableBuckets, availableTags, onContextUpdate, onFullUpdate, onRemove, onAddColumn, isOnly, initialQuery }: SearchColumnProps) => {
+const SearchColumn = memo(({ id, availableBuckets, availableTags, onContextUpdate, onFullUpdate, onRemove, onAddColumn, isOnly, initialQuery }: SearchColumnProps) => {
   const [query, setQuery] = useState(initialQuery || '');
   const [results, setResults] = useState<any[]>([]);
   const [context, setContext] = useState('');
@@ -52,7 +53,7 @@ const SearchColumn = ({ id, availableBuckets, availableTags, onContextUpdate, on
   // Sync context to parent whenever it changes
   useEffect(() => {
     onContextUpdate(id, context);
-  }, [context, id]);
+  }, [context, id, onContextUpdate]);
 
   // Debounce Logic for Live Mode
   useEffect(() => {
@@ -87,7 +88,7 @@ const SearchColumn = ({ id, availableBuckets, availableTags, onContextUpdate, on
           query: scope === 'all' ? query : `${query} ${scope === 'code' ? '#code' : '#doc'}`,
           max_chars: tokenBudget * 4,
           token_budget: tokenBudget,
-          provenance: sovereignBias ? 'sovereign' : 'all'
+          provenance: sovereignBias ? 'internal' : 'all'
         })
       });
 
@@ -282,7 +283,7 @@ const SearchColumn = ({ id, availableBuckets, availableTags, onContextUpdate, on
       </div>
     </div>
   );
-};
+});
 
 // --- SEARCH PAGE CONTAINER ---
 const SearchPage = () => {
@@ -313,22 +314,17 @@ const SearchPage = () => {
     });
   }, []);
 
-  const addColumn = (initialQuery?: string) => {
-    if (columns.length >= 8) { // Increased limit
-      // alert("Max columns reached."); 
-      return;
-    }
-    const newId = (columns.length > 0 ? Math.max(...columns.map(c => c.id)) : 0) + 1;
-    setColumns(prev => [...prev, { id: newId, query: initialQuery }]);
-  };
-
-  const removeColumn = (id: number) => {
-    console.log('[SearchPage] removeColumn called for ID:', id);
+  const addColumn = useCallback((initialQuery?: string) => {
     setColumns(prev => {
-      const next = prev.filter(c => c.id !== id);
-      console.log('[SearchPage] New columns state:', next);
-      return next;
+      if (prev.length >= 8) return prev;
+      const newId = (prev.length > 0 ? Math.max(...prev.map(c => c.id)) : 0) + 1;
+      return [...prev, { id: newId, query: initialQuery }];
     });
+  }, []);
+
+  const removeColumn = useCallback((id: number) => {
+    console.log('[SearchPage] removeColumn called for ID:', id);
+    setColumns(prev => prev.filter(c => c.id !== id));
     setColumnContexts(prev => {
       const next = { ...prev };
       delete next[id];
@@ -339,15 +335,15 @@ const SearchPage = () => {
       delete next[id];
       return next;
     });
-  };
+  }, []);
 
-  const handleContextUpdate = (id: number, ctx: string) => {
+  const handleContextUpdate = useCallback((id: number, ctx: string) => {
     setColumnContexts(prev => ({ ...prev, [id]: ctx }));
-  };
+  }, []);
 
-  const handleFullUpdate = (id: number, full: string) => {
+  const handleFullUpdate = useCallback((id: number, full: string) => {
     setColumnFullTexts(prev => ({ ...prev, [id]: full }));
-  };
+  }, []);
 
   const copyContextWindow = () => {
     const all = Object.values(columnContexts).filter(c => c && c.trim()).join('\n\n' + '='.repeat(40) + '\n\n');
@@ -906,6 +902,7 @@ function App() {
         {route === '#chat' ? <ChatPage /> : null}
         {route === '#quarantine' ? <QuarantinePage /> : null}
       </main>
+      <PerformanceMonitor />
     </>
   );
 }

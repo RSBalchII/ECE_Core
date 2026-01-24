@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
-const MASTER_TAGS_PATH = path.join(PROJECT_ROOT, 'context', 'sovereign_tags.json');
+const MASTER_TAGS_PATH = path.join(PROJECT_ROOT, 'context', 'internal_tags.json');
 
 /**
  * Discovery Service (The Teacher)

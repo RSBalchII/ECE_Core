@@ -20,12 +20,12 @@ interface IngestOptions {
 /**
  * Determines the provenance of content based on its source
  */
-function determineProvenance(source: string, type?: string): 'sovereign' | 'external' | 'system' {
+function determineProvenance(source: string, type?: string): 'internal' | 'external' | 'system' {
   const normalizedSource = source.replace(/\\/g, '/');
 
   // 1. Explicit Trusted Inbox
-  if (normalizedSource.includes('internal-inbox/') || normalizedSource.includes('/sovereign/') || type === 'user') {
-    return 'sovereign';
+  if (normalizedSource.includes('internal-inbox/') || normalizedSource.includes('/sovereign/') || type === 'user') { // Keep /sovereign/ path check for backward compat if needed, or remove? User said "vs the word sovereign". I'll keep the path check but return 'internal'.
+    return 'internal';
   }
 
   // 2. Explicit External Inbox
@@ -33,9 +33,9 @@ function determineProvenance(source: string, type?: string): 'sovereign' | 'exte
     return 'external';
   }
 
-  // 3. Main Inbox Fallback (Treat as Sovereign for manual user drops)
+  // 3. Main Inbox Fallback (Treat as Internal for manual user drops)
   if (normalizedSource.includes('/inbox/')) {
-    return 'sovereign';
+    return 'internal';
   }
 
   // Default to external for unknown sources
@@ -84,11 +84,11 @@ export async function ingestContent(
   const epochsJson: string[] = []; // Pass as array
 
   // Insert the memory with provenance information
-  // Schema: id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding
-  const insertQuery = `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] <- $data :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}`;
+  // Schema: id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding
+  const insertQuery = `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding] <- $data :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding}`;
 
   await db.run(insertQuery, {
-    data: [[id, timestamp, content, source, source, 0, type, hash, bucketsArray, epochsJson, tagsJson, provenance, new Array(config.MODELS.EMBEDDING_DIM).fill(0.1)]]
+    data: [[id, timestamp, content, source, source, 0, type, hash, bucketsArray, epochsJson, tagsJson, provenance, "0", new Array(config.MODELS.EMBEDDING_DIM).fill(0.1)]]
   });
 
   // Strict Read-After-Write Verification (Standard 059)
@@ -111,9 +111,10 @@ export interface IngestAtom {
   sourcePath: string; // Preservation of original context
   sequence: number;
   timestamp: number;
-  provenance: 'sovereign' | 'external' | 'quarantine';
+  provenance: 'internal' | 'external' | 'quarantine';
   embedding?: number[];
   hash?: string; // Explicit hash to avoid ID-based guessing
+  simhash?: string;
   tags?: string[]; // <--- NEW FIELD
 }
 
@@ -148,6 +149,7 @@ export async function ingestAtoms(
       [], // epochs
       finalTags, // <--- Use the merged tags
       atom.provenance,
+      atom.simhash || "0",
       (atom.embedding && atom.embedding.length === config.MODELS.EMBEDDING_DIM)
         ? atom.embedding
         : new Array(config.MODELS.EMBEDDING_DIM).fill(0.1) // Zero-stub if embeddings disabled
@@ -166,8 +168,8 @@ export async function ingestAtoms(
     const chunk = rows.slice(i, i + chunkSize);
     try {
       await db.run(`
-        ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] <- $data
-        :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}
+        ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding] <- $data
+        :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding}
       `, { data: chunk });
 
       if (batchNum % 10 === 0 || batchNum === totalBatches) {

@@ -1,13 +1,37 @@
-/**
- * Markovian Atomizer
- * 
- * Splits text content into "Thought Atoms" based on semantic density and natural boundaries.
- * Implements the "Markovian Chunking" strategy:
- * 1. Primary Split: Logical Blocks (Double Newline).
- * 2. Secondary Split: Length Constraint (>1000 chars) with Sentence Overlap.
- */
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+
+// --- NATIVE MODULE LOADING ---
+let native: any = null;
+try {
+    // Try release build first
+    native = require('../../../build/Release/ece_native.node');
+    console.log('[Atomizer] Loaded Native Accelerator (C++17) 🚀');
+} catch (e) {
+    try {
+        // Try debug build or other path
+        native = require('../../../build/Debug/ece_native.node');
+    } catch (e2) {
+        console.warn('[Atomizer] running in JS-Only mode (Native module not found).');
+    }
+}
 
 export function atomizeContent(text: string, strategy: 'code' | 'prose' | 'blob' = 'prose'): string[] {
+    // NATIVE ACCELERATION
+    if (native && native.atomize && strategy !== 'blob') {
+        try {
+            const nativeAtoms = native.atomize(text, strategy);
+            // Fallback if native returns empty on valid text (safety)
+            if (nativeAtoms.length > 0 || text.trim().length === 0) {
+                return nativeAtoms;
+            }
+        } catch (e) {
+            console.error('[Atomizer] Native Error:', e);
+            // Fallthrough to JS
+        }
+    }
+
     // Strategy: Code - Split by top-level blocks (indentation-based)
     if (strategy === 'code') {
         const lines = text.split('\n');

@@ -19,7 +19,7 @@ const nlp = wink(model) as any;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..'); // engine/src/services/tags -> engine/src/services -> engine/src -> engine -> ROOT
-const TAGS_FILE = path.join(PROJECT_ROOT, 'context', 'sovereign_tags.json');
+const TAGS_FILE = path.join(PROJECT_ROOT, 'context', 'internal_tags.json');
 
 /**
  * 1. The Generator (Source)

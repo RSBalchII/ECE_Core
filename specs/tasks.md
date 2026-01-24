@@ -2,7 +2,44 @@
 
 ## Current Work Queue
 
-## Active Sprint: Sovereign Desktop & Robustness (Jan 10, 2026)
+## Active Sprint: Operation "Iron Lung" (Native Refactor)
+
+### Phase 21: The Native Bridge (C++ / N-API) - **COMPLETED** ✅
+- [x] **Infrastructure Setup**:
+    - [x] Install `node-addon-api` and `node-gyp`.
+    - [x] Configure `binding.gyp` for C++17 support.
+    - [x] Create `src/native/` directory structure.
+- [x] **Module 1: The Key Assassin (Text Hygiene)**:
+    - [x] Define `src/native/key_assassin.hpp` (Header).
+    - [x] Implement `src/native/key_assassin.cpp` (Zero-copy cleaning logic).
+    - [x] Implement `src/native/main.cpp` (N-API exports).
+    - [x] **Verification**: Compile and run `npm test` to verify binary loading.
+- [x] **Module 2: The Atomizer (Text Splitting)**:
+    - [x] Implement `src/native/atomizer.hpp` and `src/native/atomizer.cpp`.
+    - [x] Implement streaming text splitter with prose/code strategies.
+    - [x] **Verification**: Benchmark performance improvements.
+- [x] **Module 3: The Fingerprint (Deduplication)**:
+    - [x] Implement `src/native/fingerprint.hpp` and `src/native/fingerprint.cpp`.
+    - [x] Implement SimHash algorithm for fuzzy matching.
+    - [x] Implement Hamming distance calculation.
+- [x] **Integration**:
+    - [x] Refactor `engine/src/services/ingest/refiner.ts` to import and use the native module.
+    - [x] Update `engine/src/services/ingest/atomizer.ts` with native acceleration.
+    - [x] Update `engine/src/core/db.ts` to include `simhash` column.
+    - [x] Update `engine/src/services/ingest/ingest.ts` to handle simhash values.
+    - [x] **Benchmark**: Compare `KeyAssassin` (C++) vs `cleanseJsonArtifacts` (JS) on a 10MB log file. (2.3x improvement achieved)
+- [x] **Testing**:
+    - [x] Create comprehensive test suite: `engine/tests/test_native_modules.js`
+    - [x] Create integration test suite: `engine/tests/test_native_integration.js`
+    - [x] Verify all native functions work correctly.
+- [x] **Documentation**:
+    - [x] Create Standard 074: Native Module Accelereration (The "Iron Lung" Protocol)
+    - [x] Update README with native module architecture.
+
+### 🟡 High Priority (Queue)
+- [ ] **Module 4: The Ingestor**: Replace `cheerio` with lightweight C++ HTML parser (future).
+- [ ] **Performance Monitoring**: Implement runtime performance tracking for native modules.
+- [ ] **Cross-Platform Validation**: Verify native modules work on Linux/macOS.
 
 ### Phase 20: Tag-Walker & Mirror 2.0 (Completed ✅)
 - [x] **Tag-Walker Protocol**: Replaced Vector Search with 3-phase graph retrieval (FTS -> Pivot -> Walk).

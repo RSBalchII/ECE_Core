@@ -187,9 +187,9 @@ export async function dream(): Promise<{ status: string; analyzed?: number; upda
       // 2. Bulk fetch full data for the batch
       const flatIds = batch.map(r => r[0]);
       const fetchQuery = `
-        ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] :=
+        ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding] :=
         id in $flatIds,
-        *memory{id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}
+        *memory{id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding}
       `;
       const fullDataResult = await db.run(fetchQuery, { flatIds });
 
@@ -204,8 +204,8 @@ export async function dream(): Promise<{ status: string; analyzed?: number; upda
 
         // 3. Bulk Update
         await db.run(`
-          ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding] <- $data
-          :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, embedding}
+          ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding] <- $data
+          :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding}
         `, { data: finalUpdateData });
 
         updatedCount += finalUpdateData.length;

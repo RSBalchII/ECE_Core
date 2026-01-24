@@ -218,7 +218,8 @@ export async function tagWalkerSearch(
   query: string,
   buckets: string[] = [],
   tags: string[] = [],
-  _maxChars: number = 524288
+  _maxChars: number = 524288,
+  provenance: 'internal' | 'external' | 'quarantine' | 'all' = 'all'
 ): Promise<SearchResult[]> {
   try {
     const sanitizedQuery = sanitizeFtsQuery(query);
@@ -229,7 +230,7 @@ export async function tagWalkerSearch(
             ?[id, content, source, timestamp, buckets, tags, epochs, provenance, score] := 
             ~memory:content_fts{id | query: $query, k: 50, bind_score: fts_score},
             *memory{id, content, source, timestamp, buckets, tags, epochs, provenance},
-            provenance != 'quarantine',
+            ${provenance !== 'quarantine' ? "provenance != 'quarantine'," : "provenance = 'quarantine',"}
             score = 70.0 * fts_score
             ${buckets.length > 0 ? ', length(intersection(buckets, $buckets)) > 0' : ''}
             ${tags.length > 0 ? ', length(intersection(tags, $tags)) > 0' : ''}
@@ -263,7 +264,7 @@ export async function tagWalkerSearch(
             *memory{id, content, source, timestamp, buckets, tags, epochs, provenance},
             tag in tags,
             id != anchor_id,
-            provenance != 'quarantine',
+            ${provenance !== 'quarantine' ? "provenance != 'quarantine'," : "provenance = 'quarantine',"}
             ${tags.length > 0 ? 'length(intersection(tags, $tags)) > 0,' : ''} 
             score = 30.0
             :limit 10
@@ -299,7 +300,7 @@ export async function executeSearch(
   buckets?: string[],
   maxChars: number = 524288,
   _deep: boolean = false,
-  provenance: 'sovereign' | 'external' | 'all' = 'all'
+  provenance: 'internal' | 'external' | 'quarantine' | 'all' = 'all'
 ): Promise<{ context: string; results: SearchResult[]; toAgentString: () => string; metadata?: any }> {
   console.log(`[Search] executeSearch (Expanded Tag-Walker) called with provenance: ${provenance}`);
 
@@ -434,19 +435,19 @@ export async function executeSearch(
 
   // 2. TAG-WALKER SEARCH (Hybrid FTS + Graph)
   // Pass both buckets and tags explicitely
-  const walkerResults = await tagWalkerSearch(expandedQuery, Array.from(realBuckets), scopeTags, maxChars);
+  const walkerResults = await tagWalkerSearch(expandedQuery, Array.from(realBuckets), scopeTags, maxChars, provenance);
 
   // Merge and Apply Provenance Boosting
   walkerResults.forEach(r => {
     let score = r.score;
 
-    if (provenance === 'sovereign') {
-      if (r.provenance === 'sovereign') score *= 3.0;
+    if (provenance === 'internal') {
+      if (r.provenance === 'internal') score *= 3.0;
       else score *= 0.5;
     } else if (provenance === 'external') {
-      if (r.provenance !== 'sovereign') score *= 1.5;
+      if (r.provenance !== 'internal') score *= 1.5;
     } else {
-      if (r.provenance === 'sovereign') score *= 2.0;
+      if (r.provenance === 'internal') score *= 2.0;
     }
 
     if (!includedIds.has(r.id)) {

@@ -53,8 +53,8 @@ export async function createBackup(): Promise<{ filename: string; stats: BackupS
 
         while (true) {
             const query = `
-                ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, embedding] := 
-                *memory{id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, embedding},
+                ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, simhash, embedding] := 
+                *memory{id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, simhash, embedding},
                 id > $lastId,
                 :order id
                 :limit 500
@@ -155,8 +155,8 @@ export async function restoreBackup(filename: string): Promise<BackupStats> {
 
         if (currentSection === 'memory') {
             await db.run(
-                `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, embedding] <- $data
-                 :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, embedding}`,
+                `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, simhash, embedding] <- $data
+                 :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, simhash, embedding}`,
                 { data: batch }
             );
             stats.memory_count += batch.length;

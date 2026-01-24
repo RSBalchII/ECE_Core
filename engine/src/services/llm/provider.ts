@@ -93,12 +93,14 @@ export async function initAutoLoad() {
       await initWorker();
 
       // Load Chat Model
+      console.log(`[Provider] Loading Main Chat Model: ${config.MODELS.MAIN.PATH}`);
       await loadModel(config.MODELS.MAIN.PATH, {
         ctxSize: config.MODELS.MAIN.CTX_SIZE,
         gpuLayers: config.MODELS.MAIN.GPU_LAYERS
       }, 'chat');
 
       // Load Orchestrator Model
+      console.log(`[Provider] Loading Orchestrator Model: ${config.MODELS.ORCHESTRATOR.PATH}`);
       await loadModel(config.MODELS.ORCHESTRATOR.PATH, {
         ctxSize: config.MODELS.ORCHESTRATOR.CTX_SIZE,
         gpuLayers: config.MODELS.ORCHESTRATOR.GPU_LAYERS
@@ -120,12 +122,17 @@ let chatLoadingPromise: Promise<any> | null = null;
 let orchLoadingPromise: Promise<any> | null = null;
 
 export async function loadModel(modelPath: string, options: LoadModelOptions = {}, target: 'chat' | 'orchestrator' = 'chat') {
+  console.log(`[Provider] loadModel called for: ${modelPath} [Target: ${target}]`);
+
   if (!clientWorker) await initWorker();
 
   let targetWorker = clientWorker;
-  if (target === 'orchestrator') targetWorker = orchestratorWorker;
+  if (target === 'orchestrator') {
+    targetWorker = orchestratorWorker;
+    if (!targetWorker) console.warn("[Provider] Warning: Orchestrator target requested but OrchestratorWorker is null. Fallback to ClientWorker?");
+  }
 
-  if (!targetWorker) throw new Error("Worker not initialized");
+  if (!targetWorker) throw new Error(`Worker not initialized for target ${target}`);
 
   // Check if already loaded
   if (target === 'chat' && modelPath === currentChatModelName) return { status: "ready" };
@@ -140,7 +147,7 @@ export async function loadModel(modelPath: string, options: LoadModelOptions = {
 
     const handler = (msg: any) => {
       if (msg.type === 'modelLoaded') {
-        console.log(`[Provider] ${target} Model loaded: ${modelPath}`);
+        console.log(`[Provider] ${target} Model loaded successfully: ${modelPath} into ${target === 'chat' ? 'ClientWorker' : 'OrchestratorWorker'}`);
         targetWorker!.off('message', handler);
         if (target === 'chat') {
           currentChatModelName = modelPath;
@@ -230,13 +237,30 @@ export async function runStreamingChat(
 
 export async function runSideChannel(prompt: string, systemInstruction = "You are a helpful assistant.", options: any = {}) {
   // Use Orchestrator Worker if available, falling back to client
-  let targetWorker = orchestratorWorker || clientWorker;
-  let targetModel = currentOrchestratorModelName || currentChatModelName;
+  // Robust Worker Selection
+  let targetWorker: Worker | null = null;
+  let targetModel: string = "";
+
+  if (orchestratorWorker && currentOrchestratorModelName) {
+    targetWorker = orchestratorWorker;
+    targetModel = currentOrchestratorModelName;
+  } else if (clientWorker && currentChatModelName) {
+    targetWorker = clientWorker;
+    targetModel = currentChatModelName;
+  }
 
   if (!targetWorker || !targetModel) {
-    await initAutoLoad();
-    targetWorker = orchestratorWorker || clientWorker;
-    targetModel = currentOrchestratorModelName || currentChatModelName;
+    if (initPromise) await initPromise;
+    else await initAutoLoad();
+
+    // Retry selection
+    if (orchestratorWorker && currentOrchestratorModelName) {
+      targetWorker = orchestratorWorker;
+      targetModel = currentOrchestratorModelName;
+    } else {
+      targetWorker = clientWorker;
+      targetModel = currentChatModelName;
+    }
   }
 
   if (!targetWorker || !targetModel) throw new Error("Orchestrator/Chat Model failed to load.");

@@ -82,7 +82,7 @@ Session State Summary:`;
 
         // 4. Persist to database with special ID
         const timestamp = Date.now();
-        const query = `?[id, timestamp, content, source, type, hash, buckets, tags] <- $data :put memory {id, timestamp, content, source, type, hash, buckets, tags}`;
+        const query = `?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding] <- $data :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, epochs, tags, provenance, simhash, embedding}`;
 
         await db.run(query, {
             data: [[
@@ -90,10 +90,16 @@ Session State Summary:`;
                 timestamp,
                 summary.trim(),
                 'Scribe',
-                'state',
-                `state_${timestamp}`,
+                SESSION_STATE_ID, // source_id
+                0, // sequence
+                'state', // type
+                `state_${timestamp}`, // hash
                 STATE_BUCKET,
-                '[]'  // tags as JSON string
+                [], // epochs
+                [], // tags
+                'system', // provenance
+                '0', // simhash
+                new Array(768).fill(0.0) // embedding (stub)
             ]]
         });
 

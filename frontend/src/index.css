@@ -99,6 +99,16 @@ body {
     transform: translateY(0);
   }
 }
+  
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.hourglass-spin {
+  animation: spin 2s linear infinite;
+  display: inline-block; /* Required for transform */
+}
 
 .animate-fade-in {
   animation: fadeIn var(--transition-normal) forwards;

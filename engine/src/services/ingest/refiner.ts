@@ -4,10 +4,27 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 import { atomizeContent as rawAtomize } from './atomizer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
+
+// --- NATIVE MODULE LOADING ---
+let native: any = null;
+try {
+    // Try release build first
+    native = require('../../../build/Release/ece_native.node');
+    console.log('[Refiner] Loaded Native Accelerator (C++17) 🚀');
+} catch (e) {
+    try {
+        // Try debug build or other path
+        native = require('../../../build/Debug/ece_native.node');
+    } catch (e2) {
+        console.warn('[Refiner] running in JS-Only mode (Native module not found).');
+    }
+}
 
 /**
  * Atom Interface
@@ -19,8 +36,9 @@ export interface Atom {
     sourcePath: string;
     sequence: number;
     timestamp: number;
-    provenance: 'sovereign' | 'external' | 'quarantine';
+    provenance: 'internal' | 'external' | 'quarantine';
     embedding?: number[];
+    simhash: string; // <--- NEW: SimHash (Hex String)
     tags: string[]; // <--- NEW: Supports Project Root Extraction
 }
 
@@ -35,9 +53,9 @@ function loadSovereignKeywords(): string[] {
 
     try {
         const possiblePaths = [
-            path.join(process.cwd(), 'context', 'sovereign_tags.json'),
-            path.join(process.cwd(), '..', 'context', 'sovereign_tags.json'),
-            path.join(__dirname, '../../../../context/sovereign_tags.json')
+            path.join(process.cwd(), 'context', 'internal_tags.json'),
+            path.join(process.cwd(), '..', 'context', 'internal_tags.json'),
+            path.join(__dirname, '../../../../context/internal_tags.json')
         ];
 
         for (const p of possiblePaths) {
@@ -45,18 +63,18 @@ function loadSovereignKeywords(): string[] {
                 const content = fs.readFileSync(p, 'utf-8');
                 const json = JSON.parse(content);
                 if (Array.isArray(json.keywords)) {
-                    console.log(`[Refiner] Loaded ${json.keywords.length} Sovereign Keywords from ${p}`);
+                    console.log(`[Refiner] Loaded ${json.keywords.length} Internal Keywords from ${p}`);
                     cachedSovereignKeywords = json.keywords;
                     return cachedSovereignKeywords!;
                 }
             }
         }
 
-        console.warn(`[Refiner] sovereign_tags.json not found in expected paths.`);
+        console.warn(`[Refiner] internal_tags.json not found in expected paths.`);
         cachedSovereignKeywords = [];
         return [];
     } catch (e) {
-        console.error(`[Refiner] Failed to load sovereign_tags.json:`, e);
+        console.error(`[Refiner] Failed to load internal_tags.json:`, e);
         return [];
     }
 }
@@ -90,14 +108,24 @@ function cleanseJsonArtifacts(text: string, filePath: string): string {
     };
 
     // 1. Recursive Un-escape (Run this FIRST to reveal hidden keys and fix code formatting)
-    let pass = 0;
-    while (clean.includes('\\') && pass < 3) {
-        pass++;
+    // 1. Recursive Un-escape (Run this FIRST to reveal hidden keys and fix code formatting)
+    // NATIVE ACCELERATION
+    if (native && native.cleanse) {
+        // C++ does the unescape loop in one pass
         const beforeLen = clean.length;
-        clean = clean.replace(/\\"/g, '"');
-        clean = clean.replace(/\\n/g, '\n');
-        clean = clean.replace(/\\t/g, '\t');
+        clean = native.cleanse(clean);
         if (clean.length < beforeLen) stats.escapes += (beforeLen - clean.length);
+    } else {
+        // JS Fallback (Slower)
+        let pass = 0;
+        while (clean.includes('\\') && pass < 3) {
+            pass++;
+            const beforeLen = clean.length;
+            clean = clean.replace(/\\"/g, '"');
+            clean = clean.replace(/\\n/g, '\n');
+            clean = clean.replace(/\\t/g, '\t');
+            if (clean.length < beforeLen) stats.escapes += (beforeLen - clean.length);
+        }
     }
 
     // 2. Code Block Protection (Masking)
@@ -288,16 +316,18 @@ export async function refineContent(rawBuffer: Buffer | string, filePath: string
     // GENERATE FILE-LEVEL TAGS ONCE
     const autoTags = extractProjectTags(filePath);
 
-    // LOAD KEYWORDS ONCE (Cached)
+    // LOAD KEYWORDS ONCE
+
+
     const keywords = loadSovereignKeywords();
 
     const sourceId = crypto.createHash('md5').update(filePath).digest('hex');
     const timestamp = Date.now();
     const normalizedPath = filePath.replace(/\\/g, '/');
 
-    let provenance: 'sovereign' | 'external' = 'external';
+    let provenance: 'internal' | 'external' = 'external';
     if (normalizedPath.includes('/internal-inbox/') || normalizedPath.includes('sovereign/') || normalizedPath.includes('/inbox/')) {
-        provenance = 'sovereign';
+        provenance = 'internal';
     } else if (normalizedPath.includes('/external-inbox/') || normalizedPath.includes('news_agent')) {
         provenance = 'external';
     }
@@ -312,8 +342,20 @@ export async function refineContent(rawBuffer: Buffer | string, filePath: string
         const contentTags = scanForSovereignTags(content, keywords);
         let finalTags = [...new Set([...autoTags, ...contentTags])];
 
+        // NEW: Generate Fingerprint (SimHash)
+        let simhash = "0";
+        if (native && native.fingerprint) {
+            try {
+                // Get BigInt from C++, convert to Hex String for JSON safety
+                const bigHash = native.fingerprint(content);
+                simhash = bigHash.toString(16);
+            } catch (err) {
+                console.error(`[Refiner] SimHash failed for atom ${index}`, err);
+            }
+        }
+
         // QUARANTINE HEURISTICS
-        let atomProvenance: 'sovereign' | 'external' | 'quarantine' = provenance;
+        let atomProvenance: 'internal' | 'external' | 'quarantine' = provenance;
 
         // 1. "Processing..." Log Spam Detection
         // Surgeon V2 handled this upstream, so any surviving lines are likely intentional or deep inside code blocks.
@@ -337,7 +379,9 @@ export async function refineContent(rawBuffer: Buffer | string, filePath: string
             sequence: index,
             timestamp: timestamp,
             provenance: atomProvenance,
+
             embedding: [],
+            simhash: simhash,
             tags: finalTags
         };
     });

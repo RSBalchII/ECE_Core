@@ -20,7 +20,7 @@ export interface SearchRequest {
 
     // The "UniversalRAG" Routing Layer
     buckets?: string[];      // e.g., ["@code", "@visual", "@memory"]
-    provenance?: 'sovereign' | 'external' | 'all'; // Data Provenance filter
+    provenance?: 'internal' | 'external' | 'quarantine' | 'all'; // Data Provenance filter
 }
 
 export interface SearchResponse {

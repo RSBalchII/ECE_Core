@@ -10,26 +10,32 @@ The `cozo-node` package relies on a native C++ binding (`.node` file). On Window
 - `MODULE_NOT_FOUND` during engine startup.
 
 ### Resolution
-The prebuilt binary for Windows (`napi-v6`) must be manually verified. In case of failure:
-1. Locate the correct binary (typically found in `.ignored` or a previous build's `node_modules`).
-2. Map it to: `node_modules/cozo-node/native/6/cozo_node_prebuilt.node`.
+#### Windows-Specific Binary Location
+On Windows (and other platforms), the engine now implements a **Fallback Loading Strategy**. It checks for the binary in this order:
+1. Standard `require('cozo-node')` (Node Resolution)
+2. `engine/cozo_node_win32.node` (Windows Fallback)
+3. `engine/cozo_node_darwin.node` (macOS Fallback)
+4. `engine/cozo_node_linux.node` (Linux Fallback)
+
+If the standard load fails (common on Windows due to pathing issues), you must manually copy the native binary from `node_modules` to the `engine/` root and rename it accordingly.
 
 ## 2. API Inconsistency (v0.7.6+)
-The official `cozo-node` library exports a `CozoDb` class, but the ECE_Core architecture (Standard 058/064) expects individual function exports (`open_db`, `query_db`, etc.) to maintain a functional, stateless-style interface.
+The official `cozo-node` library exports a `CozoDb` class, but the ECE_Core architecture expects individual function exports. Furthermore, the **Native Binary Interface** is stricter than the JS wrapper.
 
-### The Patch
-We maintain a manual patch in `node_modules/cozo-node/index.js` to expose native methods directly:
-```javascript
-module.exports = {
-    CozoDb: CozoDb,
-    open_db: (engine, path, options) => native.open_db(engine, path, JSON.stringify(options)),
-    query_db: (id, script, params) => {
-        return new Promise((resolve, reject) => {
-            native.query_db(id, script, params, (err, res) => { ... });
-        });
-    },
-    // ...
-}
+### Native Interface Contract
+If you bypass the `cozo-node` JS wrapper (e.g., loading the `.node` binary directly in a fallback scenario), you **MUST** strictly adhere to the C++ signature:
+
+| Function | Argument | Type | Requirement |
+| :--- | :--- | :--- | :--- |
+| `open_db` | `options` | `String` (JSON) | **CRITICAL:** Must be `JSON.stringify(options)`. Passing a JS Object causes `TypeError: failed to downcast any to string`. |
+| `query_db` | `params` | `Object` | Passed as standard JS Object (handled by N-API). |
+
+### The Patch (Standard Loading)
+We maintain a manual patch in `node_modules/cozo-node/index.js` to expose native methods directly.
+### The Shim (Fallback Loading)
+In `db.ts`, when loading the binary directly, we implement a **Shim** that replicates the checking logic:
+```typescript
+open_db: (engine, path, options) => native.open_db(engine, path, JSON.stringify(options || {})) // <--- CRITICAL
 ```
 
 ## 3. CozoDB Parser Fragility

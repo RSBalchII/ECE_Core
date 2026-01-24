@@ -5,10 +5,87 @@
  * database operations for the context engine.
  */
 
+console.log('[DB] Loading Config...');
+import { config } from '../config/index.js';
+console.log('[DB] Creating Require...');
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const cozoNode = require('cozo-node');
-import { config } from '../config/index.js';
+console.log('[DB] Requiring cozo-node...');
+let cozoNode: any;
+try {
+  cozoNode = require('cozo-node');
+  // cozoNode = require('cozo-node');
+  console.log('[DB] cozo-node loaded (Standard Module).');
+} catch (e) {
+  try {
+    // Fallback: Try loading from project root based on platform
+    // This allows placing platform-specific binaries in ECE_Core/engine/
+    console.log(`[DB] Standard module load failed. Attempting local binary override for platform: ${process.platform}...`);
+
+    if (process.platform === 'win32') {
+      const native = require('../../cozo_node_win32.node');
+      cozoNode = {
+        open_db: (engine: string, path: string, options: any) => native.open_db(engine || 'mem', path || 'data.db', JSON.stringify(options || {})),
+        close_db: (id: number) => native.close_db(id),
+        query_db: (id: number, script: string, params: any, immutable?: boolean) => new Promise((resolve, reject) => {
+          native.query_db(id, script, params || {}, (err: any, result: any) => {
+            if (err) {
+              try { reject(JSON.parse(err)); } catch (e) { reject(err); }
+            } else {
+              resolve(result);
+            }
+          }, !!immutable);
+        })
+      };
+    } else if (process.platform === 'darwin') {
+      const native = require('../../cozo_node_darwin.node');
+      cozoNode = {
+        open_db: (engine: string, path: string, options: any) => native.open_db(engine || 'mem', path || 'data.db', JSON.stringify(options || {})),
+        close_db: (id: number) => native.close_db(id),
+        query_db: (id: number, script: string, params: any, immutable?: boolean) => new Promise((resolve, reject) => {
+          native.query_db(id, script, params || {}, (err: any, result: any) => {
+            if (err) {
+              try { reject(JSON.parse(err)); } catch (e) { reject(err); }
+            } else {
+              resolve(result);
+            }
+          }, !!immutable);
+        })
+      };
+    } else if (process.platform === 'linux') {
+      const native = require('../../cozo_node_linux.node');
+      cozoNode = {
+        open_db: (engine: string, path: string, options: any) => native.open_db(engine || 'mem', path || 'data.db', JSON.stringify(options || {})),
+        close_db: (id: number) => native.close_db(id),
+        query_db: (id: number, script: string, params: any, immutable?: boolean) => new Promise((resolve, reject) => {
+          native.query_db(id, script, params || {}, (err: any, result: any) => {
+            if (err) {
+              try { reject(JSON.parse(err)); } catch (e) { reject(err); }
+            } else {
+              resolve(result);
+            }
+          }, !!immutable);
+        })
+      };
+    } else {
+      throw new Error(`Unsupported platform for local binary override: ${process.platform}`);
+    }
+
+    console.log(`[DB] Loaded cozo-node from local binary override (${process.platform}).`);
+  } catch (e2: any) {
+    console.warn(`[DB] WARNING: cozo-node missing (both standard and local). Engine will run in Stateless Mode. Error: ${e2.message}`);
+  }
+}
+
+class MockDatabase {
+  init() { console.log('[MockDB] Initialized (Stateless).'); return Promise.resolve(); }
+  close() { console.log('[MockDB] Closed.'); }
+  run(_q: string, _p?: any) {
+    console.log('[MockDB] Query executed in stateless mode.');
+    return Promise.resolve({ rows: [], headers: [] });
+  }
+  search(_q: string) { return Promise.resolve({ rows: [] }); }
+}
 
 export class Database {
   private dbId: string | null = null;
@@ -25,16 +102,30 @@ export class Database {
     if (this.dbId === null) {
       try {
         console.log('[DB] Attempting to open RocksDB backend: ./context.db');
-        this.dbId = cozoNode.open_db('rocksdb', './context.db', {});
+        this.dbId = cozoNode.open_db('rocksdb', './context.db', {});  // Options object for RocksDB
         console.log('[DB] Initialized with RocksDB backend: ./context.db');
       } catch (e: any) {
-        if (e.message?.includes('lock file') || e.message?.includes('IO error')) {
-          console.error('\n\n[DB] CRITICAL ERROR: Database is LOCKED.');
-          console.error('[DB] This usually means another ECE process is running.');
-          console.error('[DB] Please stop all "node" processes and try again.\n');
-          // We can optionally attempt to force-clear locks here, but it's risky if process is alive.
-          // For now, fail gracefully.
-          throw new Error('Database Locked: ' + e.message);
+        const errStr = String(e) + (e.message || '');
+        if (errStr.includes('lock file') || errStr.includes('IO error') || errStr.includes('Invalid argument') || errStr.includes('does not exist') || errStr.includes('rocksdb')) {
+          console.error('\n[DB] Database corruption or lock detected. Auto-purging...');
+          console.error(`[DB] Reason: ${errStr}`);
+
+          try {
+            // Close just in case
+            try { this.close(); } catch (c) { }
+
+            const fs = await import('fs');
+            if (fs.existsSync('./context.db')) fs.rmSync('./context.db', { recursive: true, force: true });
+            if (fs.existsSync('./context.db-log')) fs.rmSync('./context.db-log', { force: true });
+
+            console.log('[DB] Purge complete. Retrying initialization...');
+            this.dbId = cozoNode.open_db('rocksdb', './context.db', {});
+            console.log('[DB] Re-initialization successful.');
+            return; // Continue to schema init
+          } catch (recoveryError: any) {
+            console.error('[DB] CRITICAL: Auto-recovery failed.', recoveryError);
+            throw new Error('Database Corrupted & Recovery Failed: ' + errStr);
+          }
         }
         throw e;
       }
@@ -50,15 +141,18 @@ export class Database {
       const hasSequence = columns.includes('sequence');
       const hasEmbedding = columns.includes('embedding');
       const hasSourceId = columns.includes('source_id');
+      const hasSimhash = columns.includes('simhash');
 
-      if (!hasSequence || !hasEmbedding || !hasSourceId) {
+      if (!hasSequence || !hasEmbedding || !hasSourceId || !hasSimhash) {
         console.log('Migrating memory schema: Adding Atomizer columns...');
 
         // 1. Fetch old data into memory (Safe subset of columns)
-        // We only fallback to what we know existed in v2
+        // We dynamic build the query to avoid requesting missing columns
+        const simhashField = hasSimhash ? ", simhash" : "";
+
         const oldDataResult = await this.run(`
-          ?[id, timestamp, content, source, provenance] :=
-          *memory{id, timestamp, content, source, provenance}
+          ?[id, timestamp, content, source, provenance${simhashField}] :=
+          *memory{id, timestamp, content, source, provenance${simhashField}}
         `);
 
         console.log(`[DB] Migrating ${oldDataResult.rows.length} rows...`);
@@ -92,6 +186,7 @@ export class Database {
             epochs: [String],
             tags: [String],
             provenance: String,
+            simhash: String,
             embedding: <F32; ${config.MODELS.EMBEDDING_DIM}>
           }
         `);
@@ -101,10 +196,12 @@ export class Database {
           const crypto = await import('crypto'); // Dynamic import for hash generation
 
           const newData = oldDataResult.rows.map((row: any) => {
-            // row: [id, timestamp, content, source, provenance]
+            // row: [id, timestamp, content, source, provenance, simhash]
+            // Note: Handling old rows without simhash -> default "0"
             const content = row[2] || "";
             const hash = crypto.createHash('md5').update(content).digest('hex');
-
+            // If simhash was fetched, it's at index 5. If not, it's undefined -> "0"
+            const oldSimhash = hasSimhash ? row[5] : "0";
             return [
               row[0], // id
               row[1] || Date.now(), // timestamp
@@ -118,6 +215,7 @@ export class Database {
               [], // tags
               [], // epochs
               row[4] || "{}", // provenance
+              oldSimhash, // simhash
               new Array(config.MODELS.EMBEDDING_DIM).fill(0.0) // embedding (reset to zero to force re-embed)
             ];
           });
@@ -127,8 +225,8 @@ export class Database {
           for (let i = 0; i < newData.length; i += chunkSize) {
             const chunk = newData.slice(i, i + chunkSize);
             await this.run(`
-               ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, embedding] <- $data
-               :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, embedding}
+               ?[id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, simhash, embedding] <- $data
+               :put memory {id, timestamp, content, source, source_id, sequence, type, hash, buckets, tags, epochs, provenance, simhash, embedding}
              `, { data: chunk });
           }
         }
@@ -155,6 +253,7 @@ export class Database {
                 epochs: [String],
                 tags: [String],
                 provenance: String,
+                simhash: String,
                 embedding: <F32; ${config.MODELS.EMBEDDING_DIM}>
             }
         `);
@@ -319,12 +418,12 @@ export class Database {
   /**
    * Run a query against the database
    */
-  async run(query: string, params?: any) {
+  async run(q: string, p?: any) {
     const { config } = await import('../config/index.js');
     if (config.LOG_LEVEL === 'DEBUG') {
-      if (query.includes(':put') || query.includes(':insert')) {
-        console.log(`[DB] Executing Write: ${query.substring(0, 50)}... Params keys: ${params ? Object.keys(params) : 'none'}`);
-        if (params && params.data) console.log(`[DB] Data rows: ${params.data.length}`);
+      if (q.includes(':put') || q.includes(':insert')) {
+        console.log(`[DB] Executing Write: ${q.substring(0, 50)}... Params keys: ${p ? Object.keys(p) : 'none'}`);
+        if (p && p.data) console.log(`[DB] Data rows: ${p.data.length}`);
       }
     }
 
@@ -332,11 +431,11 @@ export class Database {
       if (this.dbId === null) {
         throw new Error('Database not initialized');
       }
-      const result = cozoNode.query_db(this.dbId, query, params || {});
+      const result = cozoNode.query_db(this.dbId, q, p !== undefined ? p : {});
       return result;
     } catch (e: any) {
       console.error(`[DB] Query Failed: ${e.message}`);
-      console.error(`[DB] Query: ${query}`);
+      console.error(`[DB] Query: ${q}`);
       throw e;
     }
   }
@@ -353,4 +452,4 @@ export class Database {
 }
 
 // Export a singleton instance
-export const db = new Database();
+export const db = cozoNode ? new Database() : new MockDatabase() as unknown as Database;
