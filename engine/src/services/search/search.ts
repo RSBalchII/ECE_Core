@@ -66,6 +66,57 @@ export async function lookupByEngram(key: string): Promise<string[]> {
   return [];
 }
 
+/**
+ * Hydrate atom IDs into full SearchResult objects
+ */
+export async function hydrateEngramResults(ids: string[]): Promise<SearchResult[]> {
+  if (!ids || ids.length === 0) return [];
+
+  // Remove duplicates
+  const uniqueIds = Array.from(new Set(ids));
+
+  try {
+    const query = `
+      SELECT id, content, source_path as source, timestamp, buckets, tags,
+             epochs, provenance, 1.0 as score,
+             sequence, molecular_signature, compound_id, start_byte, end_byte,
+             type, numeric_value, numeric_unit
+      FROM atoms
+      WHERE id = ANY($1)
+    `;
+    const result = await db.run(query, [uniqueIds]);
+
+    if (!result.rows) return [];
+
+    const atoms = result.rows.map((row: any) => ({
+        id: row.id,
+        content: row.content,
+        source: row.source,
+        timestamp: row.timestamp,
+        buckets: row.buckets || [],
+        tags: row.tags || [],
+        epochs: Array.isArray(row.epochs) ? row.epochs.join(',') : (row.epochs || ''),
+        provenance: row.provenance,
+        score: row.score,
+        sequence: row.sequence,
+        molecular_signature: row.molecular_signature,
+        compound_id: row.compound_id,
+        start_byte: row.start_byte,
+        end_byte: row.end_byte,
+        type: row.type,
+        numeric_value: row.numeric_value,
+        numeric_unit: row.numeric_unit
+    }));
+
+    await hydrateFromMirror(atoms);
+
+    return atoms;
+  } catch (e) {
+    console.error('[Search] Failed to hydrate engram results:', e);
+    return [];
+  }
+}
+
 import { PhysicsTagWalker } from './physics-tag-walker.js';
 import { assembleAndSerialize, assembleContextPackage } from './graph-context-serializer.js';
 import { UserContext } from '../../types/context.js';
@@ -115,7 +166,6 @@ export async function findAnchors(
     }
 
     let anchors: SearchResult[] = [];
-    let atomResults: SearchResult[] = [];
 
     // A. Atom Search (Radial Inflation) - Use C++ results if available
     if (cppResults.length > 0) {
@@ -535,15 +585,13 @@ export async function executeSearch(
 
   // 2. Find Anchors (Planets)
   // Combine Engram Lookup + FTS + Molecule Search
-  const engramResults = await lookupByEngram(cleanQuery); // TODO: Hydrate these results
+  const engramIds = await lookupByEngram(cleanQuery);
+  const engramResults = await hydrateEngramResults(engramIds);
+  console.log(`[Search] Hydrated ${engramResults.length} engram results`);
+
   const primaryAnchors = await findAnchors(cleanQuery, Array.from(realBuckets), explicitTags, maxChars, provenance, filters);
 
-  // Clean up engram results if they are just IDs (lookupByEngram returns IDs? No, currently logic is missing hydration in my quick look, assuming compatible or empty)
-  // Actually lookupByEngram returns string[] of IDs. We need to fetch them.
-  // For now, let's rely on primaryAnchors.
-  // If we had time, we'd hydrate engrams.
-
-  const allAnchors = [...primaryAnchors];
+  const allAnchors = [...engramResults, ...primaryAnchors];
 
   // Deduplicate
   const seenIds = new Set<string>();
