@@ -21,6 +21,12 @@ export interface SearchRequest {
     // The "UniversalRAG" Routing Layer
     buckets?: string[];      // e.g., ["@code", "@visual", "@memory"]
     provenance?: 'internal' | 'external' | 'quarantine' | 'all'; // Data Provenance filter
+
+    // Contextual Injection
+    user_context?: {
+      name?: string;
+      current_state?: string;
+    };
 }
 
 export interface SearchResponse {

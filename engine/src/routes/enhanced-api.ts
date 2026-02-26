@@ -24,7 +24,7 @@ export function setupEnhancedRoutes(app: Application) {
   // Enhanced search endpoint with Bright Node support
   app.post('/v1/memory/search-enhanced', async (req: Request, res: Response) => {
     try {
-      const { query, buckets, maxChars, provenance, includeGraph } = req.body;
+      const { query, buckets, maxChars, provenance, includeGraph, user_context } = req.body;
 
       // Default values
       const searchQuery = query || '';
@@ -40,7 +40,11 @@ export function setupEnhancedRoutes(app: Application) {
         searchBuckets,
         maxCharacters,
         false,
-        searchProvenance
+        searchProvenance,
+        [],
+        undefined,
+        false,
+        user_context
       );
 
       // Optionally include Bright Node graph data

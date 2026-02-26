@@ -115,7 +115,7 @@ export async function findAnchors(
     }
 
     let anchors: SearchResult[] = [];
-    let atomResults: SearchResult[] = [];
+    // atomResults already declared above
 
     // A. Atom Search (Radial Inflation) - Use C++ results if available
     if (cppResults.length > 0) {
@@ -523,7 +523,8 @@ export async function executeSearch(
   provenance: 'internal' | 'external' | 'quarantine' | 'all' = 'all',
   explicitTags: string[] = [],
   filters?: { type?: string; minVal?: number; maxVal?: number; },
-  useMaxRecall: boolean = false
+  useMaxRecall: boolean = false,
+  userContextInput?: Partial<UserContext>
 ): Promise<{ context: string; results: SearchResult[]; toAgentString: () => string; metadata?: any }> {
   console.log(`[Search] executeSearch (Physics Engine V2) called with provenance: ${provenance}`);
   const startTime = Date.now();
@@ -577,8 +578,8 @@ export async function executeSearch(
 
   // 4. Graph-Context Serialization (GCP)
   const userContext: UserContext = {
-    name: 'User', // TODO: Get from request context if available
-    current_state: 'active'
+    name: userContextInput?.name || 'User',
+    current_state: userContextInput?.current_state || 'active'
   };
 
   const contextPackage = assembleContextPackage({
@@ -643,7 +644,8 @@ export async function executeMoleculeSearch(
   maxChars: number = config.SEARCH.max_chars_default, // Use config default (512KB)
   deep: boolean = false,
   provenance: 'internal' | 'external' | 'quarantine' | 'all' = 'all',
-  explicitTags: string[] = []
+  explicitTags: string[] = [],
+  userContextInput?: Partial<UserContext>
 ): Promise<{ context: string; results: SearchResult[]; toAgentString: () => string; metadata?: any }> {
 
   // Split the query into molecules (sentence-like chunks)
@@ -666,7 +668,10 @@ export async function executeMoleculeSearch(
         maxChars,
         deep,
         provenance,
-        explicitTags
+        explicitTags,
+        undefined,
+        false,
+        userContextInput
       );
 
       // Add unique results to our collection
@@ -770,7 +775,8 @@ export async function iterativeSearch(
   maxChars: number = config.SEARCH.max_chars_default, // Use config default (512KB)
   tags: string[] = [],
   provenance: 'internal' | 'external' | 'quarantine' | 'all' = 'all',
-  useMaxRecall: boolean = false
+  useMaxRecall: boolean = false,
+  userContextInput?: Partial<UserContext>
 ): Promise<{ context: string; results: SearchResult[]; attempt: number; metadata?: any; toAgentString: () => string }> {
 
   // 0. Extract Scope Tags (Hashtags) to preserve them across strategies
@@ -784,7 +790,7 @@ export async function iterativeSearch(
 
   // Strategy 1: Standard Expanded Search (All Nouns, Verbs, Dates + Expansion)
   console.log(`[IterativeSearch] Strategy 1: Standard Execution`);
-  let results = await executeSearch(query, undefined, buckets, maxChars, false, provenance, tags, undefined, useMaxRecall);
+  let results = await executeSearch(query, undefined, buckets, maxChars, false, provenance, tags, undefined, useMaxRecall, userContextInput);
   if (results.results.length > 0) return { ...results, attempt: 1 };
 
   // Strategy 2: Strict "Subjects & Time" (Strip Verbs/Adjectives, keep Nouns + Dates)
@@ -801,7 +807,7 @@ export async function iterativeSearch(
     // Re-inject scope tags
     const strictQuery = Array.from(uniqueTokens).join(' ') + ' ' + tagsString;
     console.log(`[IterativeSearch] Fallback Query 1: "${strictQuery.trim()}"`);
-    results = await executeSearch(strictQuery, undefined, buckets, maxChars, false, provenance, tags);
+    results = await executeSearch(strictQuery, undefined, buckets, maxChars, false, provenance, tags, undefined, false, userContextInput);
     if (results.results.length > 0) return { ...results, attempt: 2 };
   }
 
@@ -815,7 +821,7 @@ export async function iterativeSearch(
 
   if (entityQuery.trim().length > 0 && entityQuery.trim() !== (Array.from(uniqueTokens).join(' ') + ' ' + tagsString).trim()) {
     console.log(`[IterativeSearch] Fallback Query 2: "${entityQuery.trim()}"`);
-    results = await executeSearch(entityQuery, undefined, buckets, maxChars, false, provenance, tags);
+    results = await executeSearch(entityQuery, undefined, buckets, maxChars, false, provenance, tags, undefined, false, userContextInput);
     if (results.results.length > 0) return { ...results, attempt: 3 };
   }
 
@@ -839,7 +845,8 @@ export async function smartChatSearch(
   maxChars: number = 20000,
   tags: string[] = [],
   provenance: 'internal' | 'external' | 'quarantine' | 'all' = 'all',
-  useMaxRecall: boolean = false
+  useMaxRecall: boolean = false,
+  userContextInput?: Partial<UserContext>
 ): Promise<{ context: string; results: SearchResult[]; strategy: string; splitQueries?: string[]; metadata?: any; toAgentString: () => string }> {
 
   const isLongQuery = query.length > 100;
@@ -847,7 +854,7 @@ export async function smartChatSearch(
 
   // 1. Initial Attempt (Skip if it's a massive max-recall query to force chunking)
   if (!isLongQuery || !useMaxRecall) {
-    initial = await iterativeSearch(query, buckets, maxChars, tags, provenance, useMaxRecall);
+    initial = await iterativeSearch(query, buckets, maxChars, tags, provenance, useMaxRecall, userContextInput);
 
     // If we have enough results, returns immediately
     if (initial.results.length >= 10 && !useMaxRecall) {
@@ -903,7 +910,7 @@ export async function smartChatSearch(
   // For max-recall mode, give each sub-query the full budget to maximize retrieval
   const budgetPerQuery = useMaxRecall ? maxChars : Math.floor(maxChars / splitQueries.length);
   const parallelPromises = splitQueries.map((entity: string) =>
-    executeSearch(entity, undefined, buckets, budgetPerQuery, false, provenance, tags, undefined, useMaxRecall)
+    executeSearch(entity, undefined, buckets, budgetPerQuery, false, provenance, tags, undefined, useMaxRecall, userContextInput)
   );
 
   const parallelResults = await Promise.all(parallelPromises);
@@ -951,8 +958,8 @@ export async function smartChatSearch(
 
   // 5. Re-Format using GCP (Standard 086)
   const userContext: UserContext = {
-    name: 'User',
-    current_state: 'active'
+    name: userContextInput?.name || 'User',
+    current_state: userContextInput?.current_state || 'active'
   };
 
   const serializedContext = assembleAndSerialize({

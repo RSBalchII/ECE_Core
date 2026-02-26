@@ -291,6 +291,7 @@ export function setupRoutes(app: Application) {
       const defaultLimit = 100000;
       const budget = (req.body as any).token_budget ? (req.body as any).token_budget * 4 : (body.max_chars || defaultLimit);
       const tags = (req.body as any).tags || [];
+      const userContext = body.user_context;
 
       // Enhanced Search Strategy (Standard 086)
       // Support both standard and max-recall strategies
@@ -305,7 +306,8 @@ export function setupRoutes(app: Application) {
           budget,
           tags,
           (req.body as any).provenance || 'all',
-          true  // useMaxRecall = true
+          true,  // useMaxRecall = true
+          userContext
         );
       } else {
         // Standard Strategy: Balanced 70/30 budget with temporal decay
@@ -315,7 +317,8 @@ export function setupRoutes(app: Application) {
           budget,
           tags,
           (req.body as any).provenance || 'all',
-          false  // useMaxRecall = false
+          false,  // useMaxRecall = false
+          userContext
         );
       }
 
@@ -433,6 +436,7 @@ export function setupRoutes(app: Application) {
       const allBuckets = bucketParam ? [...buckets, bucketParam] : buckets;
       const budget = body.token_budget ? body.token_budget * 4 : (body.max_chars || 2400); // Default to 2400 as specified
       const tags = body.tags || [];
+      const userContext = body.user_context;
 
       // Use Molecule Search Strategy - split query into sentence-like chunks
       const { executeMoleculeSearch } = await import('../services/search/search.js');
@@ -443,7 +447,8 @@ export function setupRoutes(app: Application) {
         budget,
         false, // deep
         'all', // provenance
-        tags
+        tags,
+        userContext
       );
 
       // Construct standard response
@@ -483,6 +488,7 @@ export function setupRoutes(app: Application) {
       // Default to 256K chars for max recall
       const budget = body.token_budget ? body.token_budget * 4 : (body.max_chars || 262144);
       const tags = body.tags || [];
+      const userContext = body.user_context;
 
       // Use max-recall configuration
       const { smartChatSearch } = await import('../services/search/search.js');
@@ -492,7 +498,8 @@ export function setupRoutes(app: Application) {
         budget,
         tags,
         'all', // provenance
-        true   // useMaxRecall = true
+        true,   // useMaxRecall = true
+        userContext
       );
 
       console.log(`[API] Max Recall Search "${body.query}" -> Found ${result.results.length} results`);
