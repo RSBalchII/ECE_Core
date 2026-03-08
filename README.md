@@ -73,7 +73,7 @@ To maintain speed and reduce database bloat, we designed our data model around p
 
 ### Zero-Compilation Deployment
 
-We chose **PGlite (WASM-based PostgreSQL)** because it eliminates native compilation headaches and runs everywhere Node.js does. You get the power of Postgres full-text search (FTS5) and structured data without managing a standalone database server.
+We chose **PGlite (WASM-based PostgreSQL)** because it eliminates native compilation headaches and runs everywhere Node.js does. You get the power of PostgreSQL’s `tsvector`/`tsquery` full-text search and structured data without managing a standalone database server.
 
 ---
 
