@@ -866,9 +866,9 @@ async function _executeSearchInternal(
   }
 
   // 4. Graph-Context Serialization (GCP)
-  const finalUserContext: UserContext = userContext || {
-    name: 'User', // TODO: Get from request context if available
-    current_state: 'active'
+  const finalUserContext: UserContext = {
+    name: userContext?.name || 'User',
+    current_state: userContext?.current_state || 'active'
   };
 
   const contextPackage = assembleContextPackage({
@@ -1267,9 +1267,9 @@ export async function smartChatSearch(
   }
 
   // 5. Re-Format using GCP (Standard 086)
-  const finalUserContext: UserContext = userContext || {
-    name: 'User',
-    current_state: 'active'
+  const finalUserContext: UserContext = {
+    name: userContext?.name || 'User',
+    current_state: userContext?.current_state || 'active'
   };
 
   const serializedContext = assembleAndSerialize({
