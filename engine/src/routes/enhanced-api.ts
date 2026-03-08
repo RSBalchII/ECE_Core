@@ -133,30 +133,6 @@ export function setupEnhancedRoutes(app: Application) {
     }
   });
 
-  // Raw database query endpoint (for advanced users)
-  app.post('/v1/db/query', async (req: Request, res: Response) => {
-    try {
-      const { query, params } = req.body;
-
-      if (!query) {
-        return res.status(400).json({ error: 'Query is required' });
-      }
-
-      const result = await db.run(query, params || {});
-
-      res.status(200).json({
-        result,
-        query: query.substring(0, 100) + (query.length > 100 ? '...' : '') // Truncate for safety
-      });
-    } catch (error: any) {
-      console.error('Database query failed:', error);
-      res.status(500).json({
-        error: error.message,
-        query: req.body?.query?.substring(0, 100) + '...' || ''
-      });
-    }
-  });
-
   // System information endpoint
   app.get('/v1/system/info', async (_req: Request, res: Response) => {
     try {
