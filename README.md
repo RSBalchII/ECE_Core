@@ -32,6 +32,7 @@ Instead of vectors, we use **graph traversal**. Instead of guessing, we give you
 | **Local‑first** | Runs entirely offline on your hardware. No API calls, no data leaving your machine. |
 | **Model‑agnostic** | Works with any LLM – local models, cloud APIs, or anything in between. |
 | **Lightweight** | <3GB RAM, runs on a Raspberry Pi or a $200 mini PC. |
+| **Cross-Platform** | Built on PGlite (WASM PostgreSQL), it requires zero native compilation. Identical behavior on ARM64, x64, Linux, and macOS. |
 | **Open source** | AGPL‑3.0 – no lock‑in, no license tracking, no proprietary binaries. |
 | **Recursive** | Used to build itself – if it's good enough for its own development, it's good enough for yours. |
 
@@ -58,12 +59,33 @@ Need to see the "spine" of your corpus? Use `illuminate:` to perform a breadth�
 
 ---
 
+## Technical Overview
+
+### Data Model: Compound → Molecule → Atom
+
+To maintain speed and reduce database bloat, we designed our data model around pointers, not blobs:
+
+- **Compound:** A source file (e.g., a chat export, document, or code file).
+- **Molecule:** A semantic chunk of that file with byte‑offset pointers.
+- **Atom:** A tag or concept, NOT the actual content itself.
+
+**Key Insight:** Content lives in the `mirrored_brain/` filesystem. The database only stores pointers (byte offsets + metadata). This makes the database a **disposable, rebuildable index** that can be wiped and re-hydrated quickly.
+
+### Zero-Compilation Deployment
+
+We chose **PGlite (WASM-based PostgreSQL)** because it eliminates native compilation headaches and runs everywhere Node.js does. You get the power of Postgres full-text search (FTS5) and structured data without managing a standalone database server.
+
+---
+
 ## Performance Numbers
 
-- **Memory usage:** <3GB RAM (tested on 500M+ token corpora)
-- **Search latency:** <200ms for typical queries (p95)
-- **Ingestion:** 25M tokens in under 5 minutes
-- **Hardware:** Runs on Raspberry Pi 4, $200 mini PCs, and your laptop
+We built Anchor Engine to handle real-world scale without needing a server rack.
+
+- **Dataset Size:** Tested on ~25M tokens (~100MB chat history corpus)
+- **Restore Speed:** Restored 281,690 atoms in 13.8 minutes (340 atoms/second)
+- **Search Latency:** <200ms for typical queries (p95)
+- **Memory Usage:** <3GB RAM peak, <600MB typical
+- **Ingestion Speed:** 8-15ms per chunk cleaning time, ~25M tokens in under 5 minutes
 
 Benchmarks against vector search are available in the [whitepaper](docs/STAR_Whitepaper.md).
 
@@ -76,6 +98,12 @@ Anchor Engine wasn't built in a vacuum. The entire codebase was developed **usin
 ---
 
 ## Quick Start
+
+### Requirements
+- Node.js v18+ (v20+ recommended)
+- PNPM package manager
+- Minimum 4GB RAM (8GB+ recommended)
+- 10GB free storage space
 
 ```bash
 git clone https://github.com/RSBalchII/anchor-engine-node.git
@@ -90,6 +118,37 @@ Full instructions in the [docs](docs/).
 
 ---
 
+## Docker Deployment
+
+For those who prefer containerized environments, we've got you covered.
+
+### Quick Start with Docker
+
+```bash
+# Build the Docker image
+docker build -t anchor-engine:latest .
+
+# Run the container
+docker run -d -p 3160:3160 --name anchor anchor-engine:latest
+```
+
+### Docker Compose (Recommended)
+
+Using Docker Compose mounts persistent storage and your ingestion folders automatically.
+
+```bash
+# Start with persistent storage and inbox mounted
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop and remove data volume
+docker-compose down -v
+```
+
+---
+
 ## Use Cases
 
 - **AI agents** – give your agents persistent memory across sessions
@@ -97,6 +156,19 @@ Full instructions in the [docs](docs/).
 - **Personal assistants** – learn user preferences over time
 - **Coding copilots** – maintain context across a whole project
 - **Research tools** – compress large corpora into navigable graphs
+
+---
+
+## Built with Standards
+
+Anchor Engine is built with rigorous architecture standards to ensure predictability and maintainability. You can review our active design documents in the [`specs/standards/`](specs/standards/) directory.
+
+| Standard | Description |
+|----------|-------------|
+| **104** | Universal Semantic Search |
+| **110** | Ephemeral Index (Disposable database pattern) |
+| **094** | Smart Search Protocol |
+| **065** | Graph Associative Retrieval |
 
 ---
 
@@ -111,7 +183,7 @@ Full instructions in the [docs](docs/).
 
 ## Community & Feedback
 
-We're building this in the open and would love your input. If you've hit the walls of fuzzy retrieval, context limits, or cloud dependency – give Anchor Engine a spin.
+We're building this in the open and would love your input. If you've hit the walls of fuzzy retrieval, context limits, or cloud dependency – give Anchor Engine a spin. Inspired by the tireless experiments of the `r/LocalLLaMA` and `r/aiagents` communities, we are building for sovereign AI.
 
 - **Star the repo** – it helps others find it
 - **Open an issue** – bug reports, feature requests, questions
