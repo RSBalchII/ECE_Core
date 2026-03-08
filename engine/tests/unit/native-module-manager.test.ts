@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NativeModuleManager } from '../../src/utils/native-module-manager.js';
+import { NativeModuleManager, nativeModuleManager } from '../../src/utils/native-module-manager.js';
 import { pathManager } from '../../src/utils/path-manager.js';
 
 // Mock pathManager
@@ -48,6 +48,18 @@ describe('NativeModuleManager', () => {
       const instance1 = NativeModuleManager.getInstance();
       const instance2 = NativeModuleManager.getInstance();
       expect(instance1).toBe(instance2);
+    });
+
+    it('should export a singleton instance', () => {
+      expect(nativeModuleManager).toBeDefined();
+      expect(nativeModuleManager).toBeInstanceOf(NativeModuleManager);
+      // Since beforeEach resets the instance, the exported one might be different from the one created in beforeEach if it was imported earlier
+      // The exported instance is created once when the module is evaluated.
+      // So we test that it has the expected methods of a NativeModuleManager instance
+      expect(nativeModuleManager.loadNativeModule).toBeInstanceOf(Function);
+      expect(nativeModuleManager.getStatus).toBeInstanceOf(Function);
+      expect(nativeModuleManager.isUsingFallback).toBeInstanceOf(Function);
+      expect(nativeModuleManager.getAllStatus).toBeInstanceOf(Function);
     });
   });
 
