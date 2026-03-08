@@ -183,7 +183,7 @@ Anchor Engine is built with rigorous architecture standards to ensure predictabi
 
 ## Community & Feedback
 
-We're building this in the open and would love your input. If you've hit the walls of fuzzy retrieval, context limits, or cloud dependency – give Anchor Engine a spin. Inspired by the tireless experiments of the `r/LocalLLaMA` and `r/aiagents` communities, we are building for sovereign AI.
+We're building this in the open and would love your input. If you've hit the walls of fuzzy retrieval, context limits, or cloud dependency – give Anchor Engine a spin.
 
 - **Star the repo** – it helps others find it
 - **Open an issue** – bug reports, feature requests, questions
