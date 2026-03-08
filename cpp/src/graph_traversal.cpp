@@ -34,8 +34,24 @@ std::vector<Edge> bfsTraversal(Database& db, AtomId start_id, int max_hops) {
 }
 
 std::vector<AtomId> findTagNeighbors(Database& db, AtomId atom_id) {
-    // TODO: Implement tag-based neighbor finding
-    return {};
+    std::unordered_set<AtomId> neighbor_ids;
+
+    // Get all tags for the source atom
+    std::vector<Tag> source_tags = db.getTagsForAtom(atom_id);
+
+    // For each tag, find all atoms sharing that tag
+    for (const auto& tag : source_tags) {
+        std::vector<Atom> atoms_with_tag = db.getAtomsByTag(tag.tag);
+        for (const auto& atom : atoms_with_tag) {
+            // Add to neighbors if it's not the original atom
+            if (atom.id != atom_id) {
+                neighbor_ids.insert(atom.id);
+            }
+        }
+    }
+
+    // Convert set back to vector
+    return std::vector<AtomId>(neighbor_ids.begin(), neighbor_ids.end());
 }
 
 } // namespace anchor
