@@ -45,7 +45,6 @@ Options:
 Examples:
   node github-ingester.js --repo RSBalchII/anchor-engine-node
   node github-ingester.js --repo RSBalchII/anchor-engine-node --branch develop --output inbox
-  node github-ingester.js --repo RSBalchII/anchor-engine-node --token ghp_xxx --incremental
 `);
       process.exit(0);
     }
