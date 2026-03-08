@@ -56,8 +56,17 @@ export class TagAuditor {
   async findUnderTaggedAtoms(minContentLength: number = 500, maxTags: number = 2): Promise<UnderTaggedAtom[]> {
     console.log('[TagAuditor] Finding under-tagged atoms...');
     
+    // Fetch all existing distinct tags once for performance
+    const allTagsQuery = `SELECT DISTINCT unnest(tags) as tag FROM atoms WHERE tags IS NOT NULL`;
+    const allTagsResult = await db.run(allTagsQuery);
+    const allTags = allTagsResult.rows
+      ? (allTagsResult.rows as any[])
+          .map((r: any) => r.tag)
+          .filter((tag: string) => tag && tag.length > 0)
+      : [];
+
     const query = `
-      SELECT id, source_path, length(content) as content_length, 
+      SELECT id, source_path, content, length(content) as content_length,
              cardinality(tags) as tag_count, tags
       FROM atoms
       WHERE length(content) > $1 
@@ -73,7 +82,11 @@ export class TagAuditor {
     const underTagged: UnderTaggedAtom[] = [];
     
     for (const row of result.rows as any[]) {
-      const suggestedTags = await this.suggestTagsForAtom(row.id);
+      const suggestedTags = await this.suggestTagsForAtom(row.id, 5, {
+        content: row.content || '',
+        existingTags: row.tags || [],
+        allTags
+      });
       
       underTagged.push({
         id: row.id,
@@ -192,21 +205,46 @@ export class TagAuditor {
   /**
    * Suggest tags for an atom based on content
    */
-  async suggestTagsForAtom(atomId: string, limit: number = 5): Promise<string[]> {
+  async suggestTagsForAtom(
+    atomId: string,
+    limit: number = 5,
+    context?: { content: string; existingTags: string[]; allTags: string[] }
+  ): Promise<string[]> {
     try {
-      // Get atom content
-      const atomQuery = `SELECT content, tags FROM atoms WHERE id = $1`;
-      const atomResult = await db.run(atomQuery, [atomId]);
-      
-      if (!atomResult.rows || atomResult.rows.length === 0) {
-        return [];
+      let atomContent = '';
+      let existingTags: Set<string>;
+      let allTags: string[];
+
+      if (context) {
+        atomContent = context.content;
+        existingTags = new Set(context.existingTags || []);
+        allTags = context.allTags;
+      } else {
+        // Get atom content
+        const atomQuery = `SELECT content, tags FROM atoms WHERE id = $1`;
+        const atomResult = await db.run(atomQuery, [atomId]);
+
+        if (!atomResult.rows || atomResult.rows.length === 0) {
+          return [];
+        }
+
+        const atom = atomResult.rows[0] as any;
+        atomContent = atom.content || '';
+        existingTags = new Set(atom.tags || []);
+
+        // Get all existing tags
+        const allTagsQuery = `SELECT DISTINCT unnest(tags) as tag FROM atoms WHERE tags IS NOT NULL`;
+        const allTagsResult = await db.run(allTagsQuery);
+
+        if (!allTagsResult.rows) return [];
+
+        allTags = (allTagsResult.rows as any[])
+          .map((r: any) => r.tag)
+          .filter((tag: string) => tag && tag.length > 0);
       }
       
-      const atom = atomResult.rows[0] as any;
-      const existingTags = new Set(atom.tags || []);
-      
       // Extract key terms from content
-      const doc = nlp.readDoc(atom.content);
+      const doc = nlp.readDoc(atomContent);
       const terms = doc.tokens()
         .filter((t: any) => {
           const pos = t.out(nlp.its.pos);
@@ -215,16 +253,6 @@ export class TagAuditor {
         .out(nlp.its.normal)
         .filter((term: string) => term.length > 3 && term.length < 30)
         .slice(0, 20);
-      
-      // Get all existing tags
-      const allTagsQuery = `SELECT DISTINCT unnest(tags) as tag FROM atoms WHERE tags IS NOT NULL`;
-      const allTagsResult = await db.run(allTagsQuery);
-      
-      if (!allTagsResult.rows) return [];
-      
-      const allTags = (allTagsResult.rows as any[])
-        .map((r: any) => r.tag)
-        .filter((tag: string) => tag && tag.length > 0);
       
       // Find matching tags
       const suggestions = terms.filter((term: string) => {

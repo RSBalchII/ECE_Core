@@ -69,7 +69,8 @@ export function setupSearchRoutes(app: Application) {
           budget,
           tags,
           (req.body as any).provenance || 'all',
-          true  // useMaxRecall = true
+          true,  // useMaxRecall = true
+          body.user_context
         );
       } else {
         // Standard Strategy: Balanced 70/30 budget with temporal decay
@@ -79,7 +80,8 @@ export function setupSearchRoutes(app: Application) {
           budget,
           tags,
           (req.body as any).provenance || 'all',
-          false  // useMaxRecall = false
+          false,  // useMaxRecall = false
+          body.user_context
         );
       }
 
@@ -167,7 +169,8 @@ export function setupSearchRoutes(app: Application) {
         budget,
         false, // deep
         'all', // provenance
-        tags
+        tags,
+        body.user_context
       );
 
       // Construct standard response
@@ -215,7 +218,8 @@ export function setupSearchRoutes(app: Application) {
         budget,
         tags,
         'all', // provenance
-        true   // useMaxRecall = true
+        true,   // useMaxRecall = true
+        body.user_context
       );
 
       console.log(`[API] Max Recall Search "${body.query}" -> Found ${result.results.length} results`);

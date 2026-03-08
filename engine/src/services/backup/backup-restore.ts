@@ -93,33 +93,44 @@ export async function restoreFromBackup(filename: string): Promise<RestoreStats>
     const BATCH_SIZE = 100;
     for (let i = 0; i < backupData.atoms.length; i += BATCH_SIZE) {
         const batch = backupData.atoms.slice(i, i + BATCH_SIZE);
+
+        if (batch.length === 0) continue;
+
+        const placeholders: string[] = [];
+        const values: any[] = [];
+        let paramIndex = 1;
+
         for (const atom of batch) {
-            await db.run(
-                `INSERT INTO atoms (id, timestamp, content, source_path, source_id, sequence, type, hash, buckets, tags, epochs, provenance, simhash, embedding)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-                 ON CONFLICT (id) DO UPDATE SET
-                   content = EXCLUDED.content,
-                   timestamp = EXCLUDED.timestamp,
-                   source_path = EXCLUDED.source_path,
-                   source_id = EXCLUDED.source_id,
-                   sequence = EXCLUDED.sequence,
-                   type = EXCLUDED.type,
-                   hash = EXCLUDED.hash,
-                   buckets = EXCLUDED.buckets,
-                   tags = EXCLUDED.tags,
-                   epochs = EXCLUDED.epochs,
-                   provenance = EXCLUDED.provenance,
-                   simhash = EXCLUDED.simhash,
-                   embedding = EXCLUDED.embedding`,
-                [
-                    atom.id, atom.timestamp, atom.content, atom.source_path,
-                    atom.source_id, atom.sequence, atom.type, atom.hash,
-                    atom.buckets, atom.tags, atom.epochs, atom.provenance,
-                    atom.simhash, atom.embedding
-                ]
+            placeholders.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4}, $${paramIndex + 5}, $${paramIndex + 6}, $${paramIndex + 7}, $${paramIndex + 8}, $${paramIndex + 9}, $${paramIndex + 10}, $${paramIndex + 11}, $${paramIndex + 12}, $${paramIndex + 13})`);
+            values.push(
+                atom.id, atom.timestamp, atom.content, atom.source_path,
+                atom.source_id, atom.sequence, atom.type, atom.hash,
+                atom.buckets, atom.tags, atom.epochs, atom.provenance,
+                atom.simhash, atom.embedding
             );
-            stats.memory_count++;
+            paramIndex += 14;
         }
+
+        await db.run(
+            `INSERT INTO atoms (id, timestamp, content, source_path, source_id, sequence, type, hash, buckets, tags, epochs, provenance, simhash, embedding)
+             VALUES ${placeholders.join(', ')}
+             ON CONFLICT (id) DO UPDATE SET
+               content = EXCLUDED.content,
+               timestamp = EXCLUDED.timestamp,
+               source_path = EXCLUDED.source_path,
+               source_id = EXCLUDED.source_id,
+               sequence = EXCLUDED.sequence,
+               type = EXCLUDED.type,
+               hash = EXCLUDED.hash,
+               buckets = EXCLUDED.buckets,
+               tags = EXCLUDED.tags,
+               epochs = EXCLUDED.epochs,
+               provenance = EXCLUDED.provenance,
+               simhash = EXCLUDED.simhash,
+               embedding = EXCLUDED.embedding`,
+            values
+        );
+        stats.memory_count += batch.length;
     }
 
     // Restore engrams
