@@ -32,7 +32,7 @@ Instead of vectors, we use **graph traversal**. Instead of guessing, we give you
 | **Local‑first** | Runs entirely offline on your hardware. No API calls, no data leaving your machine. |
 | **Model‑agnostic** | Works with any LLM – local models, cloud APIs, or anything in between. |
 | **Lightweight** | <3GB RAM, runs on a Raspberry Pi or a $200 mini PC. |
-| **Cross-Platform** | Built on PGlite (WASM PostgreSQL), it requires zero native compilation. Identical behavior on ARM64, x64, Linux, and macOS. |
+| **Cross-platform** | Built on PGlite (WASM PostgreSQL), it requires zero native compilation. Identical behavior on ARM64, x64, Linux, and macOS. |
 | **Open source** | AGPL‑3.0 – no lock‑in, no license tracking, no proprietary binaries. |
 | **Recursive** | Used to build itself – if it's good enough for its own development, it's good enough for yours. |
 
