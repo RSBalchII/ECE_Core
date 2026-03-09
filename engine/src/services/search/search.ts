@@ -126,55 +126,65 @@ async function enrichAtomsWithMoleculeTags(anchors: SearchResult[]): Promise<voi
       }
     }
 
-    // For each compound, fetch molecule tags and merge with atom tags
-    for (const [compoundId, compoundAnchors] of anchorsByCompound) {
-      try {
-        // Fetch all molecules for this compound with their tags
-        const molQuery = `
-          SELECT id, tags 
-          FROM molecules 
-          WHERE compound_id = $1 AND tags IS NOT NULL
-        `;
-        
-        const molResult = await db.run(molQuery, [compoundId]);
-        
-        if (molResult.rows && molResult.rows.length > 0) {
-          // Collect all unique molecule tags
-          const moleculeTags = new Set<string>();
+    if (anchorsByCompound.size === 0) return;
+
+    const compoundIds = Array.from(anchorsByCompound.keys());
+
+    try {
+      // ⚡ Bolt Optimization: Batch fetch molecules for all compounds using ANY() to prevent N+1 queries
+      const molQuery = `
+        SELECT compound_id, tags
+        FROM molecules
+        WHERE compound_id = ANY($1) AND tags IS NOT NULL
+      `;
+
+      const molResult = await db.run(molQuery, [compoundIds]);
+
+      // Group molecule tags by compound_id
+      const tagsByCompound = new Map<string, Set<string>>();
+
+      if (molResult.rows && molResult.rows.length > 0) {
+        for (const molRow of molResult.rows) {
+          const cId = molRow.compound_id;
+          if (!tagsByCompound.has(cId)) {
+            tagsByCompound.set(cId, new Set<string>());
+          }
+          const compoundTags = tagsByCompound.get(cId)!;
           
-          for (const molRow of molResult.rows) {
-            if (molRow.tags) {
-              const tags = typeof molRow.tags === 'string' 
-                ? JSON.parse(molRow.tags) 
-                : molRow.tags;
-              
-              if (Array.isArray(tags)) {
-                for (const tag of tags) {
-                  if (tag && typeof tag === 'string') {
-                    moleculeTags.add(tag);
-                  }
+          if (molRow.tags) {
+            const tags = typeof molRow.tags === 'string'
+              ? JSON.parse(molRow.tags)
+              : molRow.tags;
+
+            if (Array.isArray(tags)) {
+              for (const tag of tags) {
+                if (tag && typeof tag === 'string') {
+                  compoundTags.add(tag);
                 }
               }
             }
           }
-          
-          // Merge molecule tags with each atom's tags
-          if (moleculeTags.size > 0) {
-            for (const anchor of compoundAnchors) {
-              const atomTags = anchor.tags || [];
-              const mergedTags = Array.from(
-                new Set([...atomTags, ...moleculeTags])
-              );
-              
-              // Sort tags for consistency (atom tags first, then molecule tags alphabetically)
-              anchor.tags = mergedTags.sort();
-            }
+        }
+      }
+
+      // Merge molecule tags with each atom's tags
+      for (const [compoundId, compoundAnchors] of anchorsByCompound) {
+        const moleculeTags = tagsByCompound.get(compoundId);
+        if (moleculeTags && moleculeTags.size > 0) {
+          for (const anchor of compoundAnchors) {
+            const atomTags = anchor.tags || [];
+            const mergedTags = Array.from(
+              new Set([...atomTags, ...moleculeTags])
+            );
+
+            // Sort tags for consistency (atom tags first, then molecule tags alphabetically)
+            anchor.tags = mergedTags.sort();
           }
         }
-      } catch (molErr) {
-        // Silently continue if molecule tag fetch fails for a compound
-        console.debug('[Search] Could not fetch molecule tags for compound:', compoundId, molErr);
       }
+    } catch (molErr) {
+      // Silently continue if molecule tag fetch fails
+      console.debug('[Search] Could not fetch molecule tags for compounds:', molErr);
     }
   } catch (e) {
     console.warn('[Search] Failed to enrich atoms with molecule tags:', e);

@@ -1,0 +1,3 @@
+## 2024-05-18 - [N+1 Query Bottleneck in Search Service]
+**Learning:** Found an N+1 query issue in `enrichAtomsWithMoleculeTags` where a separate SQL query was being executed for each `compound_id`.
+**Action:** When working with nested loops or arrays that require data fetching, always look for opportunities to batch queries. Used `SELECT ... WHERE compound_id = ANY($1)` to fetch all molecule tags in a single query, significantly improving performance.
