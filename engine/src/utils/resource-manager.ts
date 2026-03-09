@@ -83,6 +83,7 @@ export class ResourceManager {
   private lastGCTime: number = 0;
   private gcCooldown: number = config.GC_COOLDOWN_MS; // Configurable cooldown between forced GC
   private resources: SystemResources;
+  private monitoringInterval: NodeJS.Timeout | null = null;
 
   private constructor(resources?: SystemResources) {
     this.resources = resources || new DefaultSystemResources();
@@ -261,9 +262,12 @@ export class ResourceManager {
    * Monitor memory usage and trigger optimizations
    */
   public startMonitoring(intervalMs: number = config.MONITORING_INTERVAL_MS): void {
+    if (this.monitoringInterval !== null) {
+      this.stopMonitoring();
+    }
     console.log(`[ResourceManager] Starting memory monitoring (interval: ${intervalMs}ms)`);
 
-    setInterval(() => {
+    this.monitoringInterval = setInterval(() => {
       const stats = this.getMemoryStats();
 
       if (stats.percentageUsed > this.limits.gcThreshold * 100) {
@@ -279,6 +283,17 @@ export class ResourceManager {
         console.log(`[ResourceManager] RSS: ${(stats.rss / 1024 / 1024).toFixed(2)}MB, Heap: ${stats.percentageUsed.toFixed(2)}%`);
       }
     }, intervalMs);
+  }
+
+  /**
+   * Stop memory monitoring
+   */
+  public stopMonitoring(): void {
+    if (this.monitoringInterval !== null) {
+      clearInterval(this.monitoringInterval);
+      this.monitoringInterval = null;
+      console.log(`[ResourceManager] Stopped memory monitoring`);
+    }
   }
 }
 

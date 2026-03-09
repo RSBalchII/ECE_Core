@@ -181,10 +181,131 @@ async function runTests() {
         }
     });
 
+    await test('updateLimits and getResourceLimits behavior', () => {
+        const mock = new MockSystemResources();
+        ResourceManager.resetInstance();
+        const rm = ResourceManager.createInstanceForTesting(mock);
+
+        const initialLimits = rm.getResourceLimits();
+
+        rm.updateLimits({
+            gcThreshold: 0.9,
+            memoryThreshold: 0.8
+        });
+
+        const updatedLimits = rm.getResourceLimits();
+
+        // Assert only these were updated
+        assert.strictEqual(updatedLimits.gcThreshold, 0.9);
+        assert.strictEqual(updatedLimits.memoryThreshold, 0.8);
+
+        // Assert others remained the same
+        assert.strictEqual(updatedLimits.maxHeapSize, initialLimits.maxHeapSize);
+        assert.strictEqual(updatedLimits.maxAtomsInMemory, initialLimits.maxAtomsInMemory);
+    });
+
+    await test('startMonitoring and stopMonitoring trigger correctly based on memory usage', () => {
+        const mock = new MockSystemResources();
+        ResourceManager.resetInstance();
+        const rm = ResourceManager.createInstanceForTesting(mock);
+
+        const heapLimit = 1000;
+        mock.setHeapStatistics({ ...mock.getHeapStatistics(), heap_size_limit: heapLimit });
+
+        let setIntervalCalled = false;
+        let clearIntervalCalled = false;
+        let intervalCallback: (() => void) | null = null;
+
+        // Mock global interval functions
+        const originalSetInterval = global.setInterval;
+        const originalClearInterval = global.clearInterval;
+        const originalConsoleLog = console.log;
+
+        try {
+            // @ts-ignore
+            global.setInterval = (cb: () => void, ms: number) => {
+                setIntervalCalled = true;
+                intervalCallback = cb;
+                return 123 as any;
+            };
+
+            // @ts-ignore
+            global.clearInterval = (id: any) => {
+                clearIntervalCalled = true;
+            };
+
+            // Suppress logs during test
+            console.log = () => {};
+
+            rm.startMonitoring(1000);
+            assert.strictEqual(setIntervalCalled, true, 'setInterval should have been called');
+            assert.ok(intervalCallback !== null, 'interval callback should have been registered');
+
+            // Test Case 1: Memory critical (> gcThreshold)
+            mock.setMemoryUsage({ ...mock.getMemoryUsage(), heapUsed: heapLimit * 0.8 }); // 80% > 75%
+            // Reset GC status and make sure it has not been called in cooldown
+            mock.resetGcCall();
+            // Force past cooldown manually by resetting the lastGCTime via re-instantiating, or just bypass cooldown issue:
+            // Since we test the method triggering it, we can spy on performGCIfNeeded. Instead of spying, we can just look at mock gc called
+            // First we need to make sure the cooldown has passed.
+            // A simpler way: just check if needsOptimization is true
+
+            // Re-create to clear the private lastGCTime
+            ResourceManager.resetInstance();
+            const rm2 = ResourceManager.createInstanceForTesting(mock);
+            rm2.startMonitoring(1000);
+
+            mock.resetGcCall();
+            if (intervalCallback) (intervalCallback as () => void)(); // Execute the interval
+            assert.strictEqual(mock.wasGcCalled(), true, 'GC should be triggered when memory is critical');
+
+            // Test Case 2: Memory high but not critical (> memoryThreshold)
+            ResourceManager.resetInstance();
+            const rm3 = ResourceManager.createInstanceForTesting(mock);
+            mock.setMemoryUsage({ ...mock.getMemoryUsage(), heapUsed: heapLimit * 0.72 }); // 72% > 70% but < 75%
+            rm3.startMonitoring(1000);
+
+            // For optimizeMemory, it calls performGCIfNeeded but also clearInternalCaches.
+            // In our Mock, calling optimizeMemory might call GC if cooldown allows.
+            // We just verify it doesn't crash and completes optimization log logic
+            mock.resetGcCall();
+            if (intervalCallback) (intervalCallback as () => void)();
+            assert.strictEqual(mock.wasGcCalled(), true, 'GC is triggered as part of optimization if cooldown allows');
+
+            // Test Case 3: Memory normal (< memoryThreshold)
+            ResourceManager.resetInstance();
+            const rm4 = ResourceManager.createInstanceForTesting(mock);
+            mock.setMemoryUsage({ ...mock.getMemoryUsage(), heapUsed: heapLimit * 0.5 }); // 50% < 70%
+            rm4.startMonitoring(1000);
+
+            mock.resetGcCall();
+            if (intervalCallback) (intervalCallback as () => void)();
+            assert.strictEqual(mock.wasGcCalled(), false, 'GC should NOT be triggered when memory is normal');
+
+            // Test stopMonitoring
+            rm4.stopMonitoring();
+            assert.strictEqual(clearIntervalCalled, true, 'clearInterval should have been called');
+
+            // Test startMonitoring clears existing interval
+            clearIntervalCalled = false;
+            rm4.startMonitoring(1000); // Sets interval
+            rm4.startMonitoring(1000); // Should clear previous interval
+            assert.strictEqual(clearIntervalCalled, true, 'clearInterval should be called if starting when already monitoring');
+            rm4.stopMonitoring();
+
+        } finally {
+            global.setInterval = originalSetInterval;
+            global.clearInterval = originalClearInterval;
+            console.log = originalConsoleLog;
+        }
+    });
+
     console.log('\nTest suite completed.');
 }
 
-runTests().catch(e => {
+runTests().then(() => {
+    process.exit(0);
+}).catch(e => {
     console.error('Test suite failed:', e);
     process.exit(1);
 });
