@@ -82,7 +82,7 @@ export function setupSettingsRoutes(app: Application) {
   // GET /v1/settings - Get all settings
   app.get('/v1/settings', async (_req: Request, res: Response) => {
     try {
-      const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8'));
+      const settings = JSON.parse(await fs.promises.readFile(SETTINGS_PATH, 'utf-8'));
       res.status(200).json({
         status: 'success',
         settings
@@ -130,7 +130,7 @@ export function setupSettingsRoutes(app: Application) {
       const newCategorySettings = req.body;
 
       // Read current settings
-      const settings: any = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8'));
+      const settings: any = JSON.parse(await fs.promises.readFile(SETTINGS_PATH, 'utf-8'));
 
       // Update specific category
       settings[category] = {
