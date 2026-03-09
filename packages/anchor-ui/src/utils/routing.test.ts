@@ -110,19 +110,15 @@ describe('Routing Utility', () => {
   });
 
   it('does not throw when window is undefined (SSR scenario)', () => {
-    // Save original window object properties that we'll mock out
-    const originalWindow = global.window;
-
-    // Temporarily replace window with undefined
-    // @ts-ignore - deliberately breaking type for test
-    delete global.window;
+    // Temporarily simulate an SSR environment where window is undefined
+    vi.stubGlobal('window', undefined);
 
     try {
       // Should not throw
       expect(() => navigate('/ssr-test')).not.toThrow();
     } finally {
-      // Restore window
-      global.window = originalWindow;
+      // Restore all stubbed globals, including window
+      vi.unstubAllGlobals();
     }
   });
 });
