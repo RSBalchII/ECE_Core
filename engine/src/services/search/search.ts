@@ -152,12 +152,19 @@ async function enrichAtomsWithMoleculeTags(anchors: SearchResult[]): Promise<voi
           const compoundTags = tagsByCompound.get(cId)!;
           
           if (molRow.tags) {
-            const tags = typeof molRow.tags === 'string'
-              ? JSON.parse(molRow.tags)
-              : molRow.tags;
+            let rawTags: unknown = molRow.tags;
 
-            if (Array.isArray(tags)) {
-              for (const tag of tags) {
+            if (typeof rawTags === 'string') {
+              try {
+                rawTags = JSON.parse(rawTags);
+              } catch {
+                // Malformed tags JSON for this molecule; skip this row only.
+                continue;
+              }
+            }
+
+            if (Array.isArray(rawTags)) {
+              for (const tag of rawTags) {
                 if (tag && typeof tag === 'string') {
                   compoundTags.add(tag);
                 }
