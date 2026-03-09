@@ -8,12 +8,29 @@ import dns from 'node:dns';
  * @returns true if the IP is private or reserved, false otherwise.
  */
 export function isPrivateIP(ip: string): boolean {
+    // IPv6 with embedded IPv4 (e.g., ::ffff:127.0.0.1)
+    if (ip.includes(':') && ip.includes('.')) {
+        const lowerIp = ip.toLowerCase();
+
+        // IPv4-mapped IPv6 ::ffff:127.0.0.1
+        if (lowerIp.startsWith('::ffff:')) {
+            const ipv4 = lowerIp.substring(7);
+             if (ipv4.includes('.')) {
+                 return isPrivateIP(ipv4);
+             }
+        }
+
+        // Also check for 0:0:0:0:0:ffff:127.0.0.1 style if not normalized
+        // It's likely an embedded IPv4
+        const parts = lowerIp.split(':');
+        const lastPart = parts[parts.length - 1];
+        if (lastPart.includes('.')) {
+            return isPrivateIP(lastPart);
+        }
+    }
+
     // IPv4
     if (ip.includes('.')) {
-        // If it also contains ':', it might be IPv6 mapped, but usually IPv4 doesn't contain ':'.
-        // However, if it's strictly IPv4, it shouldn't have ':'.
-        // If it's IPv6 with embedded IPv4, it falls into the else if below unless it's just an IPv4 string.
-
         const parts = ip.split('.').map(Number);
         if (parts.length !== 4) return false;
 
@@ -53,24 +70,6 @@ export function isPrivateIP(ip: string): boolean {
 
         // fe80::/10 - Link-local
         if (lowerIp.startsWith('fe8') || lowerIp.startsWith('fe9') || lowerIp.startsWith('fea') || lowerIp.startsWith('feb')) return true;
-
-        // IPv4-mapped IPv6 ::ffff:127.0.0.1
-        if (lowerIp.startsWith('::ffff:')) {
-            const ipv4 = lowerIp.substring(7);
-             if (ipv4.includes('.')) {
-                 return isPrivateIP(ipv4);
-             }
-        }
-
-        // Also check for 0:0:0:0:0:ffff:127.0.0.1 style if not normalized
-        if (lowerIp.includes('.')) {
-             // It's likely an embedded IPv4
-             const parts = lowerIp.split(':');
-             const lastPart = parts[parts.length - 1];
-             if (lastPart.includes('.')) {
-                 return isPrivateIP(lastPart);
-             }
-        }
 
         return false;
     }
