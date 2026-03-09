@@ -163,25 +163,59 @@ async function updateMasterTags(newTags: string[]) {
         if (added.length > 0) {
             fs.writeFileSync(MASTER_TAGS_PATH, JSON.stringify(currentTags, null, 2));
             console.log(`[Discovery] Learned ${added.length} new tags:`, added.join(', '));
+
+            // Explicitly invalidate cache just to be safe (though watcher usually catches it)
+            cachedMasterTags = null;
         }
     } catch (e) {
         console.error('[Discovery] Failed to update master list:', e);
     }
 }
 
+let cachedMasterTags: string[] | null = null;
+let watcherInitialized = false;
+
 /**
  * Reads the master list for the Infector (and Walker).
+ * Uses an in-memory cache updated via file watcher.
  */
 export function getMasterTags(): string[] {
+    if (cachedMasterTags !== null) {
+        return cachedMasterTags;
+    }
+
     try {
         if (fs.existsSync(MASTER_TAGS_PATH)) {
             const content = fs.readFileSync(MASTER_TAGS_PATH, 'utf8');
             const data = JSON.parse(content);
-            if (Array.isArray(data)) return data;
-            if (data.keywords && Array.isArray(data.keywords)) return data.keywords;
+
+            let tags: string[] = [];
+            if (Array.isArray(data)) tags = data;
+            else if (data.keywords && Array.isArray(data.keywords)) tags = data.keywords;
+
+            cachedMasterTags = tags;
+
+            // Initialize watcher on first successful read
+            if (!watcherInitialized) {
+                watcherInitialized = true;
+                try {
+                    fs.watch(MASTER_TAGS_PATH, (eventType) => {
+                        if (eventType === 'change' || eventType === 'rename') {
+                            // Invalidate cache
+                            cachedMasterTags = null;
+                        }
+                    });
+                } catch (watchErr) {
+                    console.warn('[Discovery] Failed to set up file watcher for tags:', watchErr);
+                    // If watch fails, we fallback to just reading it occasionally or next startup,
+                    // but the error is logged. We still consider it "initialized" so we don't spam watch attempts.
+                }
+            }
+
+            return tags;
         }
     } catch (e) {
-        console.error('[Discovery] Failed to load master_tags.json:', e);
+        console.error('[Discovery] Failed to load internal_tags.json:', e);
     }
     return [];
 }
