@@ -869,7 +869,7 @@ async function _executeSearchInternal(
   const finalUserContext: UserContext = {
     name: 'User',
     current_state: 'active',
-    ...userContext
+    ...(userContext ?? {})
   };
 
   const contextPackage = assembleContextPackage({
