@@ -1271,7 +1271,7 @@ export async function smartChatSearch(
   const finalUserContext: UserContext = {
     name: 'User',
     current_state: 'active',
-    ...userContext
+    ...(userContext ?? {})
   };
 
   const serializedContext = assembleAndSerialize({
