@@ -189,6 +189,9 @@ importers:
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
+      tar:
+        specifier: ^7.5.10
+        version: 7.5.10
       turndown:
         specifier: ^7.2.2
         version: 7.2.2

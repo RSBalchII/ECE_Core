@@ -16,7 +16,6 @@ interface GitCommandResult {
 
 export const GitCommandsModal: React.FC<GitCommandsModalProps> = ({ onClose }) => {
     const [selectedCommand, setSelectedCommand] = useState<string>('status');
-    const [customCommand, setCustomCommand] = useState('');
     const [workingDir, setWorkingDir] = useState('');
     const [result, setResult] = useState<GitCommandResult | null>(null);
     const [loading, setLoading] = useState(false);
@@ -37,7 +36,7 @@ export const GitCommandsModal: React.FC<GitCommandsModalProps> = ({ onClose }) =
     }, []);
 
     const handleRunCommand = async () => {
-        const commandToRun = selectedCommand === 'custom' ? customCommand : selectedCommand;
+        const commandToRun = selectedCommand;
         if (!commandToRun.trim() || !workingDir) return;
 
         setLoading(true);
@@ -65,8 +64,7 @@ export const GitCommandsModal: React.FC<GitCommandsModalProps> = ({ onClose }) =
         { value: 'diff', label: '🔀 git diff', description: 'Unstaged changes' },
         { value: 'diff --cached', label: '🔀 git diff --cached', description: 'Staged changes' },
         { value: 'branch -a', label: '🌿 git branch', description: 'List all branches' },
-        { value: 'remote -v', label: '🔗 git remote', description: 'Remote repositories' },
-        { value: 'custom', label: '⌨️ Custom command', description: 'Enter your own command' },
+        { value: 'remote -v', label: '🔗 git remote', description: 'Remote repositories' }
     ];
 
     return (
@@ -115,21 +113,12 @@ export const GitCommandsModal: React.FC<GitCommandsModalProps> = ({ onClose }) =
                             <option key={cmd.value} value={cmd.value}>{cmd.label}</option>
                         ))}
                     </select>
-                    {selectedCommand === 'custom' && (
-                        <input
-                            type="text"
-                            value={customCommand}
-                            onChange={e => setCustomCommand(e.target.value)}
-                            placeholder="Enter git command (e.g., 'checkout -b feature')"
-                            style={{ padding: '0.5rem', background: '#222', color: 'white', border: '1px solid #444', borderRadius: '4px' }}
-                        />
-                    )}
                 </div>
 
                 {/* Run Button */}
                 <Button
                     onClick={handleRunCommand}
-                    disabled={loading || !workingDir || (selectedCommand === 'custom' && !customCommand.trim())}
+                    disabled={loading || !workingDir}
                     style={{ background: 'var(--accent-primary)', color: 'white' }}
                 >
                     {loading ? 'Running...' : 'Run Command'}

@@ -278,17 +278,31 @@ export function setupGitRoutes(app: Application) {
         return res.status(400).json({ error: 'command and working_dir are required' });
       }
 
-      const { exec } = await import('child_process');
+      const { execFile } = await import('child_process');
       const util = await import('util');
-      const execPromise = util.promisify(exec);
+      const execFilePromise = util.promisify(execFile);
 
-      // Security: Only allow git commands
-      const gitCommand = `git ${command}`;
+      // Security: Strict whitelist of allowed git commands and their arguments
+      const allowedCommands: Record<string, string[]> = {
+        'status': ['status'],
+        'log --oneline -20': ['log', '--oneline', '-20'],
+        'log --graph --oneline -15': ['log', '--graph', '--oneline', '-15'],
+        'diff': ['diff'],
+        'diff --cached': ['diff', '--cached'],
+        'branch -a': ['branch', '-a'],
+        'remote -v': ['remote', '-v']
+      };
 
-      console.log(`[Git] Running: ${gitCommand} in ${working_dir}`);
+      if (!(command in allowedCommands)) {
+        console.warn(`[Git] Rejected unauthorized command: ${command} in ${working_dir}`);
+        return res.status(400).json({ error: 'Command not allowed for security reasons' });
+      }
+
+      const args = allowedCommands[command];
+      console.log(`[Git] Running: git ${args.join(' ')} in ${working_dir}`);
 
       try {
-        const { stdout, stderr } = await execPromise(gitCommand, {
+        const { stdout, stderr } = await execFilePromise('git', args, {
           cwd: working_dir,
           encoding: 'utf8',
           timeout: 30000 // 30 second timeout
