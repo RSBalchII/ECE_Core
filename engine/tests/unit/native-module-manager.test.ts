@@ -4,16 +4,17 @@ import { jest } from '@jest/globals';
 jest.unstable_mockModule('module', () => ({
   createRequire: jest.fn().mockImplementation(() => {
     return jest.fn().mockImplementation((path: string) => {
+      const normalizedPath = path.replace(/\\/g, '/');
       // 1. standard path
-      if (path.includes('success') && !path.includes('fail') && !path.includes('debug') && !path.includes('dev')) {
+      if (normalizedPath.includes('success') && !normalizedPath.includes('fail') && !normalizedPath.includes('debug') && !normalizedPath.includes('dev')) {
         return { success: true, distance: () => 1 };
       }
       // 2. debug path
-      if (path.includes('Debug') && path.includes('debug_success_binary')) {
+      if (normalizedPath.includes('Debug') && normalizedPath.includes('debug_success_binary')) {
          return { debug_success: true, distance: () => 1 };
       }
       // 3. dev path
-      if (path.includes('build/Release') && path.includes('dev_success_binary')) {
+      if (normalizedPath.includes('build/Release') && normalizedPath.includes('dev_success_binary')) {
          return { dev_success: true, distance: () => 1 };
       }
       throw new Error(`Cannot find module '${path}'`);
