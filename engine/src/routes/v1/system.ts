@@ -160,16 +160,18 @@ export function setupSystemRoutes(app: Application) {
         return;
       }
 
-      const { exec } = await import('child_process');
+      const { execFile } = await import('child_process');
+      const util = await import('util');
+      const execFilePromise = util.promisify(execFile);
       const platform = process.platform;
 
-      // Open file explorer based on platform
+      // Open file explorer based on platform safely using execFile
       if (platform === 'win32') {
-        exec(`explorer.exe "${path}"`);
+        await execFilePromise('explorer.exe', [path]);
       } else if (platform === 'darwin') {
-        exec(`open "${path}"`);
+        await execFilePromise('open', [path]);
       } else {
-        exec(`xdg-open "${path}"`);
+        await execFilePromise('xdg-open', [path]);
       }
 
       res.status(200).json({
