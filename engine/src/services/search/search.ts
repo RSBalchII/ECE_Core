@@ -190,8 +190,14 @@ async function enrichAtomsWithMoleculeTags(anchors: SearchResult[]): Promise<voi
         }
       }
     } catch (molErr) {
-      // Silently continue if molecule tag fetch fails
-      console.debug('[Search] Could not fetch molecule tags for compounds:', molErr);
+      // Silently continue if molecule tag fetch fails, but include compoundId context for debugging
+      const sampleCompoundIds = compoundIds.slice(0, 5);
+      console.debug(
+        '[Search] Could not fetch molecule tags for compounds (count=%d, sample=%o): %o',
+        compoundIds.length,
+        sampleCompoundIds,
+        molErr
+      );
     }
   } catch (e) {
     console.warn('[Search] Failed to enrich atoms with molecule tags:', e);
