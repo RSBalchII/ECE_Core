@@ -103,8 +103,8 @@ describe('Routing Utility', () => {
     navigate('/test-state-title');
 
     expect(pushStateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({}),
-      expect.stringMatching(/^$/),
+      {},
+      '',
       '/test-state-title'
     );
   });
