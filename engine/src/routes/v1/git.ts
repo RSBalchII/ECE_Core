@@ -226,43 +226,49 @@ export function setupGitRoutes(app: Application) {
     }
   });
 
+  // Helper to discover allowed git repositories
+  const getDiscoveredRepos = async (): Promise<string[]> => {
+    const path = await import('path');
+    const fs = await import('fs');
+    const { pathManager } = await import('../../utils/path-manager.js');
+    const { PROJECT_ROOT } = await import('../../config/paths.js');
+
+    const potentialRepos: string[] = [];
+    const basePath = pathManager.getBasePath();
+    const checkDirs = [
+      basePath,
+      path.join(basePath, '..'),
+      path.join(basePath, '..', '..'),
+      PROJECT_ROOT
+    ];
+
+    for (const dir of checkDirs) {
+      if (!dir) continue;
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const repoPath = path.join(dir, entry.name);
+            const gitPath = path.join(repoPath, '.git');
+            // Resolve to absolute path to prevent traversal evasion
+            const absoluteRepoPath = path.resolve(repoPath);
+            if (fs.existsSync(gitPath) && !potentialRepos.includes(absoluteRepoPath)) {
+              potentialRepos.push(absoluteRepoPath);
+            }
+          }
+        }
+      } catch {
+        // Skip if directory doesn't exist or can't be read
+      }
+    }
+    return potentialRepos;
+  };
+
   // GET /v1/git/repos - List available git repositories
   app.get('/v1/git/repos', async (_req: Request, res: Response) => {
     try {
-      const path = await import('path');
-      const fs = await import('fs');
-      const { pathManager } = await import('../../utils/path-manager.js');
-      const { PROJECT_ROOT } = await import('../../config/paths.js');
-
-      // Check common directories for git repos
-      const potentialRepos: string[] = [];
-      const basePath = pathManager.getBasePath();
-      const checkDirs = [
-        basePath,
-        path.join(basePath, '..'),
-        path.join(basePath, '..', '..'),
-        PROJECT_ROOT
-      ];
-
-      for (const dir of checkDirs) {
-        if (!dir) continue;
-        try {
-          const entries = fs.readdirSync(dir, { withFileTypes: true });
-          for (const entry of entries) {
-            if (entry.isDirectory()) {
-              const repoPath = path.join(dir, entry.name);
-              const gitPath = path.join(repoPath, '.git');
-              if (fs.existsSync(gitPath) && !potentialRepos.includes(repoPath)) {
-                potentialRepos.push(repoPath);
-              }
-            }
-          }
-        } catch {
-          // Skip if directory doesn't exist or can't be read
-        }
-      }
-
-      res.status(200).json(potentialRepos);
+      const repos = await getDiscoveredRepos();
+      res.status(200).json(repos);
     } catch (error: any) {
       console.error('[API] Git repos list error:', error);
       res.status(500).json({ error: error.message });
@@ -280,7 +286,17 @@ export function setupGitRoutes(app: Application) {
 
       const { execFile } = await import('child_process');
       const util = await import('util');
+      const path = await import('path');
       const execFilePromise = util.promisify(execFile);
+
+      // Security: Resolve requested directory to absolute path and verify it's a discovered repository
+      const absoluteRequestedDir = path.resolve(working_dir);
+      const allowedRepos = await getDiscoveredRepos();
+
+      if (!allowedRepos.includes(absoluteRequestedDir)) {
+        console.warn(`[Git] Rejected unauthorized directory access: ${working_dir} (resolved: ${absoluteRequestedDir})`);
+        return res.status(403).json({ error: 'Directory not authorized for git commands' });
+      }
 
       // Security: Strict whitelist of allowed git commands and their arguments
       const allowedCommands: Record<string, string[]> = {
@@ -294,16 +310,16 @@ export function setupGitRoutes(app: Application) {
       };
 
       if (!(command in allowedCommands)) {
-        console.warn(`[Git] Rejected unauthorized command: ${command} in ${working_dir}`);
+        console.warn(`[Git] Rejected unauthorized command: ${command} in ${absoluteRequestedDir}`);
         return res.status(400).json({ error: 'Command not allowed for security reasons' });
       }
 
       const args = allowedCommands[command];
-      console.log(`[Git] Running: git ${args.join(' ')} in ${working_dir}`);
+      console.log(`[Git] Running: git ${args.join(' ')} in ${absoluteRequestedDir}`);
 
       try {
         const { stdout, stderr } = await execFilePromise('git', args, {
-          cwd: working_dir,
+          cwd: absoluteRequestedDir,
           encoding: 'utf8',
           timeout: 30000 // 30 second timeout
         });
