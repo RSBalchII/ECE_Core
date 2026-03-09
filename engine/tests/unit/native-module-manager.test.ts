@@ -129,7 +129,14 @@ describe('NativeModuleManager', () => {
     const statusMap2 = nativeModuleManager.getAllStatus();
 
     expect(statusMap1).not.toBe(statusMap2); // Should be distinct instances
-    expect(statusMap1.get('mod1')).toBe(statusMap2.get('mod1')); // But containing same data
+
+    // Mutating the returned Map should not affect the manager's internal state
+    statusMap1.delete('mod1');
+    expect(statusMap1.has('mod1')).toBe(false);
+
+    const internalStatus = nativeModuleManager.getStatus('mod1');
+    expect(internalStatus).toBeDefined();
+    expect(internalStatus?.loaded).toBe(true);
   });
 
   test('loadNativeModule falls back when standard and alternative paths fail', () => {
