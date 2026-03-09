@@ -167,21 +167,24 @@ describe('NativeModuleManager', () => {
 
     // Since 'ece_native' is forced to fallback early, we'll temporarily remove that check
     const originalShouldUseFallbackOnly = nativeModuleManager.shouldUseFallbackOnly.bind(nativeModuleManager);
-    nativeModuleManager.shouldUseFallbackOnly = () => false;
 
-    const mod = nativeModuleManager.loadNativeModule('ece_native', 'crash_binary');
+    try {
+      nativeModuleManager.shouldUseFallbackOnly = () => false;
 
-    expect(mod).not.toBeNull();
-    expect(mod).toHaveProperty('fingerprint');
+      const mod = nativeModuleManager.loadNativeModule('ece_native', 'crash_binary');
 
-    const status = nativeModuleManager.getStatus('ece_native');
-    expect(status?.loaded).toBe(true);
-    expect(status?.fallbackActive).toBe(true);
-    expect(status?.error).toBeDefined();
+      expect(mod).not.toBeNull();
+      expect(mod).toHaveProperty('fingerprint');
 
-    // Restore
-    nativeModuleManager.shouldUseFallbackOnly = originalShouldUseFallbackOnly;
-    warnSpy.mockRestore();
+      const status = nativeModuleManager.getStatus('ece_native');
+      expect(status?.loaded).toBe(true);
+      expect(status?.fallbackActive).toBe(true);
+      expect(status?.error).toBeDefined();
+    } finally {
+      // Restore
+      nativeModuleManager.shouldUseFallbackOnly = originalShouldUseFallbackOnly;
+      warnSpy.mockRestore();
+    }
   });
 
   test('loadNativeModule succeeds from debug path when release path fails', () => {
