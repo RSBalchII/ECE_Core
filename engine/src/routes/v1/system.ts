@@ -162,21 +162,35 @@ export function setupSystemRoutes(app: Application) {
 
       const { execFile } = await import('child_process');
       const util = await import('util');
+      const pathModule = await import('path');
+      const { PROJECT_ROOT } = await import('../../config/paths.js');
       const execFilePromise = util.promisify(execFile);
       const platform = process.platform;
 
+      // Security: Resolve requested directory to absolute path and verify it's within PROJECT_ROOT
+      const absoluteRequestedDir = pathModule.resolve(path);
+      const relativePath = pathModule.relative(PROJECT_ROOT, absoluteRequestedDir);
+
+      // Check if it's an outside directory (e.g. starts with ..) or an absolute path (on Windows)
+      const isOutside = relativePath.startsWith('..') || pathModule.isAbsolute(relativePath);
+
+      if (isOutside && absoluteRequestedDir !== PROJECT_ROOT) {
+        console.warn(`[System] Rejected unauthorized explorer access: ${path} (resolved: ${absoluteRequestedDir})`);
+        return res.status(403).json({ error: 'Directory not authorized for explorer access' });
+      }
+
       // Open file explorer based on platform safely using execFile
       if (platform === 'win32') {
-        await execFilePromise('explorer.exe', [path]);
+        await execFilePromise('explorer.exe', [absoluteRequestedDir]);
       } else if (platform === 'darwin') {
-        await execFilePromise('open', [path]);
+        await execFilePromise('open', [absoluteRequestedDir]);
       } else {
-        await execFilePromise('xdg-open', [path]);
+        await execFilePromise('xdg-open', [absoluteRequestedDir]);
       }
 
       res.status(200).json({
         status: 'success',
-        message: `Opened file explorer at: ${path}`
+        message: `Opened file explorer at: ${absoluteRequestedDir}`
       });
     } catch (e: any) {
       console.error('[API] Failed to open file explorer:', e);
