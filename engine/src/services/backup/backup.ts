@@ -207,6 +207,10 @@ export async function restoreBackup(filename: string): Promise<BackupStats> {
             }
         } else if (currentSection === 'memory') {
             // Legacy format: restore atoms to DB
+            const placeholders = [];
+            const params: any[] = [];
+            let pIdx = 1;
+
             for (const row of batch) {
                 let embedding = row.embedding;
                 if (typeof embedding === 'string') {
@@ -223,9 +227,20 @@ export async function restoreBackup(filename: string): Promise<BackupStats> {
                     try { tags = JSON.parse(tags); } catch { tags = []; }
                 } else if (!Array.isArray(tags)) { tags = []; }
 
+                placeholders.push(`($${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++})`);
+                params.push(
+                    row.id || '', row.timestamp || 0, row.content || '', row.source_path || '',
+                    row.source_id || null, row.sequence ?? null, row.type || null, row.hash || null,
+                    toPgArray(buckets), toPgArray(tags), row.epochs || null,
+                    row.provenance || 'external', row.simhash || '0', toPgArray(embedding)
+                );
+                stats.memory_count++;
+            }
+
+            if (placeholders.length > 0) {
                 await db.run(
                     `INSERT INTO atoms (id, timestamp, content, source_path, source_id, sequence, type, hash, buckets, tags, epochs, provenance, simhash, embedding)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                     VALUES ${placeholders.join(', ')}
                      ON CONFLICT (id) DO UPDATE SET
                        content = EXCLUDED.content, timestamp = EXCLUDED.timestamp,
                        source_path = EXCLUDED.source_path, source_id = EXCLUDED.source_id,
@@ -234,35 +249,47 @@ export async function restoreBackup(filename: string): Promise<BackupStats> {
                        tags = EXCLUDED.tags, epochs = EXCLUDED.epochs,
                        provenance = EXCLUDED.provenance, simhash = EXCLUDED.simhash,
                        embedding = EXCLUDED.embedding`,
-                    [
-                        row.id || '', row.timestamp || 0, row.content || '', row.source_path || '',
-                        row.source_id || null, row.sequence ?? null, row.type || null, row.hash || null,
-                        toPgArray(buckets), toPgArray(tags), row.epochs || null,
-                        row.provenance || 'external', row.simhash || '0', toPgArray(embedding)
-                    ]
+                    params
                 );
-                stats.memory_count++;
             }
         } else if (currentSection === 'source') {
+            const placeholders = [];
+            const params: any[] = [];
+            let pIdx = 1;
+
             for (const row of batch) {
+                placeholders.push(`($${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++})`);
+                params.push(row.path || '', row.hash || '', row.total_atoms || 0, row.last_ingest || null);
+                stats.source_count++;
+            }
+
+            if (placeholders.length > 0) {
                 await db.run(
                     `INSERT INTO sources (path, hash, total_atoms, last_ingest)
-                     VALUES ($1, $2, $3, $4)
+                     VALUES ${placeholders.join(', ')}
                      ON CONFLICT (path) DO UPDATE SET
                        hash = EXCLUDED.hash, total_atoms = EXCLUDED.total_atoms,
                        last_ingest = EXCLUDED.last_ingest`,
-                    [row.path || '', row.hash || '', row.total_atoms || 0, row.last_ingest || null]
+                    params
                 );
-                stats.source_count++;
             }
         } else if (currentSection === 'engrams') {
+            const placeholders = [];
+            const params: any[] = [];
+            let pIdx = 1;
+
             for (const row of batch) {
-                await db.run(
-                    `INSERT INTO engrams (key, value) VALUES ($1, $2)
-                     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
-                    row
-                );
+                placeholders.push(`($${pIdx++}, $${pIdx++})`);
+                params.push(row.key, row.value);
                 stats.engram_count++;
+            }
+
+            if (placeholders.length > 0) {
+                await db.run(
+                    `INSERT INTO engrams (key, value) VALUES ${placeholders.join(', ')}
+                     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+                    params
+                );
             }
         }
 

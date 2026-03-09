@@ -75,28 +75,58 @@ export async function restoreFromBackup(filename: string): Promise<RestoreStats>
 
     // Restore sources first (for reference integrity)
     console.log(`[Phoenix] 📦 Restoring ${backupData.sources.length} sources...`);
-    for (const source of backupData.sources) {
-        await db.run(
-            `INSERT INTO sources (path, hash, total_atoms, last_ingest)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT (path) DO UPDATE SET
-               hash = EXCLUDED.hash,
-               total_atoms = EXCLUDED.total_atoms,
-               last_ingest = EXCLUDED.last_ingest`,
-            [source.path, source.hash, source.total_atoms, source.last_ingest]
-        );
-        stats.source_count++;
+    const SOURCE_BATCH_SIZE = 1000;
+    for (let i = 0; i < backupData.sources.length; i += SOURCE_BATCH_SIZE) {
+        const batch = backupData.sources.slice(i, i + SOURCE_BATCH_SIZE);
+
+        const placeholders = [];
+        const params: any[] = [];
+        let pIdx = 1;
+
+        for (const source of batch) {
+            placeholders.push(`($${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++})`);
+            params.push(source.path, source.hash, source.total_atoms, source.last_ingest);
+            stats.source_count++;
+        }
+
+        if (placeholders.length > 0) {
+            await db.run(
+                `INSERT INTO sources (path, hash, total_atoms, last_ingest)
+                 VALUES ${placeholders.join(', ')}
+                 ON CONFLICT (path) DO UPDATE SET
+                   hash = EXCLUDED.hash,
+                   total_atoms = EXCLUDED.total_atoms,
+                   last_ingest = EXCLUDED.last_ingest`,
+                params
+            );
+        }
     }
 
     // Restore atoms
     console.log(`[Phoenix] 🧠 Restoring ${backupData.atoms.length} atoms...`);
-    const BATCH_SIZE = 100;
-    for (let i = 0; i < backupData.atoms.length; i += BATCH_SIZE) {
-        const batch = backupData.atoms.slice(i, i + BATCH_SIZE);
+    const ATOM_BATCH_SIZE = 500; // 500 atoms * 14 params = 7000 params (well below Postgres limit of ~65k)
+    for (let i = 0; i < backupData.atoms.length; i += ATOM_BATCH_SIZE) {
+        const batch = backupData.atoms.slice(i, i + ATOM_BATCH_SIZE);
+
+        const placeholders = [];
+        const params: any[] = [];
+        let pIdx = 1;
+
         for (const atom of batch) {
+            placeholders.push(`($${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++}, $${pIdx++})`);
+            params.push(
+                atom.id, atom.timestamp, atom.content, atom.source_path,
+                atom.source_id, atom.sequence, atom.type, atom.hash,
+                atom.buckets, atom.tags, atom.epochs, atom.provenance,
+                atom.simhash, atom.embedding
+            );
+            stats.memory_count++;
+        }
+
+        if (placeholders.length > 0) {
             await db.run(
                 `INSERT INTO atoms (id, timestamp, content, source_path, source_id, sequence, type, hash, buckets, tags, epochs, provenance, simhash, embedding)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                 VALUES ${placeholders.join(', ')}
                  ON CONFLICT (id) DO UPDATE SET
                    content = EXCLUDED.content,
                    timestamp = EXCLUDED.timestamp,
@@ -111,28 +141,36 @@ export async function restoreFromBackup(filename: string): Promise<RestoreStats>
                    provenance = EXCLUDED.provenance,
                    simhash = EXCLUDED.simhash,
                    embedding = EXCLUDED.embedding`,
-                [
-                    atom.id, atom.timestamp, atom.content, atom.source_path,
-                    atom.source_id, atom.sequence, atom.type, atom.hash,
-                    atom.buckets, atom.tags, atom.epochs, atom.provenance,
-                    atom.simhash, atom.embedding
-                ]
+                params
             );
-            stats.memory_count++;
         }
     }
 
     // Restore engrams
     console.log(`[Phoenix] 🧬 Restoring ${backupData.engrams.length} engrams...`);
-    for (const engram of backupData.engrams) {
-        await db.run(
-            `INSERT INTO engrams (key, value)
-             VALUES ($1, $2)
-             ON CONFLICT (key) DO UPDATE SET
-               value = EXCLUDED.value`,
-            [engram.key, engram.value]
-        );
-        stats.engram_count++;
+    const ENGRAM_BATCH_SIZE = 1000;
+    for (let i = 0; i < backupData.engrams.length; i += ENGRAM_BATCH_SIZE) {
+        const batch = backupData.engrams.slice(i, i + ENGRAM_BATCH_SIZE);
+
+        const placeholders = [];
+        const params: any[] = [];
+        let pIdx = 1;
+
+        for (const engram of batch) {
+            placeholders.push(`($${pIdx++}, $${pIdx++})`);
+            params.push(engram.key, engram.value);
+            stats.engram_count++;
+        }
+
+        if (placeholders.length > 0) {
+            await db.run(
+                `INSERT INTO engrams (key, value)
+                 VALUES ${placeholders.join(', ')}
+                 ON CONFLICT (key) DO UPDATE SET
+                   value = EXCLUDED.value`,
+                params
+            );
+        }
     }
 
     // Rebuild inbox/external-inbox from sources
