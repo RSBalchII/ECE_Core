@@ -293,7 +293,7 @@ export function setupGitRoutes(app: Application) {
         'remote -v': ['remote', '-v']
       };
 
-      if (!Object.prototype.hasOwnProperty.call(allowedCommands, command)) {
+      if (!(command in allowedCommands)) {
         console.warn(`[Git] Rejected unauthorized command: ${command} in ${working_dir}`);
         return res.status(400).json({ error: 'Command not allowed for security reasons' });
       }
