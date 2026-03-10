@@ -22,9 +22,12 @@ export const ThoughtLog: React.FC<ThoughtLogProps> = ({ thoughts, isActive }) =>
                 : 'border-gray-800/50 bg-gray-950/20 overflow-hidden'
             }`}>
             {/* Header */}
-            <div
+            <button
+                type="button"
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="p-3 flex justify-between items-center cursor-pointer hover:bg-white/5 transition-colors"
+                className="w-full text-left p-3 flex justify-between items-center cursor-pointer hover:bg-white/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50"
+                aria-expanded={isExpanded}
+                aria-label="Toggle neural thought process"
             >
                 <div className="flex items-center gap-3">
                     <div className="relative">
@@ -43,7 +46,7 @@ export const ThoughtLog: React.FC<ThoughtLogProps> = ({ thoughts, isActive }) =>
                 <div className={`text-xs text-gray-600 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
                     ▼
                 </div>
-            </div>
+            </button>
 
             {/* Expanded Content */}
             <div className={`transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[500px] opacity-100 border-t border-gray-800/50 p-4' : 'max-h-0 opacity-0'
