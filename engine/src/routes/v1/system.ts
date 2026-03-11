@@ -292,13 +292,20 @@ export function setupSystemRoutes(app: Application) {
       }
       
       // Security: only allow reading from inbox/distilled directory
-      if (!filePath.includes('distilled') || !filePath.endsWith('.yaml')) {
+      const pathModule = await import('path');
+      const { PROJECT_ROOT } = await import('../../config/paths.js');
+
+      const absoluteRequestedPath = pathModule.resolve(filePath);
+      const inboxDistilledDir = pathModule.join(PROJECT_ROOT, 'inbox', 'distilled');
+
+      // Ensure the path is strictly within the inbox/distilled directory
+      if (!absoluteRequestedPath.startsWith(inboxDistilledDir + pathModule.sep) || !absoluteRequestedPath.endsWith('.yaml')) {
         res.status(403).json({ error: 'Access denied' });
         return;
       }
       
       const fs = await import('fs');
-      const content = await fs.promises.readFile(filePath, 'utf-8');
+      const content = await fs.promises.readFile(absoluteRequestedPath, 'utf-8');
       res.json({
         status: 'success',
         path: filePath,
