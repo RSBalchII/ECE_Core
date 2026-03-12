@@ -331,12 +331,8 @@
 
             <div class="action-bar">
                 <button class="btn-primary" onclick="openBookModal()">📚 Select Book from Gutenberg</button>
-                <button class="btn-secondary" onclick="document.getElementById('fileInput').click()">📁 Upload TXT File</button>
                 <button class="btn-secondary" onclick="resetDemo()">🔄 Reset Demo</button>
             </div>
-            
-            <!-- Hidden file input for TXT upload -->
-            <input type="file" id="fileInput" accept=".txt" style="display: none;" onchange="handleFileUpload(event)">
 
             <div class="search-box">
                 <input 
@@ -365,8 +361,7 @@
             </div>
             <div class="info-box">
                 <strong>How it works:</strong> Books are fetched from Project Gutenberg, atomized into concepts,
-                and indexed using the STAR algorithm. All processing happens in your browser.<br><br>
-                <strong>⚠️ Having issues?</strong> Use the "📁 Upload TXT File" button instead to upload any text file directly.
+                and indexed using the STAR algorithm. All processing happens in your browser.
             </div>
             <div id="bookList" class="book-grid">
                 <div class="loading">
@@ -647,7 +642,7 @@
             
             function tryProxy(proxyIndex) {
                 if (proxyIndex >= corsProxies.length) {
-                    showError('All CORS proxies failed. Try uploading a TXT file instead!');
+                    showError('All CORS proxies failed. Please try another book.');
                     return;
                 }
                 
@@ -678,27 +673,6 @@
             }
         }
         
-        function handleFileUpload(event) {
-            var file = event.target.files[0];
-            if (!file) return;
-            
-            console.log('[STAR Demo] File selected:', file.name);
-            
-            var reader = new FileReader();
-            reader.onload = function(e) {
-                var text = e.target.result;
-                console.log('[STAR Demo] File loaded, length:', text.length);
-                processIngestedText(text, file.name, null, null, document.getElementById('results'));
-            };
-            reader.onerror = function() {
-                showError('Failed to read file: ' + file.name);
-            };
-            reader.readAsText(file);
-            
-            // Reset file input
-            event.target.value = '';
-        }
-        
         function processIngestedText(text, title, progressBar, progressFill, resultsDiv) {
             if (progressBar) progressBar.style.display = 'block';
             if (progressFill) progressFill.style.width = '0%';
@@ -724,7 +698,7 @@
             
             currentBook = { title: title };
             
-            resultsDiv.innerHTML = '<div class="info-box"><strong>✅ Ingestion Complete!</strong><br>"' + title + '" has been atomized into ' + stats.atoms.toLocaleString() + ' atoms with ' + stats.tags.toLocaleString() + ' tags and ' + stats.edges.toLocaleString() + ' edges.<br><br>Try searching for themes, characters, or concepts.</div>';
+            resultsDiv.innerHTML = '<div class="info-box"><strong>✅ Ingestion Complete!</strong><br>"' + title + '" has been atomized into ' + stats.atoms.toLocaleString() + ' atoms with ' + stats.tags.toLocaleString() + ' tags and ' + stats.edges.toLocaleString() + ' edges.<br><br>Try searching for themes, characters, or concepts from the book.</div><h3 style="margin-bottom: 1rem; color: #2d3748;">Example Searches:</h3><div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">' + getExampleSearches(title).map(function(q) { return '<button class="btn-secondary" onclick="document.getElementById(\'searchInput\').value=\'' + q + '\'; performSearch()">' + q + '</button>'; }).join('') + '</div>';
             
             if (progressBar) setTimeout(function() { progressBar.style.display = 'none'; }, 1000);
         }
@@ -765,18 +739,26 @@
             return text.substring(0, 100000);
         }
 
-        function getExampleSearches(bookId) {
+        function getExampleSearches(title) {
+            // Simple example searches based on book title
             var examples = {
-                84: ['monster', 'life', 'death', 'creation'],
-                1342: ['pride', 'love', 'marriage', 'family'],
-                46: ['beauty', 'soul', 'art', 'portrait'],
-                11: ['alice', 'queen', 'time', 'mad'],
-                2701: ['whale', 'sea', 'captain', 'ship'],
-                1260: ['love', 'master', 'house', 'fire'],
-                1952: ['gatsby', 'dream', 'party', 'love'],
-                76: ['city', 'revolution', 'prison', 'love']
+                'Frankenstein': ['monster', 'life', 'death', 'creation'],
+                'Pride': ['pride', 'love', 'marriage', 'family'],
+                'Dorian': ['beauty', 'soul', 'art', 'portrait'],
+                'Alice': ['alice', 'queen', 'time', 'mad'],
+                'Moby': ['whale', 'sea', 'captain', 'ship'],
+                'Jane': ['love', 'master', 'house', 'fire'],
+                'Gatsby': ['gatsby', 'dream', 'party', 'love'],
+                'Tale': ['city', 'revolution', 'prison', 'love']
             };
-            return examples[bookId] || ['theme', 'character', 'story'];
+            
+            // Find matching examples or return generic searches
+            for (var key in examples) {
+                if (title.toLowerCase().includes(key.toLowerCase())) {
+                    return examples[key];
+                }
+            }
+            return ['theme', 'character', 'story'];
         }
 
         function performSearch() {
