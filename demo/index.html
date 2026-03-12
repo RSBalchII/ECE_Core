@@ -414,7 +414,7 @@
                 var trimmed = sentence.trim();
                 
                 // Skip if too short (not a meaningful molecule)
-                if (trimmed.length < 30) {
+                if (trimmed.length < 20) {
                     return;
                 }
                 
@@ -427,11 +427,6 @@
 
                 var atomId = 'atom_' + (++self.atomCounter);
                 var tags = self.extractTags(trimmed);
-                
-                // Skip if no meaningful tags extracted (likely noise)
-                if (tags.length < 2) {
-                    return;
-                }
                 
                 var atom = {
                     id: atomId,
