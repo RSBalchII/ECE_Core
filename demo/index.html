@@ -628,46 +628,69 @@
 
             console.log('[STAR Demo] Fetching book:', book.title, 'ID:', book.id);
 
-            // Use CORS proxy to fetch Gutenberg books
-            fetch('https://corsproxy.io/?' + encodeURIComponent('https://www.gutenberg.org/files/' + book.id + '/' + book.id + '-0.txt'))
-                .then(function(response) {
-                    console.log('[STAR Demo] Response status:', response.status);
-                    if (!response.ok) {
-                        throw new Error('HTTP ' + response.status);
-                    }
-                    return response.text();
-                })
-                .then(function(text) {
-                    console.log('[STAR Demo] Raw text length:', text.length);
-                    
-                    text = extractBookContent(text);
-                    console.log('[STAR Demo] Extracted content length:', text.length);
-                    
-                    progressFill.style.width = '30%';
-                    
-                    var atoms = engine.atomize(text);
-                    console.log('[STAR Demo] Atoms created:', atoms.length);
-                    
-                    progressFill.style.width = '100%';
-                    
-                    var stats = engine.getStats();
-                    console.log('[STAR Demo] Stats:', stats);
-                    
-                    document.getElementById('atomCount').textContent = stats.atoms.toLocaleString();
-                    document.getElementById('tagCount').textContent = stats.tags.toLocaleString();
-                    document.getElementById('edgesCount').textContent = stats.edges.toLocaleString();
-                    
-                    currentBook = book;
-                    
-                    resultsDiv.innerHTML = '<div class="info-box"><strong>✅ Ingestion Complete!</strong><br>"' + book.title + '" has been atomized into ' + stats.atoms.toLocaleString() + ' atoms with ' + stats.tags.toLocaleString() + ' tags and ' + stats.edges.toLocaleString() + ' edges.<br><br>Try searching for themes, characters, or concepts from the book.</div><h3 style="margin-bottom: 1rem; color: #2d3748;">Example Searches:</h3><div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">' + getExampleSearches(book.id).map(function(q) { return '<button class="btn-secondary" onclick="document.getElementById(\'searchInput\').value=\'' + q + '\'; performSearch()">' + q + '</button>'; }).join('') + '</div>';
-                    
-                    setTimeout(function() { progressBar.style.display = 'none'; }, 1000);
-                })
-                .catch(function(error) {
-                    console.error('[STAR Demo] Ingestion error:', error);
-                    resultsDiv.innerHTML = '<div class="info-box" style="background: #fed7d7; border-color: #e53e3e;"><strong>❌ Error:</strong> Failed to load book. Please try another book.<br><br><small>Error: ' + error.message + '</small><br><br>Check browser console for details.</div>';
-                    progressBar.style.display = 'none';
-                });
+            // Multiple CORS proxies for reliability (some get rate limited)
+            var corsProxies = [
+                'https://api.allorigins.win/raw?url=',
+                'https://corsproxy.io/?',
+                'https://api.codetabs.com/v1/proxy?quest='
+            ];
+            
+            var gutenbergUrl = 'https://www.gutenberg.org/files/' + book.id + '/' + book.id + '-0.txt';
+            
+            // Try proxies in sequence until one works
+            tryProxy(0);
+            
+            function tryProxy(proxyIndex) {
+                if (proxyIndex >= corsProxies.length) {
+                    throw new Error('All CORS proxies failed');
+                }
+                
+                var proxyUrl = corsProxies[proxyIndex] + encodeURIComponent(gutenbergUrl);
+                console.log('[STAR Demo] Trying proxy:', proxyIndex + 1, '/', corsProxies.length);
+                
+                fetch(proxyUrl)
+                    .then(function(response) {
+                        console.log('[STAR Demo] Response status:', response.status);
+                        if (!response.ok) {
+                            throw new Error('HTTP ' + response.status);
+                        }
+                        return response.text();
+                    })
+                    .then(function(text) {
+                        console.log('[STAR Demo] Raw text length:', text.length);
+                        
+                        if (text.length < 1000) {
+                            throw new Error('Content too short, trying next proxy');
+                        }
+                        
+                        text = extractBookContent(text);
+                        console.log('[STAR Demo] Extracted content length:', text.length);
+                        
+                        progressFill.style.width = '30%';
+                        
+                        var atoms = engine.atomize(text);
+                        console.log('[STAR Demo] Atoms created:', atoms.length);
+                        
+                        progressFill.style.width = '100%';
+                        
+                        var stats = engine.getStats();
+                        console.log('[STAR Demo] Stats:', stats);
+                        
+                        document.getElementById('atomCount').textContent = stats.atoms.toLocaleString();
+                        document.getElementById('tagCount').textContent = stats.tags.toLocaleString();
+                        document.getElementById('edgesCount').textContent = stats.edges.toLocaleString();
+                        
+                        currentBook = book;
+                        
+                        resultsDiv.innerHTML = '<div class="info-box"><strong>✅ Ingestion Complete!</strong><br>"' + book.title + '" has been atomized into ' + stats.atoms.toLocaleString() + ' atoms with ' + stats.tags.toLocaleString() + ' tags and ' + stats.edges.toLocaleString() + ' edges.<br><br>Try searching for themes, characters, or concepts from the book.</div><h3 style="margin-bottom: 1rem; color: #2d3748;">Example Searches:</h3><div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">' + getExampleSearches(book.id).map(function(q) { return '<button class="btn-secondary" onclick="document.getElementById(\'searchInput\').value=\'' + q + '\'; performSearch()">' + q + '</button>'; }).join('') + '</div>';
+                        
+                        setTimeout(function() { progressBar.style.display = 'none'; }, 1000);
+                    })
+                    .catch(function(error) {
+                        console.warn('[STAR Demo] Proxy', proxyIndex + 1, 'failed:', error.message);
+                        tryProxy(proxyIndex + 1);
+                    });
+            }
         }
 
         function extractBookContent(text) {
