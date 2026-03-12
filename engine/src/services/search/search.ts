@@ -256,13 +256,38 @@ import { UserContext } from '../../types/context.js';
 // Search serialization lock — only one search runs at a time to prevent
 // concurrent searches from doubling peak heap usage.
 // ---------------------------------------------------------------------------
-let _searchLock: Promise<void> = Promise.resolve();
+// Fixed: Use simple boolean flag instead of promise chain to prevent memory leak
+let _searchLockHeld = false;
+let _searchLockWaiters: Array<() => void> = [];
+
 function acquireSearchLock(): Promise<() => void> {
-  let release!: () => void;
-  const next = new Promise<void>(resolve => { release = resolve; });
-  const acquired = _searchLock.then(() => release);
-  _searchLock = _searchLock.then(() => next);
-  return acquired;
+  return new Promise<() => void>((resolve) => {
+    if (!_searchLockHeld) {
+      // Lock is free, acquire it immediately
+      _searchLockHeld = true;
+      resolve(() => {
+        _searchLockHeld = false;
+        // Release next waiter if any
+        const next = _searchLockWaiters.shift();
+        if (next) {
+          _searchLockHeld = true;
+          next();
+        }
+      });
+    } else {
+      // Lock is held, queue this waiter
+      _searchLockWaiters.push(() => {
+        resolve(() => {
+          _searchLockHeld = false;
+          const next = _searchLockWaiters.shift();
+          if (next) {
+            _searchLockHeld = true;
+            next();
+          }
+        });
+      });
+    }
+  });
 }
 
 // Memory thresholds - loaded from user_settings.json with defaults
@@ -371,7 +396,23 @@ export async function findAnchors(
     // Expand camelCase identifiers (e.g. findAnchors → [findanchors, find, anchors])
     // so FTS can match partial names and prose descriptions of the same concept.
     const tsTerms = expandCamelCase(baseTerms);
-    let tsQueryString = tsTerms.join(' | ');
+    
+    // SECURITY FIX: Sanitize FTS query terms to prevent injection attacks
+    // Remove PostgreSQL FTS operators and special characters
+    const sanitizeFtsTerm = (term: string): string => {
+      // Remove FTS operators: &, |, !, ( ), < >
+      let sanitized = term.replace(/[&|!()<>]/g, '');
+      // Remove quotes and backslashes
+      sanitized = sanitized.replace(/["\\]/g, '');
+      // Remove control characters
+      sanitized = sanitized.replace(/[\x00-\x1F\x7F]/g, '');
+      // Escape colons (field search operator)
+      sanitized = sanitized.replace(/:/g, '\\:');
+      return sanitized;
+    };
+    
+    const sanitizedTerms = tsTerms.map(sanitizeFtsTerm).filter(t => t.length > 0);
+    let tsQueryString = sanitizedTerms.join(' | ');
 
     let anchors: SearchResult[] = [];
     let atomResults: SearchResult[] = [];
@@ -1040,9 +1081,12 @@ async function _executeSearchInternal(
   // 100KB per snippet cap in inflateSnippetFromDisk bounds memory per snippet,
   // but 900+ snippets * 100KB = still huge. Limit by budget: budget / 200 chars minimum
   // gives a rough upper bound on useful snippets.
+  // CRITICAL FIX: Add absolute maximum to prevent resource exhaustion
+  const ABSOLUTE_MAX_RESULTS = 200;  // Hard limit regardless of budget
   const maxResultsForBudget = Math.min(
     combinedResults.length,
-    Math.max(200, Math.ceil(maxChars / 200))
+    ABSOLUTE_MAX_RESULTS,  // Absolute cap
+    Math.max(50, Math.ceil(maxChars / 200))  // Budget-based (reduced from 200 to 50 base)
   );
   const cappedResults = combinedResults
     .sort((a: any, b: any) => (b.score || 0) - (a.score || 0))

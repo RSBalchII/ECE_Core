@@ -157,7 +157,7 @@ const DEFAULT_CONFIG: Config = {
   // Core
   PORT: 3160,
   HOST: "0.0.0.0",
-  API_KEY: "ece-secret-key",
+  API_KEY: "",  // Empty by default - must be explicitly configured
   LOG_LEVEL: "INFO",
   OVERLAY_PORT: 3002,
 

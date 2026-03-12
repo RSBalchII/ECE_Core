@@ -1,8 +1,10 @@
 /**
  * API Key Authentication Middleware for Anchor Engine
- * 
+ *
  * Validates Bearer token from Authorization header against the configured API key.
- * When no API key is configured (empty string), authentication is disabled (open access).
+ * When no API key is configured (empty string), authentication is DISABLED for development.
+ * 
+ * ⚠️ SECURITY WARNING: For production deployments, ALWAYS set an API key in user_settings.json!
  */
 
 import { Request, Response, NextFunction } from 'express';
@@ -11,13 +13,16 @@ import { config } from '../config/index.js';
 /**
  * Express middleware that validates API key from Authorization header.
  * Reads the key from config.API_KEY (sourced from user_settings.json → server.api_key).
- * If API_KEY is the default placeholder "ece-secret-key" or empty, auth is disabled.
+ * If API_KEY is empty, auth is disabled (development mode).
+ * 
+ * ⚠️ For production: Set a strong API key in user_settings.json server.api_key
  */
 export function apiKeyAuth(req: Request, res: Response, next: NextFunction): void {
   const apiKey = config.API_KEY;
 
-  // If no meaningful API key configured, skip authentication (open access)
-  if (!apiKey || apiKey === 'ece-secret-key') {
+  // If no API key configured, skip authentication (open access - development mode)
+  // ⚠️ WARNING: Set an API key for production!
+  if (!apiKey) {
     return next();
   }
 

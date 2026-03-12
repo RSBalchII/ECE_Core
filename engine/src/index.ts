@@ -61,23 +61,15 @@ app.use((req, res, next) => {
 // Global state tracker
 let databaseReady = false;
 
-// Global 503 Guard for API routes
-app.use('/v1', (req, res, next) => {
-  if (!databaseReady) {
-    return res.status(503).json({
-      error: "Service temporarily unavailable",
-      message: "Database initializing, please wait..."
-    });
-  }
-  next();
-});
-
 // API Key Authentication for /v1 routes
 app.use('/v1', apiKeyAuth);
-if (config.API_KEY && config.API_KEY !== 'ece-secret-key') {
+if (config.API_KEY) {
   StructuredLogger.info('AUTH_CONFIG', { api_key_enabled: true });
 } else {
-  StructuredLogger.info('AUTH_CONFIG', { api_key_enabled: false });
+  StructuredLogger.warn('AUTH_CONFIG', { 
+    api_key_enabled: false,
+    warning: '⚠️ NO API KEY CONFIGURED - Authentication disabled! Set server.api_key in user_settings.json for production.'
+  });
 }
 
 // Rate limiting — applied after auth so authenticated clients share the same window
@@ -234,17 +226,20 @@ async function startServer() {
     console.time("⏱️ Startup Time");
     console.log("Initializing Anchor Context Engine...");
 
-    // Start the server immediately so health checks pass
+    // ============================================
+    // CRITICAL: Initialize database BEFORE server starts
+    // This prevents race condition where requests hit uninitialized DB
+    // ============================================
+    console.log("Initializing database...");
+    await db.init();
+    databaseReady = true;
+    console.log("Database initialized successfully");
+
+    // Start the server AFTER database is ready
     app.listen(PORT, config.HOST, () => {
       console.log(`Anchor Context Engine running on ${config.HOST}:${PORT}`);
       console.log(`Health check available at http://${config.HOST}:${PORT}/health`);
     });
-
-    // Initialize database in the background after server starts
-    console.log("Initializing database in the background...");
-    await db.init();
-    databaseReady = true;
-    console.log("Database initialized successfully");
 
     // Cleanup blacklisted tags from database
     console.log('[Startup] Cleaning up blacklisted tags...');
@@ -317,6 +312,7 @@ async function startServer() {
         )
       ]);
 
+      // FIX: Proper error handling - catch errors in .then() callback too
       synonymPromise.then(async (synonyms) => {
         // Save to auto-generated path (cleared on shutdown)
         const synonymPath = path.join(pathManager.getNotebookDir(), 'synonym-ring-auto.json');
@@ -446,6 +442,20 @@ process.on('warning', (warning) => {
     console.log('Performing memory optimization due to warning...');
     resourceManager.optimizeMemory();
   }
+});
+
+// FIX: Global unhandled rejection handler to prevent crashes
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[UNHANDLED REJECTION] Promise:', promise);
+  console.error('[UNHANDLED REJECTION] Reason:', reason);
+  // Don't exit - log and continue (Node.js default is to crash)
+});
+
+// FIX: Global uncaught exception handler
+process.on('uncaughtException', (error) => {
+  console.error('[UNCAUGHT EXCEPTION]', error);
+  // Attempt graceful shutdown
+  process.exit(1);
 });
 
 // Initialize Idle Manager for automatic memory cleanup during inactivity
