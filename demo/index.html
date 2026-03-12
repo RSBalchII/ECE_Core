@@ -626,17 +626,33 @@
             progressBar.style.display = 'block';
             progressFill.style.width = '0%';
 
-            // Use CORS proxy to fetch Gutenberg books (using corsproxy.io for better reliability)
+            console.log('[STAR Demo] Fetching book:', book.title, 'ID:', book.id);
+
+            // Use CORS proxy to fetch Gutenberg books
             fetch('https://corsproxy.io/?' + encodeURIComponent('https://www.gutenberg.org/files/' + book.id + '/' + book.id + '-0.txt'))
-                .then(function(response) { return response.text(); })
+                .then(function(response) {
+                    console.log('[STAR Demo] Response status:', response.status);
+                    if (!response.ok) {
+                        throw new Error('HTTP ' + response.status);
+                    }
+                    return response.text();
+                })
                 .then(function(text) {
+                    console.log('[STAR Demo] Raw text length:', text.length);
+                    
                     text = extractBookContent(text);
+                    console.log('[STAR Demo] Extracted content length:', text.length);
+                    
                     progressFill.style.width = '30%';
                     
                     var atoms = engine.atomize(text);
+                    console.log('[STAR Demo] Atoms created:', atoms.length);
+                    
                     progressFill.style.width = '100%';
                     
                     var stats = engine.getStats();
+                    console.log('[STAR Demo] Stats:', stats);
+                    
                     document.getElementById('atomCount').textContent = stats.atoms.toLocaleString();
                     document.getElementById('tagCount').textContent = stats.tags.toLocaleString();
                     document.getElementById('edgesCount').textContent = stats.edges.toLocaleString();
@@ -648,7 +664,8 @@
                     setTimeout(function() { progressBar.style.display = 'none'; }, 1000);
                 })
                 .catch(function(error) {
-                    resultsDiv.innerHTML = '<div class="info-box" style="background: #fed7d7; border-color: #e53e3e;"><strong>❌ Error:</strong> Failed to load book. Please try another book.</div>';
+                    console.error('[STAR Demo] Ingestion error:', error);
+                    resultsDiv.innerHTML = '<div class="info-box" style="background: #fed7d7; border-color: #e53e3e;"><strong>❌ Error:</strong> Failed to load book. Please try another book.<br><br><small>Error: ' + error.message + '</small><br><br>Check browser console for details.</div>';
                     progressBar.style.display = 'none';
                 });
         }
