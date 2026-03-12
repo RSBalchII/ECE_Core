@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STAR Demo - Semantic Temporal Associative Retrieval</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .demo-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            margin-bottom: 2rem;
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 2rem;
+            justify-content: space-around;
+            padding: 1rem;
+            background: #f7fafc;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: #718096;
+            margin-top: 0.25rem;
+        }
+
+        .action-bar {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        button {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #2d3748;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .results {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 1.5rem;
+            min-height: 200px;
+        }
+
+        .result-item {
+            background: white;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            border-left: 4px solid #667eea;
+        }
+
+        .result-score {
+            font-size: 0.75rem;
+            color: #718096;
+            margin-bottom: 0.5rem;
+        }
+
+        .result-content {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: #2d3748;
+        }
+
+        .result-tags {
+            margin-top: 0.5rem;
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .tag {
+            background: #e2e8f0;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            color: #4a5568;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 800px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2d3748;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #718096;
+        }
+
+        .book-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .book-card {
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .book-card:hover {
+            border-color: #667eea;
+            background: #f7fafc;
+            transform: translateY(-2px);
+        }
+
+        .book-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .book-author {
+            font-size: 0.8rem;
+            color: #718096;
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: #e2e8f0;
+            border-radius: 2px;
+            margin-top: 1rem;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #667eea;
+            transition: width 0.3s;
+            width: 0%;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #718096;
+        }
+
+        .spinner {
+            border: 3px solid #e2e8f0;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .info-box {
+            background: #ebf8ff;
+            border-left: 4px solid #4299e1;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌟 STAR Demo</h1>
+            <p class="subtitle">Semantic Temporal Associative Retrieval - Deterministic Graph-Based Search</p>
+        </header>
+
+        <div class="demo-card">
+            <div class="info-box">
+                <strong>📚 Demo Mode:</strong> This is a lightweight client-side implementation of the STAR algorithm. 
+                Select a book from Project Gutenberg, and it will be atomized into a concept graph for deterministic retrieval.
+            </div>
+
+            <div class="stats-bar">
+                <div class="stat">
+                    <div class="stat-value" id="atomCount">0</div>
+                    <div class="stat-label">Atoms</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="tagCount">0</div>
+                    <div class="stat-label">Tags</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="edgesCount">0</div>
+                    <div class="stat-label">Edges</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="searchTime">0ms</div>
+                    <div class="stat-label">Search Time</div>
+                </div>
+            </div>
+
+            <div class="action-bar">
+                <button class="btn-primary" onclick="openBookModal()">📚 Select Book from Gutenberg</button>
+                <button class="btn-secondary" onclick="resetDemo()">🔄 Reset Demo</button>
+            </div>
+
+            <div class="search-box">
+                <input 
+                    type="text" 
+                    id="searchInput" 
+                    placeholder="Search the ingested book... (e.g., 'love', 'war', 'time')"
+                    onkeypress="if(event.key === 'Enter') performSearch()"
+                >
+                <button class="btn-primary" onclick="performSearch()">🔍 Search</button>
+            </div>
+
+            <div class="results" id="results">
+                <div class="loading">
+                    <p>Select a book to begin ingestion and search</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Book Selection Modal -->
+    <div class="modal-overlay" id="bookModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title">📚 Select a Book from Project Gutenberg</h2>
+                <button class="close-btn" onclick="closeBookModal()">×</button>
+            </div>
+            <div class="info-box">
+                <strong>How it works:</strong> Books are fetched from Project Gutenberg's API, atomized into concepts, 
+                and indexed using the STAR algorithm. All processing happens in your browser.
+            </div>
+            <div id="bookList" class="book-grid">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading books from Project Gutenberg...</p>
+                </div>
+            </div>
+            <div class="progress-bar" id="ingestProgress" style="display: none;">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // STAR Algorithm - Client-Side Implementation
+        // ============================================
+
+        function STAREngine() {
+            this.atoms = new Map();
+            this.tags = new Map();
+            this.edges = new Map();
+            this.atomCounter = 0;
+        }
+
+        STAREngine.prototype.atomize = function(text) {
+            var sentences = text.split(/[.!?]+/).filter(function(s) { return s.trim().length > 20; });
+            var atoms = [];
+            var self = this;
+
+            sentences.forEach(function(sentence, idx) {
+                var atomId = 'atom_' + (++self.atomCounter);
+                var tags = self.extractTags(sentence);
+                
+                var atom = {
+                    id: atomId,
+                    content: sentence.trim(),
+                    tags: tags,
+                    timestamp: Date.now() - (sentences.length - idx) * 1000
+                };
+
+                self.atoms.set(atomId, atom);
+                atoms.push(atom);
+
+                tags.forEach(function(tag) {
+                    if (!self.tags.has(tag)) {
+                        self.tags.set(tag, new Set());
+                    }
+                    self.tags.get(tag).add(atomId);
+                });
+            });
+
+            this.buildEdges();
+            return atoms;
+        };
+
+        STAREngine.prototype.extractTags = function(text) {
+            var words = text.toLowerCase()
+                .replace(/[^\w\s]/g, '')
+                .split(/\s+/)
+                .filter(function(w) { return w.length > 3; });
+
+            var stopWords = new Set(['this', 'that', 'with', 'have', 'from', 'they', 'been', 'would', 'there', 'their', 'about', 'which', 'when', 'make', 'like', 'just', 'over', 'such', 'into', 'than', 'them', 'then', 'some', 'very', 'after', 'most', 'also', 'made', 'did', 'before', 'must', 'through', 'because', 'where', 'could', 'old', 'under', 'well', 'against', 'without', 'little', 'still', 'both', 'each', 'while', 'being', 'only', 'came', 'come', 'years', 'year', 'time', 'times', 'great', 'good', 'much', 'many', 'first', 'last', 'long', 'found', 'know', 'think', 'went', 'shall', 'may', 'can', 'will', 'said', 'say', 'see']);
+
+            var contentWords = words.filter(function(w) { return !stopWords.has(w); });
+            return Array.from(new Set(contentWords)).slice(0, 10);
+        };
+
+        STAREngine.prototype.buildEdges = function() {
+            this.edges.clear();
+            var self = this;
+
+            this.tags.forEach(function(atomIds, tag) {
+                var idsArray = Array.from(atomIds);
+                for (var i = 0; i < idsArray.length; i++) {
+                    for (var j = i + 1; j < idsArray.length; j++) {
+                        if (!self.edges.has(idsArray[i])) {
+                            self.edges.set(idsArray[i], new Set());
+                        }
+                        if (!self.edges.has(idsArray[j])) {
+                            self.edges.set(idsArray[j], new Set());
+                        }
+                        self.edges.get(idsArray[i]).add(idsArray[j]);
+                        self.edges.get(idsArray[j]).add(idsArray[i]);
+                    }
+                }
+            });
+        };
+
+        STAREngine.prototype.search = function(query, limit) {
+            limit = limit || 20;
+            var startTime = performance.now();
+            var queryTags = this.extractTags(query);
+            var anchors = new Map();
+            var neighbors = new Map();
+            var self = this;
+
+            queryTags.forEach(function(tag) {
+                if (self.tags.has(tag)) {
+                    self.tags.get(tag).forEach(function(atomId) {
+                        var current = anchors.get(atomId) || 0;
+                        anchors.set(atomId, current + 1);
+                    });
+                }
+            });
+
+            anchors.forEach(function(score, atomId) {
+                if (self.edges.has(atomId)) {
+                    self.edges.get(atomId).forEach(function(neighborId) {
+                        if (!anchors.has(neighborId)) {
+                            var current = neighbors.get(neighborId) || 0;
+                            neighbors.set(neighborId, current + score * 0.5);
+                        }
+                    });
+                }
+            });
+
+            var now = Date.now();
+            var results = [];
+
+            anchors.forEach(function(score, atomId) {
+                var atom = self.atoms.get(atomId);
+                var timeDecay = Math.exp(-0.00001 * (now - atom.timestamp));
+                results.push({
+                    id: atom.id,
+                    content: atom.content,
+                    tags: atom.tags,
+                    score: score * timeDecay,
+                    type: 'anchor'
+                });
+            });
+
+            neighbors.forEach(function(score, atomId) {
+                var atom = self.atoms.get(atomId);
+                var timeDecay = Math.exp(-0.00001 * (now - atom.timestamp));
+                results.push({
+                    id: atom.id,
+                    content: atom.content,
+                    tags: atom.tags,
+                    score: score * timeDecay,
+                    type: 'neighbor'
+                });
+            });
+
+            results.sort(function(a, b) { return b.score - a.score; });
+
+            var searchTime = performance.now() - startTime;
+            document.getElementById('searchTime').textContent = searchTime.toFixed(1) + 'ms';
+
+            return results.slice(0, limit);
+        };
+
+        STAREngine.prototype.getStats = function() {
+            var edgeCount = 0;
+            var self = this;
+            this.edges.forEach(function(neighbors) { edgeCount += neighbors.size; });
+            edgeCount /= 2;
+
+            return {
+                atoms: this.atoms.size,
+                tags: this.tags.size,
+                edges: Math.round(edgeCount)
+            };
+        };
+
+        STAREngine.prototype.clear = function() {
+            this.atoms.clear();
+            this.tags.clear();
+            this.edges.clear();
+            this.atomCounter = 0;
+        };
+
+        // ============================================
+        // Demo Application
+        // ============================================
+
+        var engine = new STAREngine();
+        var currentBook = null;
+
+        var GUTENBERG_BOOKS = [
+            { id: 84, title: "Frankenstein", author: "Mary Shelley" },
+            { id: 1342, title: "Pride and Prejudice", author: "Jane Austen" },
+            { id: 46, title: "The Picture of Dorian Gray", author: "Oscar Wilde" },
+            { id: 11, title: "Alice's Adventures in Wonderland", author: "Lewis Carroll" },
+            { id: 2701, title: "Moby Dick", author: "Herman Melville" },
+            { id: 1260, title: "Jane Eyre", author: "Charlotte Brontë" },
+            { id: 1952, title: "The Great Gatsby", author: "F. Scott Fitzgerald" },
+            { id: 76, title: "A Tale of Two Cities", author: "Charles Dickens" }
+        ];
+
+        function openBookModal() {
+            document.getElementById('bookModal').classList.add('active');
+            loadBooks();
+        }
+
+        function closeBookModal() {
+            document.getElementById('bookModal').classList.remove('active');
+        }
+
+        function loadBooks() {
+            var bookList = document.getElementById('bookList');
+            bookList.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading books...</p></div>';
+
+            fetch('https://gutendex.com/books?languages=en&sort=downloads')
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    var books = data.results.slice(0, 24);
+                    bookList.innerHTML = '';
+                    books.forEach(function(book) {
+                        var card = document.createElement('div');
+                        card.className = 'book-card';
+                        card.innerHTML = '<div class="book-title">' + book.title + '</div><div class="book-author">' + book.authors.map(function(a) { return a.name; }).join(', ') + '</div>';
+                        card.onclick = function() { ingestBook(book); };
+                        bookList.appendChild(card);
+                    });
+                })
+                .catch(function(error) {
+                    bookList.innerHTML = '';
+                    GUTENBERG_BOOKS.forEach(function(book) {
+                        var card = document.createElement('div');
+                        card.className = 'book-card';
+                        card.innerHTML = '<div class="book-title">' + book.title + '</div><div class="book-author">' + book.author + '</div>';
+                        card.onclick = function() { ingestBook(book); };
+                        bookList.appendChild(card);
+                    });
+                });
+        }
+
+        function ingestBook(book) {
+            closeBookModal();
+            
+            var resultsDiv = document.getElementById('results');
+            var progressBar = document.getElementById('ingestProgress');
+            var progressFill = document.getElementById('progressFill');
+            
+            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Ingesting "' + book.title + '"...</p></div>';
+            progressBar.style.display = 'block';
+            progressFill.style.width = '0%';
+
+            // Use CORS proxy to fetch Gutenberg books
+            fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://www.gutenberg.org/files/' + book.id + '/' + book.id + '-0.txt'))
+                .then(function(response) { return response.text(); })
+                .then(function(text) {
+                    text = extractBookContent(text);
+                    progressFill.style.width = '30%';
+                    
+                    var atoms = engine.atomize(text);
+                    progressFill.style.width = '100%';
+                    
+                    var stats = engine.getStats();
+                    document.getElementById('atomCount').textContent = stats.atoms.toLocaleString();
+                    document.getElementById('tagCount').textContent = stats.tags.toLocaleString();
+                    document.getElementById('edgesCount').textContent = stats.edges.toLocaleString();
+                    
+                    currentBook = book;
+                    
+                    resultsDiv.innerHTML = '<div class="info-box"><strong>✅ Ingestion Complete!</strong><br>"' + book.title + '" has been atomized into ' + stats.atoms.toLocaleString() + ' atoms with ' + stats.tags.toLocaleString() + ' tags and ' + stats.edges.toLocaleString() + ' edges.<br><br>Try searching for themes, characters, or concepts from the book.</div><h3 style="margin-bottom: 1rem; color: #2d3748;">Example Searches:</h3><div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">' + getExampleSearches(book.id).map(function(q) { return '<button class="btn-secondary" onclick="document.getElementById(\'searchInput\').value=\'' + q + '\'; performSearch()">' + q + '</button>'; }).join('') + '</div>';
+                    
+                    setTimeout(function() { progressBar.style.display = 'none'; }, 1000);
+                })
+                .catch(function(error) {
+                    resultsDiv.innerHTML = '<div class="info-box" style="background: #fed7d7; border-color: #e53e3e;"><strong>❌ Error:</strong> Failed to load book. Please try another book.</div>';
+                    progressBar.style.display = 'none';
+                });
+        }
+
+        function extractBookContent(text) {
+            var startMarker = '*** START OF THE PROJECT GUTENBERG';
+            var endMarker = '*** END OF THE PROJECT GUTENBERG';
+            
+            var startIndex = text.indexOf(startMarker);
+            var endIndex = text.indexOf(endMarker);
+            
+            if (startIndex !== -1 && endIndex !== -1) {
+                text = text.substring(startIndex, endIndex);
+            }
+            
+            return text.substring(0, 50000);
+        }
+
+        function getExampleSearches(bookId) {
+            var examples = {
+                84: ['monster', 'life', 'death', 'creation'],
+                1342: ['pride', 'love', 'marriage', 'family'],
+                46: ['beauty', 'soul', 'art', 'portrait'],
+                11: ['alice', 'queen', 'time', 'mad'],
+                2701: ['whale', 'sea', 'captain', 'ship'],
+                1260: ['love', 'master', 'house', 'fire'],
+                1952: ['gatsby', 'dream', 'party', 'love'],
+                76: ['city', 'revolution', 'prison', 'love']
+            };
+            return examples[bookId] || ['theme', 'character', 'story'];
+        }
+
+        function performSearch() {
+            var query = document.getElementById('searchInput').value.trim();
+            if (!query) return;
+
+            var resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Searching...</p></div>';
+
+            setTimeout(function() {
+                var results = engine.search(query, 20);
+                
+                if (results.length === 0) {
+                    resultsDiv.innerHTML = '<div class="info-box"><strong>No results found</strong><br>Try different keywords or more general terms.</div>';
+                    return;
+                }
+
+                resultsDiv.innerHTML = '<h3 style="margin-bottom: 1rem; color: #2d3748;">Search Results for "' + query + '" (' + results.length + ' results)</h3>' + results.map(function(result, idx) {
+                    return '<div class="result-item"><div class="result-score">Score: ' + result.score.toFixed(4) + ' | Type: ' + result.type + ' | Tags: ' + result.tags.slice(0, 5).join(', ') + '</div><div class="result-content">' + highlightMatch(result.content, query) + '</div><div class="result-tags">' + result.tags.slice(0, 8).map(function(tag) { return '<span class="tag">' + tag + '</span>'; }).join('') + '</div></div>';
+                }).join('');
+            }, 50);
+        }
+
+        function highlightMatch(text, query) {
+            var words = query.toLowerCase().split(/\s+/);
+            var highlighted = text;
+            words.forEach(function(word) {
+                if (word.length > 2) {
+                    var regex = new RegExp('(' + word + ')', 'gi');
+                    highlighted = highlighted.replace(regex, '<mark>$1</mark>');
+                }
+            });
+            return highlighted;
+        }
+
+        function resetDemo() {
+            engine.clear();
+            currentBook = null;
+            document.getElementById('searchInput').value = '';
+            document.getElementById('atomCount').textContent = '0';
+            document.getElementById('tagCount').textContent = '0';
+            document.getElementById('edgesCount').textContent = '0';
+            document.getElementById('searchTime').textContent = '0ms';
+            document.getElementById('results').innerHTML = '<div class="loading"><p>Select a book to begin ingestion and search</p></div>';
+        }
+
+        document.getElementById('bookModal').addEventListener('click', function(e) {
+            if (e.target.id === 'bookModal') {
+                closeBookModal();
+            }
+        });
+    </script>
+</body>
+</html>
