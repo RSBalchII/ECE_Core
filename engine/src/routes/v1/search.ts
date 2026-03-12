@@ -1,18 +1,31 @@
 import { Application, Request, Response } from 'express';
-import { validate, schemas } from '../../middleware/validate.js';
+import { z } from 'zod';
 import { StructuredLogger } from '../../utils/structured-logger.js';
 import { smartChatSearch, executeMoleculeSearch } from '../../services/search/search.js';
-import { SearchRequest } from '../../types/api.js';
 import { executeStreamingSearch, formatSSE } from '../../services/search/streaming-search.js';
+import { searchSchema, moleculeSearchSchema, maxRecallSearchSchema } from '../../schemas/api-schemas.js';
 
 export function setupSearchRoutes(app: Application) {
   // POST Search endpoint (Standard 136: Streaming Search)
   // Memory-efficient streaming search with Server-Sent Events
-  app.post('/v1/memory/search', validate(schemas.memorySearch), async (req: Request, res: Response) => {
+  app.post('/v1/memory/search', async (req: Request, res: Response) => {
     const startTime = Date.now();
 
+    // Validate request body with Zod
+    const validation = searchSchema.safeParse(req.body);
+    if (!validation.success) {
+      StructuredLogger.warn('SEARCH_VALIDATION_ERROR', { errors: validation.error.issues });
+      return res.status(400).json({
+        error: 'Invalid search request',
+        details: validation.error.issues.map(e => ({
+          field: e.path.join('.'),
+          message: e.message
+        }))
+      });
+    }
+
     try {
-      const body = req.body as SearchRequest;
+      const body = validation.data;
       if (!body.query) {
         res.status(400).json({ error: 'Query is required' });
         return;

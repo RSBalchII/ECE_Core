@@ -1,15 +1,30 @@
 import { Application, Request, Response } from 'express';
-import { validate, schemas } from '../../middleware/validate.js';
+import { z } from 'zod';
 import { StructuredLogger } from '../../utils/structured-logger.js';
 import { AtomizerService } from '../../services/ingest/atomizer-service.js';
 import { AtomicIngestService } from '../../services/ingest/ingest-atomic.js';
+import { ingestSchema } from '../../schemas/api-schemas.js';
 
 export function setupIngestRoutes(app: Application) {
   // Ingestion endpoint (Atomic Architecture)
-  app.post('/v1/ingest', validate(schemas.ingest), async (req: Request, res: Response) => {
+  app.post('/v1/ingest', async (req: Request, res: Response) => {
     const startTime = Date.now();
+
+    // Validate request body with Zod
+    const validation = ingestSchema.safeParse(req.body);
+    if (!validation.success) {
+      StructuredLogger.warn('INGEST_VALIDATION_ERROR', { errors: validation.error.issues });
+      return res.status(400).json({
+        error: 'Invalid ingest request',
+        details: validation.error.issues.map(e => ({
+          field: e.path.join('.'),
+          message: e.message
+        }))
+      });
+    }
+
     try {
-      const { content, source, type, bucket, buckets = [], tags = [] } = req.body;
+      const { content, source, type, bucket, buckets = [], tags = [] } = validation.data;
 
       if (!content) {
         StructuredLogger.warn('INGEST_INVALID_REQUEST', { error: 'Content is required' });
