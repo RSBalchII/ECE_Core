@@ -331,8 +331,12 @@
 
             <div class="action-bar">
                 <button class="btn-primary" onclick="openBookModal()">📚 Select Book from Gutenberg</button>
+                <button class="btn-secondary" onclick="document.getElementById('fileInput').click()">📁 Upload TXT File</button>
                 <button class="btn-secondary" onclick="resetDemo()">🔄 Reset Demo</button>
             </div>
+            
+            <!-- Hidden file input for TXT upload -->
+            <input type="file" id="fileInput" accept=".txt" style="display: none;" onchange="handleFileUpload(event)">
 
             <div class="search-box">
                 <input 
@@ -360,8 +364,9 @@
                 <button class="close-btn" onclick="closeBookModal()">×</button>
             </div>
             <div class="info-box">
-                <strong>How it works:</strong> Books are fetched from Project Gutenberg's API, atomized into concepts, 
-                and indexed using the STAR algorithm. All processing happens in your browser.
+                <strong>How it works:</strong> Books are fetched from Project Gutenberg, atomized into concepts,
+                and indexed using the STAR algorithm. All processing happens in your browser.<br><br>
+                <strong>⚠️ Having issues?</strong> Use the "📁 Upload TXT File" button instead to upload any text file directly.
             </div>
             <div id="bookList" class="book-grid">
                 <div class="loading">
@@ -642,7 +647,8 @@
             
             function tryProxy(proxyIndex) {
                 if (proxyIndex >= corsProxies.length) {
-                    throw new Error('All CORS proxies failed');
+                    showError('All CORS proxies failed. Try uploading a TXT file instead!');
+                    return;
                 }
                 
                 var proxyUrl = corsProxies[proxyIndex] + encodeURIComponent(gutenbergUrl);
@@ -663,34 +669,69 @@
                             throw new Error('Content too short, trying next proxy');
                         }
                         
-                        text = extractBookContent(text);
-                        console.log('[STAR Demo] Extracted content length:', text.length);
-                        
-                        progressFill.style.width = '30%';
-                        
-                        var atoms = engine.atomize(text);
-                        console.log('[STAR Demo] Atoms created:', atoms.length);
-                        
-                        progressFill.style.width = '100%';
-                        
-                        var stats = engine.getStats();
-                        console.log('[STAR Demo] Stats:', stats);
-                        
-                        document.getElementById('atomCount').textContent = stats.atoms.toLocaleString();
-                        document.getElementById('tagCount').textContent = stats.tags.toLocaleString();
-                        document.getElementById('edgesCount').textContent = stats.edges.toLocaleString();
-                        
-                        currentBook = book;
-                        
-                        resultsDiv.innerHTML = '<div class="info-box"><strong>✅ Ingestion Complete!</strong><br>"' + book.title + '" has been atomized into ' + stats.atoms.toLocaleString() + ' atoms with ' + stats.tags.toLocaleString() + ' tags and ' + stats.edges.toLocaleString() + ' edges.<br><br>Try searching for themes, characters, or concepts from the book.</div><h3 style="margin-bottom: 1rem; color: #2d3748;">Example Searches:</h3><div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">' + getExampleSearches(book.id).map(function(q) { return '<button class="btn-secondary" onclick="document.getElementById(\'searchInput\').value=\'' + q + '\'; performSearch()">' + q + '</button>'; }).join('') + '</div>';
-                        
-                        setTimeout(function() { progressBar.style.display = 'none'; }, 1000);
+                        processIngestedText(text, book.title, progressBar, progressFill, resultsDiv);
                     })
                     .catch(function(error) {
                         console.warn('[STAR Demo] Proxy', proxyIndex + 1, 'failed:', error.message);
                         tryProxy(proxyIndex + 1);
                     });
             }
+        }
+        
+        function handleFileUpload(event) {
+            var file = event.target.files[0];
+            if (!file) return;
+            
+            console.log('[STAR Demo] File selected:', file.name);
+            
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var text = e.target.result;
+                console.log('[STAR Demo] File loaded, length:', text.length);
+                processIngestedText(text, file.name, null, null, document.getElementById('results'));
+            };
+            reader.onerror = function() {
+                showError('Failed to read file: ' + file.name);
+            };
+            reader.readAsText(file);
+            
+            // Reset file input
+            event.target.value = '';
+        }
+        
+        function processIngestedText(text, title, progressBar, progressFill, resultsDiv) {
+            if (progressBar) progressBar.style.display = 'block';
+            if (progressFill) progressFill.style.width = '0%';
+            
+            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Ingesting "' + title + '"...</p></div>';
+            
+            text = extractBookContent(text);
+            console.log('[STAR Demo] Extracted content length:', text.length);
+            
+            if (progressFill) progressFill.style.width = '30%';
+            
+            var atoms = engine.atomize(text);
+            console.log('[STAR Demo] Atoms created:', atoms.length);
+            
+            if (progressFill) progressFill.style.width = '100%';
+            
+            var stats = engine.getStats();
+            console.log('[STAR Demo] Stats:', stats);
+            
+            document.getElementById('atomCount').textContent = stats.atoms.toLocaleString();
+            document.getElementById('tagCount').textContent = stats.tags.toLocaleString();
+            document.getElementById('edgesCount').textContent = stats.edges.toLocaleString();
+            
+            currentBook = { title: title };
+            
+            resultsDiv.innerHTML = '<div class="info-box"><strong>✅ Ingestion Complete!</strong><br>"' + title + '" has been atomized into ' + stats.atoms.toLocaleString() + ' atoms with ' + stats.tags.toLocaleString() + ' tags and ' + stats.edges.toLocaleString() + ' edges.<br><br>Try searching for themes, characters, or concepts.</div>';
+            
+            if (progressBar) setTimeout(function() { progressBar.style.display = 'none'; }, 1000);
+        }
+        
+        function showError(message) {
+            var resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="info-box" style="background: #fed7d7; border-color: #e53e3e;"><strong>❌ Error:</strong> ' + message + '</div>';
         }
 
         function extractBookContent(text) {
