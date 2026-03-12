@@ -61,14 +61,24 @@ app.use((req, res, next) => {
 // Global state tracker
 let databaseReady = false;
 
+// SECURITY FIX #4: Require API key in production (fail closed, not open)
+const isProduction = process.env.NODE_ENV === 'production';
+if (isProduction && !config.API_KEY) {
+  throw new Error(
+    'SECURITY ERROR: API_KEY must be set in production! ' +
+    'Set server.api_key in user_settings.json or ANCHOR_API_KEY environment variable. ' +
+    'For safety, the server will not start without authentication in production mode.'
+  );
+}
+
 // API Key Authentication for /v1 routes
 app.use('/v1', apiKeyAuth);
 if (config.API_KEY) {
   StructuredLogger.info('AUTH_CONFIG', { api_key_enabled: true });
 } else {
-  StructuredLogger.warn('AUTH_CONFIG', { 
+  StructuredLogger.warn('AUTH_CONFIG', {
     api_key_enabled: false,
-    warning: '⚠️ NO API KEY CONFIGURED - Authentication disabled! Set server.api_key in user_settings.json for production.'
+    warning: '⚠️ NO API KEY CONFIGURED - Authentication disabled! DEVELOPMENT MODE ONLY. Set server.api_key in user_settings.json for production.'
   });
 }
 

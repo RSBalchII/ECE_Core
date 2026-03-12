@@ -163,34 +163,41 @@ export function setupSystemRoutes(app: Application) {
       const { execFile } = await import('child_process');
       const util = await import('util');
       const pathModule = await import('path');
+      const fs = await import('fs');
       const { PROJECT_ROOT } = await import('../../config/paths.js');
       const execFilePromise = util.promisify(execFile);
       const platform = process.platform;
 
-      // Security: Resolve requested directory to absolute path and verify it's within PROJECT_ROOT
+      // SECURITY FIX #3: Path traversal prevention with realpath
+      // 1. Resolve to absolute path
+      // 2. Resolve symlinks to prevent bypass via symbolic links
+      // 3. Verify resolved path is within PROJECT_ROOT
       const absoluteRequestedDir = pathModule.resolve(path);
-      const relativePath = pathModule.relative(PROJECT_ROOT, absoluteRequestedDir);
-
-      // Check if it's an outside directory (e.g. starts with ..) or an absolute path (on Windows)
+      
+      // Resolve symlinks to get the real path (prevents symlink attacks)
+      const realPath = await fs.promises.realpath(absoluteRequestedDir).catch(() => absoluteRequestedDir);
+      
+      // Verify the real path is within PROJECT_ROOT
+      const relativePath = pathModule.relative(PROJECT_ROOT, realPath);
       const isOutside = relativePath.startsWith('..') || pathModule.isAbsolute(relativePath);
 
-      if (isOutside && absoluteRequestedDir !== PROJECT_ROOT) {
-        console.warn(`[System] Rejected unauthorized explorer access: ${path} (resolved: ${absoluteRequestedDir})`);
+      if (isOutside) {
+        console.warn(`[System] Rejected unauthorized explorer access: ${path} (resolved: ${realPath})`);
         return res.status(403).json({ error: 'Directory not authorized for explorer access' });
       }
 
       // Open file explorer based on platform safely using execFile
       if (platform === 'win32') {
-        await execFilePromise('explorer.exe', [absoluteRequestedDir]);
+        await execFilePromise('explorer.exe', [realPath]);
       } else if (platform === 'darwin') {
-        await execFilePromise('open', [absoluteRequestedDir]);
+        await execFilePromise('open', [realPath]);
       } else {
-        await execFilePromise('xdg-open', [absoluteRequestedDir]);
+        await execFilePromise('xdg-open', [realPath]);
       }
 
       res.status(200).json({
         status: 'success',
-        message: `Opened file explorer at: ${absoluteRequestedDir}`
+        message: `Opened file explorer at: ${realPath}`
       });
     } catch (e: any) {
       console.error('[API] Failed to open file explorer:', e);

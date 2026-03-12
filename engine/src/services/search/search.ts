@@ -397,22 +397,10 @@ export async function findAnchors(
     // so FTS can match partial names and prose descriptions of the same concept.
     const tsTerms = expandCamelCase(baseTerms);
     
-    // SECURITY FIX: Sanitize FTS query terms to prevent injection attacks
-    // Remove PostgreSQL FTS operators and special characters
-    const sanitizeFtsTerm = (term: string): string => {
-      // Remove FTS operators: &, |, !, ( ), < >
-      let sanitized = term.replace(/[&|!()<>]/g, '');
-      // Remove quotes and backslashes
-      sanitized = sanitized.replace(/["\\]/g, '');
-      // Remove control characters
-      sanitized = sanitized.replace(/[\x00-\x1F\x7F]/g, '');
-      // Escape colons (field search operator)
-      sanitized = sanitized.replace(/:/g, '\\:');
-      return sanitized;
-    };
-    
-    const sanitizedTerms = tsTerms.map(sanitizeFtsTerm).filter(t => t.length > 0);
-    let tsQueryString = sanitizedTerms.join(' | ');
+    // SECURITY FIX #1: Use plainto_tsquery instead of manual sanitization
+    // plainto_tsquery treats input as plain text, automatically handling all special characters
+    // This prevents SQL injection via FTS operators like <->, *, :, &, |, !, etc.
+    const tsQueryString = tsTerms.join(' ');  // Space-separated for plainto_tsquery
 
     let anchors: SearchResult[] = [];
     let atomResults: SearchResult[] = [];
@@ -453,16 +441,17 @@ export async function findAnchors(
     anchors = atomResults;
 
     // B. Molecule Search (Full-Text with BM25-style ranking)
+    // SECURITY FIX: Use plainto_tsquery which safely handles user input
     let moleculeQuery = `
         SELECT m.id, m.content, c.path as source, m.timestamp,
                '{}'::text[] as buckets, '{}'::text[] as tags, 'epoch_placeholder' as epochs, c.provenance,
                -- Use ts_rank_cd for cover-density ranking (closer to BM25)
-               ts_rank_cd(to_tsvector('simple', m.content), to_tsquery('simple', $1)) * 10 as score,
+               ts_rank_cd(to_tsvector('simple', m.content), plainto_tsquery('simple', $1)) * 10 as score,
                m.sequence, m.molecular_signature,
                m.start_byte, m.end_byte, m.type, m.numeric_value, m.numeric_unit, m.compound_id
         FROM molecules m
         JOIN compounds c ON m.compound_id = c.id
-        WHERE to_tsvector('simple', m.content) @@ to_tsquery('simple', $1)
+        WHERE to_tsvector('simple', m.content) @@ plainto_tsquery('simple', $1)
     `;
 
     const moleculeParams: any[] = [tsQueryString];
@@ -1081,12 +1070,13 @@ async function _executeSearchInternal(
   // 100KB per snippet cap in inflateSnippetFromDisk bounds memory per snippet,
   // but 900+ snippets * 100KB = still huge. Limit by budget: budget / 200 chars minimum
   // gives a rough upper bound on useful snippets.
-  // CRITICAL FIX: Add absolute maximum to prevent resource exhaustion
-  const ABSOLUTE_MAX_RESULTS = 200;  // Hard limit regardless of budget
+  // CRITICAL FIX #5: Reduce absolute maximum to prevent resource exhaustion
+  // 50 results × 100KB = 5MB max per search (vs 20MB with 200 results)
+  const ABSOLUTE_MAX_RESULTS = 50;  // Hard limit regardless of budget
   const maxResultsForBudget = Math.min(
     combinedResults.length,
     ABSOLUTE_MAX_RESULTS,  // Absolute cap
-    Math.max(50, Math.ceil(maxChars / 200))  // Budget-based (reduced from 200 to 50 base)
+    Math.max(20, Math.ceil(maxChars / 200))  // Budget-based (20 minimum for small budgets)
   );
   const cappedResults = combinedResults
     .sort((a: any, b: any) => (b.score || 0) - (a.score || 0))

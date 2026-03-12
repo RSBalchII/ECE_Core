@@ -150,13 +150,15 @@ export function setupGitRoutes(app: Application) {
 
       // 3. Check git config for credential helper
       if (!token) {
-        const { exec } = await import('child_process');
+        // SECURITY FIX #2: Use execFile instead of exec to prevent command injection
+        // execFile does not invoke a shell, making it safe from shell injection attacks
+        const { execFile } = await import('child_process');
         const util = await import('util');
-        const execPromise = util.promisify(exec);
+        const execFilePromise = util.promisify(execFile);
 
         try {
           // Try to get credential helper status
-          const { stdout } = await execPromise('git config --global credential.helper', {
+          const { stdout } = await execFilePromise('git', ['config', '--global', 'credential.helper'], {
             timeout: 5000
           });
           if (stdout.trim()) {
