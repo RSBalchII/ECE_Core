@@ -11,17 +11,33 @@
  */
 
 import { Application, Request, Response } from 'express';
+import { z } from 'zod';
 import { StructuredLogger } from '../../utils/structured-logger.js';
 import { exploreMemory, ExploreRequest } from '../../services/search/explore.js';
 import { radialDistill, RadialDistillRequest } from '../../services/distillation/radial-distiller.js';
+import { exploreSchema, distillSchema } from '../../schemas/api-schemas.js';
 
 export function setupMemoryRoutes(app: Application) {
   app.post('/v1/memory/explore', async (req: Request, res: Response) => {
     const startTime = Date.now();
+
+    // Validate request body with Zod
+    const validation = exploreSchema.safeParse(req.body);
+    if (!validation.success) {
+      StructuredLogger.warn('EXPLORE_VALIDATION_ERROR', { errors: validation.error.issues });
+      return res.status(400).json({
+        error: 'Invalid explore request',
+        details: validation.error.issues.map(e => ({
+          field: e.path.join('.'),
+          message: e.message
+        }))
+      });
+    }
+
     StructuredLogger.info('EXPLORE_REQUEST', { endpoint: '/v1/memory/explore' });
 
     try {
-      const body = req.body as ExploreRequest;
+      const body = validation.data as ExploreRequest;
 
       if (!body?.seed || (!body.seed.global && !body.seed.query && !body.seed.atom_ids?.length)) {
         res.status(400).json({ error: 'seed.query, seed.atom_ids, or seed.global:true is required' });
@@ -64,6 +80,19 @@ export function setupMemoryRoutes(app: Application) {
   app.post('/v1/memory/distill', async (req: Request, res: Response) => {
     const startTime = Date.now();
 
+    // Validate request body with Zod
+    const validation = distillSchema.safeParse(req.body);
+    if (!validation.success) {
+      StructuredLogger.warn('DISTILL_VALIDATION_ERROR', { errors: validation.error.issues });
+      return res.status(400).json({
+        error: 'Invalid distill request',
+        details: validation.error.issues.map(e => ({
+          field: e.path.join('.'),
+          message: e.message
+        }))
+      });
+    }
+
     StructuredLogger.info('DISTILL_REQUEST', {
       endpoint: '/v1/memory/distill',
       mode: 'radial'
@@ -71,7 +100,7 @@ export function setupMemoryRoutes(app: Application) {
 
     try {
       // Standard 133: Radial Distillation (only mode supported)
-      const body = req.body as RadialDistillRequest;
+      const body = validation.data as RadialDistillRequest;
       const result = await radialDistill(body);
       const duration = Date.now() - startTime;
 
