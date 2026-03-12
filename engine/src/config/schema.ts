@@ -127,7 +127,7 @@ const LlmProviderSchema = z.object({
 
 // Server schema
 const ServerSchema = z.object({
-  host: z.string().ip().default('0.0.0.0'),
+  host: z.string().regex(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/, 'Invalid IP address').default('0.0.0.0'),
   port: z.number().int().min(1).max(65535).default(3160),
   api_key: z.string().optional()
 });
@@ -197,7 +197,7 @@ const McpSchema = z.object({
 export const ConfigSchema = z.object({
   // Core
   PORT: z.number().int().min(1).max(65535).default(3160),
-  HOST: z.string().ip().default('0.0.0.0'),
+  HOST: z.string().regex(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/, 'Invalid IP address').default('0.0.0.0'),
   API_KEY: z.string().default(''),
   LOG_LEVEL: z.enum(['DEBUG', 'INFO', 'WARN', 'ERROR']).default('INFO'),
   OVERLAY_PORT: z.number().int().min(1).max(65535).default(3002),

@@ -36,7 +36,7 @@ export function sanitizeTagsForWrite(
   const {
     context = 'tag-sanitizer',
     enableLogging = false,
-    maxTags = config.TAGGING?.max_tags_per_molecule || 20
+    maxTags = 20
   } = options || {};
 
   // Step 1: Filter blacklisted tags
@@ -48,7 +48,7 @@ export function sanitizeTagsForWrite(
   sanitized = sanitized.map(tag => tag.trim());
 
   // Step 3: Enforce minimum tag length (from config)
-  const minTagLength = config.TAGGING?.min_tag_length || 3;
+  const minTagLength = 3;
   sanitized = sanitized.filter(tag => tag.length >= minTagLength);
 
   // Step 4: Limit max tags to prevent bloat
@@ -77,7 +77,7 @@ export function sanitizeSingleTagForWrite(tag: string): string | null {
     return null;
   }
 
-  const minTagLength = config.TAGGING?.min_tag_length || 3;
+  const minTagLength = 3;
   if (trimmed.length < minTagLength) {
     return null;
   }

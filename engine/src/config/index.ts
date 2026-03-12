@@ -1,3 +1,4 @@
+import { StructuredLogger } from "../utils/structured-logger.js";
 /**
  * Configuration Module for Sovereign Context Engine
  * 
@@ -334,7 +335,7 @@ function loadConfig(): Config {
       const parsedConfig = yaml.load(configFile) as Partial<Config>;
       loadedConfig = { ...loadedConfig, ...parsedConfig };
     } catch (error) {
-      console.warn(`Failed to load config from ${configPath}:`, error);
+      StructuredLogger.warn(`Failed to load config from ${configPath}: ${(error as Error)?.message || String(error)}`);
     }
   }
 
@@ -344,7 +345,7 @@ function loadConfig(): Config {
   if (fs.existsSync(userSettingsPath) && fs.statSync(userSettingsPath).isFile()) {
     try {
       const userSettings = JSON.parse(fs.readFileSync(userSettingsPath, 'utf8'));
-      console.log(`[Config] Loaded settings from ${userSettingsPath}`);
+      StructuredLogger.info(`[Config] Loaded settings from ${userSettingsPath}`);
 
       // Load LLM Settings (Provider + Model paths — single consolidated block)
       if (userSettings.llm) {
@@ -445,21 +446,21 @@ function loadConfig(): Config {
       }
 
     } catch (e) {
-      console.error(`[Config] Failed to parse user_settings.json:`, e);
+      StructuredLogger.error(`[Config] Failed to parse user_settings.json: ${(e as Error)?.message || String(e)}`);
     }
   }
 
   // Validate the final configuration using Zod
   const validationResult = safeValidateConfig(loadedConfig);
-  
-  if (!validationResult.success) {
-    console.error('[Config] Configuration validation failed:');
-    validationResult.error.errors.forEach(err => {
-      console.error(`  - ${err.path.join('.')}: ${err.message}`);
+
+  if (validationResult.error) {
+    StructuredLogger.error('[Config] Configuration validation failed:');
+    validationResult.error.issues.forEach((err: any) => {
+      StructuredLogger.error(`  - ${err.path.join('.')}: ${err.message}`);
     });
-    console.warn('[Config] Using default configuration with validation errors. Fix user_settings.json to resolve.');
+    StructuredLogger.warn('[Config] Using default configuration with validation errors. Fix user_settings.json to resolve.');
   } else {
-    console.log('[Config] Configuration validated successfully');
+    StructuredLogger.info('[Config] Configuration validated successfully');
   }
 
   return loadedConfig;
