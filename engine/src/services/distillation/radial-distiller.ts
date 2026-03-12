@@ -22,6 +22,11 @@ import yaml from 'js-yaml';
 const PGLITE_CHUNK_IDS = 100;
 const MOBILE_MEMORY_THRESHOLD = 500 * 1024 * 1024; // 500MB
 
+// Memory safety constants
+const MAX_LINES_IN_MEMORY = 100000; // Hard ceiling: ~50MB for line objects
+const MAX_HEAP_BEFORE_STREAM = 800 * 1024 * 1024; // 800MB heap threshold
+const STREAMING_CHUNK_SIZE = 50; // Process compounds in chunks of 50
+
 export interface RadialDistillRequest {
   seed?: {
     query?: string;
@@ -92,6 +97,46 @@ function isMobileEnvironment(): boolean {
   }
 
   return false;
+}
+
+/**
+ * Auto-detect if streaming mode should be enabled
+ * Based on heap usage and environment
+ */
+function shouldEnableStreaming(): boolean {
+  // Always stream in mobile environments
+  if (isMobileEnvironment()) return true;
+  
+  // Stream if heap is already under pressure
+  const heapUsed = process.memoryUsage().heapUsed;
+  if (heapUsed > MAX_HEAP_BEFORE_STREAM) return true;
+  
+  return false;
+}
+
+/**
+ * Check memory safety before processing
+ * Throws error if operation would exceed safe limits
+ */
+function checkMemorySafety(currentLines: number, estimatedNewLines: number): void {
+  const projectedTotal = currentLines + estimatedNewLines;
+  
+  if (projectedTotal > MAX_LINES_IN_MEMORY) {
+    throw new Error(
+      `Memory safety limit exceeded: ${projectedTotal.toLocaleString()} lines would exceed ` +
+      `maximum of ${MAX_LINES_IN_MEMORY.toLocaleString()} lines. ` +
+      `Consider using a smaller radius, filtering by compound_ids, or running in streaming mode.`
+    );
+  }
+  
+  // Check heap usage
+  const heapUsed = process.memoryUsage().heapUsed;
+  if (heapUsed > MAX_HEAP_BEFORE_STREAM) {
+    throw new Error(
+      `Heap memory too high (${Math.round(heapUsed / 1024 / 1024)}MB). ` +
+      `Please run GC or reduce workload. Threshold: ${Math.round(MAX_HEAP_BEFORE_STREAM / 1024 / 1024)}MB`
+    );
+  }
 }
 
 /**
@@ -233,6 +278,204 @@ async function* collectCompounds(
 }
 
 /**
+ * PHASE 1 (Streaming): Collect compounds in chunks with memory monitoring
+ * Yields compounds in batches to allow GC between chunks
+ */
+async function* collectCompoundsChunked(
+  request: RadialDistillRequest
+): AsyncGenerator<{ compoundId: string; content: string; source: string; timestamp: number }> {
+  const radius = request.radius || 2000;
+  const maxRadius = request.max_radius || 10000;
+  const effectiveRadius = Math.min(radius, maxRadius);
+
+  // Get all compounds first (lightweight query)
+  let query = `SELECT id, path, timestamp, provenance FROM compounds`;
+  const params: any[] = [];
+  const conditions: string[] = [];
+
+  if (request.seed?.compound_ids?.length) {
+    conditions.push(`id = ANY($${params.length + 1})`);
+    params.push(request.seed.compound_ids);
+  }
+
+  if (request.seed?.buckets?.length) {
+    query = `
+      SELECT DISTINCT c.id, c.path, c.timestamp, c.provenance
+      FROM compounds c
+      JOIN atoms a ON a.compound_id = c.id
+      WHERE EXISTS(
+        SELECT 1 FROM unnest(a.buckets) as bucket
+        WHERE bucket = ANY($${params.length + 1})
+      )
+    `;
+    params.push(request.seed.buckets);
+  }
+
+  if (conditions.length > 0) {
+    query += ` WHERE ` + conditions.join(' AND ');
+  }
+
+  query += ` ORDER BY timestamp DESC`;
+
+  const result = await db.run(query, params);
+  const compounds = result.rows as any[];
+
+  StructuredLogger.info('DISTILL_COLLECT_CHUNKED_START', {
+    compounds_found: compounds.length,
+    chunk_size: STREAMING_CHUNK_SIZE,
+    radius: effectiveRadius
+  });
+
+  // Process in chunks to allow GC
+  for (let chunkStart = 0; chunkStart < compounds.length; chunkStart += STREAMING_CHUNK_SIZE) {
+    const chunk = compounds.slice(chunkStart, chunkStart + STREAMING_CHUNK_SIZE);
+    
+    StructuredLogger.debug('DISTILL_CHUNK_PROCESSING', {
+      chunk_start: chunkStart,
+      chunk_size: chunk.length,
+      total: compounds.length
+    });
+
+    for (const compound of chunk) {
+      try {
+        const searchResult = {
+          id: compound.id,
+          content: '',
+          source: compound.path,
+          timestamp: compound.timestamp,
+          buckets: [],
+          tags: [],
+          epochs: '',
+          provenance: compound.provenance || 'internal',
+          score: 1.0,
+          compound_id: compound.id,
+          start_byte: 0,
+          end_byte: 0,
+          is_inflated: false
+        };
+
+        const inflated = await ContextInflator.inflate([searchResult], effectiveRadius * 2, effectiveRadius);
+
+        if (inflated.length > 0 && inflated[0].content) {
+          yield {
+            compoundId: compound.id,
+            content: inflated[0].content,
+            source: compound.path,
+            timestamp: compound.timestamp
+          };
+        }
+      } catch (e) {
+        StructuredLogger.error('DISTILL_INFLATE_ERROR', e instanceof Error ? e : new Error(String(e)), {
+          compound_id: compound.id
+        });
+      }
+    }
+
+    // GC hint between chunks in streaming mode
+    if (global.gc) {
+      global.gc();
+    }
+    
+    // Yield control to event loop
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+}
+
+/**
+ * PHASE 2 (With Monitoring): Deduplicate with memory monitoring and periodic GC
+ */
+async function deduplicateLinesWithMonitoring(
+  compoundGenerator: AsyncGenerator<{ compoundId: string; content: string; source: string; timestamp: number }>,
+  request: RadialDistillRequest
+): Promise<{
+  uniqueLines: Map<string, DistillLine>;
+  stats: { total: number; unique: number; duplicate: number };
+}> {
+  const normalization = request.normalization || 'strict';
+  const uniqueLines = new Map<string, DistillLine>();
+  let totalLines = 0;
+  let duplicateLines = 0;
+  let lastMemoryCheck = 0;
+
+  StructuredLogger.info('DISTILL_DEDUP_STREAMING_START', { 
+    normalization,
+    streaming: true 
+  });
+
+  for await (const compound of compoundGenerator) {
+    const lines = compound.content.split('\n');
+
+    for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+      const line = lines[lineNum];
+      totalLines++;
+
+      if (!line.trim()) continue;
+
+      const normalized = normalizeLine(line, normalization);
+      const normalizedHash = hashLine(normalized);
+      const originalHash = hashLine(line);
+
+      // Memory safety check every 1000 lines
+      if (totalLines % 1000 === 0) {
+        checkMemorySafety(uniqueLines.size, lines.length - lineNum);
+        
+        // Additional heap check every 10000 lines
+        if (totalLines % 10000 === 0) {
+          const heapUsed = process.memoryUsage().heapUsed;
+          if (heapUsed > MAX_HEAP_BEFORE_STREAM) {
+            StructuredLogger.warn('DISTILL_HEAP_PRESSURE', {
+              heap_used_mb: Math.round(heapUsed / 1024 / 1024),
+              threshold_mb: Math.round(MAX_HEAP_BEFORE_STREAM / 1024 / 1024),
+              lines_processed: totalLines
+            });
+          }
+        }
+      }
+
+      if (uniqueLines.has(normalizedHash)) {
+        const existing = uniqueLines.get(normalizedHash)!;
+        if (!existing.provenance.includes(compound.source)) {
+          existing.provenance.push(compound.source);
+        }
+        existing.timestamps.push(compound.timestamp);
+        duplicateLines++;
+      } else {
+        uniqueLines.set(normalizedHash, {
+          content: line.trim(),
+          normalizedHash,
+          originalHash,
+          provenance: [compound.source],
+          timestamps: [compound.timestamp],
+          compoundId: compound.compoundId,
+          lineNumber: lineNum
+        });
+      }
+    }
+
+    // GC hint every 10 compounds in streaming mode
+    if (totalLines % 10000 === 0 && global.gc) {
+      global.gc();
+    }
+  }
+
+  StructuredLogger.info('DISTILL_DEDUP_COMPLETE', {
+    total_lines: totalLines,
+    unique_lines: uniqueLines.size,
+    duplicate_lines: duplicateLines,
+    dedup_ratio: totalLines > 0 ? ((duplicateLines / totalLines) * 100).toFixed(1) + '%' : '0%'
+  });
+
+  return {
+    uniqueLines,
+    stats: {
+      total: totalLines,
+      unique: uniqueLines.size,
+      duplicate: duplicateLines
+    }
+  };
+}
+
+/**
  * PHASE 2: DEDUPLICATE
  * Line-level deduplication with bounded memory
  */
@@ -263,6 +506,11 @@ async function deduplicateLines(
       const normalized = normalizeLine(line, normalization);
       const normalizedHash = hashLine(normalized);
       const originalHash = hashLine(line);
+
+      // Memory safety check every 1000 lines
+      if (totalLines % 1000 === 0) {
+        checkMemorySafety(uniqueLines.size, lines.length - lineNum);
+      }
 
       if (uniqueLines.has(normalizedHash)) {
         // Duplicate: update provenance
@@ -429,7 +677,7 @@ async function reassembleCompounds(
 
 /**
  * Main entry point: Radial Distillation
- * Standard 133 implementation
+ * Standard 133 implementation with memory safety
  */
 export async function radialDistill(
   request: RadialDistillRequest
@@ -437,19 +685,38 @@ export async function radialDistill(
   const startTime = Date.now();
   const memBefore = process.memoryUsage();
 
+  // Auto-enable streaming mode if not explicitly set
+  const effectiveRequest = {
+    ...request,
+    streaming: request.streaming ?? shouldEnableStreaming()
+  };
+
   StructuredLogger.info('RADIAL_DISTILL_START', {
     seed: request.seed,
     radius: request.radius,
     normalization: request.normalization,
-    is_mobile: isMobileEnvironment()
+    is_mobile: isMobileEnvironment(),
+    streaming_enabled: effectiveRequest.streaming,
+    heap_used_mb: Math.round(memBefore.heapUsed / 1024 / 1024)
   });
 
   try {
-    // Phase 1: Collect
-    const compoundGenerator = collectCompounds(request);
+    // Memory safety check before starting
+    checkMemorySafety(0, MAX_LINES_IN_MEMORY); // Initial check
 
-    // Phase 2: Deduplicate
-    const { uniqueLines, stats: dedupStats } = await deduplicateLines(compoundGenerator, request);
+    // Phase 1: Collect (with streaming support)
+    const compoundGenerator = effectiveRequest.streaming
+      ? collectCompoundsChunked(effectiveRequest)
+      : collectCompounds(effectiveRequest);
+
+    // Phase 2: Deduplicate (with memory monitoring)
+    const { uniqueLines, stats: dedupStats } = await deduplicateLinesWithMonitoring(
+      compoundGenerator,
+      effectiveRequest
+    );
+
+    // Final memory safety check before reassembly
+    checkMemorySafety(uniqueLines.size, 0);
 
     // Phase 3: Reassemble
     const { outputPath, sizeBytes, compoundsCreated } = await reassembleCompounds(uniqueLines, request);
@@ -489,7 +756,8 @@ export async function radialDistill(
       duration_ms: duration,
       compression_ratio: compressionRatio,
       lines_unique: dedupStats.unique,
-      lines_total: dedupStats.total
+      lines_total: dedupStats.total,
+      heap_used_mb: Math.round(memAfter.heapUsed / 1024 / 1024)
     });
 
     return result;

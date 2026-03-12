@@ -22,6 +22,7 @@ import { ContextInflator } from './context-inflator.js';
 import { Timer } from '../../utils/timer.js';
 import { systemStatus } from '../system-status.js';
 import { processWithAdaptiveConcurrency } from '../../utils/adaptive-concurrency.js';
+import { sanitizeTagsForWrite } from '../../utils/tag-sanitizer.js';
 
 // --- Imports from extracted modules ---
 import {
@@ -227,8 +228,14 @@ async function enrichAtomsWithMoleculeTags(anchors: SearchResult[]): Promise<voi
               new Set([...atomTags, ...moleculeTags])
             );
 
+            // Sanitize merged tags at read time (defense in depth)
+            const sanitizedTags = sanitizeTagsForWrite(mergedTags, {
+              context: `search-enrich-${anchor.id}`,
+              enableLogging: false
+            });
+
             // Sort tags for consistency (atom tags first, then molecule tags alphabetically)
-            anchor.tags = mergedTags.sort();
+            anchor.tags = sanitizedTags.length > 0 ? sanitizedTags.sort() : mergedTags.sort();
           }
         }
       }

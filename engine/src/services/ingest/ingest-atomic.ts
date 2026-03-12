@@ -2,6 +2,7 @@ import { db } from '../../core/db.js';
 import { config } from '../../config/index.js';
 import { Atom, Molecule, Compound } from '../../types/atomic.js';
 import { filterTags } from '../../utils/tag-filter.js';
+import { sanitizeTagsForWrite, sanitizeTagsFromDb } from '../../utils/tag-sanitizer.js';
 
 export class AtomicIngestService {
 
@@ -149,6 +150,12 @@ export class AtomicIngestService {
             if (i % 500 === 0 && i > 0) await new Promise(resolve => setImmediate(resolve));
 
             for (const atom of chunk) {
+                // Sanitize tags at write time
+                const sanitizedTags = sanitizeTagsForWrite([atom.label], {
+                    context: `atom-${atom.id}`,
+                    enableLogging: false
+                });
+
                 await db.run(
                     `INSERT INTO atoms (id, content, source_path, timestamp, simhash, embedding, provenance, buckets, tags)
                      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -170,7 +177,7 @@ export class AtomicIngestService {
                         JSON.stringify(this.zeroVector()), // embedding
                         'internal', // provenance
                         ['atoms'], // buckets
-                        [atom.label] // tags
+                        JSON.stringify(sanitizedTags) // sanitized tags
                     ]
                 );
             }
@@ -198,9 +205,12 @@ export class AtomicIngestService {
             // Ensure buckets are included
             const allBuckets = new Set([...buckets, ...(atom as any).buckets || []]);
 
-            // Filter atom label through blacklist
-            const filteredTags = filterTags([atom.label]);
-            const tags = filteredTags.length > 0 ? filteredTags : [atom.label]; // Keep original if filter removes everything
+            // Filter atom label through sanitization
+            const sanitizedTags = sanitizeTagsForWrite([atom.label], {
+                context: `atom-tags-${atom.id}`,
+                enableLogging: false
+            });
+            const tags = sanitizedTags.length > 0 ? sanitizedTags : [atom.label]; // Keep original if filter removes everything
 
             for (const bucket of allBuckets) {
                 for (const tag of tags) {
@@ -255,6 +265,12 @@ export class AtomicIngestService {
             let paramIdx = 1;
 
             for (const m of batch) {
+                // Sanitize molecule tags at write time
+                const sanitizedTags = sanitizeTagsForWrite(m.tags || [], {
+                    context: `molecule-${m.id}`,
+                    enableLogging: false
+                });
+
                 placeholders.push(`($${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++}, $${paramIdx++})`);
                 values.push(
                     m.id,
@@ -270,7 +286,7 @@ export class AtomicIngestService {
                     m.molecular_signature || '0',
                     JSON.stringify(this.zeroVector()), // embedding (we don't compute embeddings here anymore)
                     m.timestamp || Date.now(),
-                    JSON.stringify(m.tags || []),
+                    JSON.stringify(sanitizedTags), // sanitized tags
                     JSON.stringify(m.entities || {})
                 );
             }

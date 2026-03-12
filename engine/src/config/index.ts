@@ -9,12 +9,20 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
+import { ZodError } from 'zod';
 
 // For __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Define configuration interface
+// Import Zod schema for validation
+import { ConfigSchema, UserSettingsSchema, safeValidateConfig } from './schema.js';
+
+// Re-export types from schema
+export type { Config, UserSettings } from './schema.js';
+export { validateConfig, validateUserSettings, safeValidateConfig, ConfigSchema } from './schema.js';
+
+// Define configuration interface (kept for backward compatibility, types now from schema)
 interface Config {
   // Core
   PORT: number;
@@ -439,6 +447,19 @@ function loadConfig(): Config {
     } catch (e) {
       console.error(`[Config] Failed to parse user_settings.json:`, e);
     }
+  }
+
+  // Validate the final configuration using Zod
+  const validationResult = safeValidateConfig(loadedConfig);
+  
+  if (!validationResult.success) {
+    console.error('[Config] Configuration validation failed:');
+    validationResult.error.errors.forEach(err => {
+      console.error(`  - ${err.path.join('.')}: ${err.message}`);
+    });
+    console.warn('[Config] Using default configuration with validation errors. Fix user_settings.json to resolve.');
+  } else {
+    console.log('[Config] Configuration validated successfully');
   }
 
   return loadedConfig;

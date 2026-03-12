@@ -245,12 +245,6 @@ async function startServer() {
     databaseReady = true;
     console.log("Database initialized successfully");
 
-    // Start the server AFTER database is ready
-    app.listen(PORT, config.HOST, () => {
-      console.log(`Anchor Context Engine running on ${config.HOST}:${PORT}`);
-      console.log(`Health check available at http://${config.HOST}:${PORT}/health`);
-    });
-
     // Cleanup blacklisted tags from database
     console.log('[Startup] Cleaning up blacklisted tags...');
     const { cleanupBlacklistedTags } = await import('./utils/tag-cleanup.js');
@@ -259,7 +253,6 @@ async function startServer() {
     // Initialize Vector Service
     const { vector } = await import("./core/vector.js");
     await vector.init();
-
 
     console.log("Setting up full routes after database initialization...");
 
@@ -276,6 +269,18 @@ async function startServer() {
 
     // Set up monitoring routes
     app.use('/monitoring', monitoringRouter);
+
+    // ============================================
+    // FIX: Start server AFTER all routes are configured
+    // This prevents race condition where requests hit before routes are ready
+    // ============================================
+    const server = await new Promise<import('http').Server>((resolve) => {
+      const s = app.listen(PORT, config.HOST, () => {
+        console.log(`Anchor Context Engine running on ${config.HOST}:${PORT}`);
+        console.log(`Health check available at http://${config.HOST}:${PORT}/health`);
+        resolve(s);
+      });
+    });
 
     console.log("Full routes set up, server is ready for all requests");
     console.timeEnd("⏱️ Startup Time");
