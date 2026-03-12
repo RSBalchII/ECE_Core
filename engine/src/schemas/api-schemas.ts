@@ -138,3 +138,96 @@ export const errorResponseSchema = z.object({
 });
 
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;
+
+// ============================================
+// GitHub Ingestion Schemas
+// ============================================
+
+export const githubRepoSchema = z.object({
+  url: z.string().url("Invalid GitHub URL"),
+  bucket: z.string().min(1, "Bucket is required"),
+  include_history: z.boolean().default(false)
+});
+
+export type GitHubRepoRequest = z.infer<typeof githubRepoSchema>;
+
+// ============================================
+// Terminal Execution Schema
+// ============================================
+
+export const terminalExecSchema = z.object({
+  command: z.string().min(1, "Command is required").max(1000, "Command too long")
+});
+
+export type TerminalExecRequest = z.infer<typeof terminalExecSchema>;
+
+// ============================================
+// Settings Schemas
+// ============================================
+
+export const settingsUpdateSchema = z.object({
+  server: z.object({
+    host: z.string().optional(),
+    port: z.number().int().min(1).max(65535).optional(),
+    api_key: z.string().optional()
+  }).optional(),
+  database: z.object({
+    wipe_on_startup: z.boolean().optional()
+  }).optional(),
+  tagging: z.object({
+    modulation_level: z.number().int().min(0).max(100).optional(),
+    atom_as_tag: z.boolean().optional(),
+    strict_atom_selection: z.boolean().optional(),
+    blacklist_strictness: z.number().int().min(0).max(100).optional(),
+    common_words_filter: z.boolean().optional(),
+    min_tag_length: z.number().int().min(1).max(10).optional(),
+    max_tags_per_molecule: z.number().int().min(1).max(100).optional()
+  }).optional()
+});
+
+export type SettingsUpdateRequest = z.infer<typeof settingsUpdateSchema>;
+
+// ============================================
+// Tag/Bucket Schemas
+// ============================================
+
+export const bucketCreateSchema = z.object({
+  name: z.string().min(1, "Bucket name is required").max(100, "Bucket name too long"),
+  location: z.enum(['inbox', 'external-inbox']).optional()
+});
+
+export type BucketCreateRequest = z.infer<typeof bucketCreateSchema>;
+
+// ============================================
+// Backup Schemas
+// ============================================
+
+export const backupRestoreSchema = z.object({
+  filename: z.string().min(1, "Filename is required")
+});
+
+export type BackupRestoreRequest = z.infer<typeof backupRestoreSchema>;
+
+// ============================================
+// Research Schemas
+// ============================================
+
+export const researchScrapeSchema = z.object({
+  url: z.string().url("Invalid URL"),
+  category: z.enum(['article', 'documentation', 'code', 'other']).optional()
+});
+
+export type ResearchScrapeRequest = z.infer<typeof researchScrapeSchema>;
+
+export const researchUploadRawSchema = z.object({
+  content: z.string().min(1, "Content is required"),
+  filename: z.string().min(1, "Filename is required").max(255, "Filename too long")
+});
+
+export type ResearchUploadRawRequest = z.infer<typeof researchUploadRawSchema>;
+
+export const researchWebSearchSchema = z.object({
+  q: z.string().min(1, "Search query is required").max(500, "Query too long")
+});
+
+export type ResearchWebSearchRequest = z.infer<typeof researchWebSearchSchema>;

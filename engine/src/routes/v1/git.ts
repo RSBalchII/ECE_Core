@@ -1,14 +1,25 @@
 import { Application, Request, Response } from 'express';
+import { z } from 'zod';
+import { githubRepoSchema } from '../../schemas/api-schemas.js';
 
 export function setupGitRoutes(app: Application) {
   // GitHub Repository Ingestion Endpoints (Standard 115)
   // POST /v1/github/repos - Register new repo and trigger initial ingestion
   app.post('/v1/github/repos', async (req: Request, res: Response) => {
+    // Validate request body with Zod
+    const validation = githubRepoSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({
+        error: 'Invalid GitHub repo request',
+        details: validation.error.issues.map(e => ({
+          field: e.path.join('.'),
+          message: e.message
+        }))
+      });
+    }
+
     try {
-      const body = req.body as any;
-      const url = body.url as string;
-      const bucket = body.bucket as string;
-      const includeHistory = body.include_history === true;
+      const { url, bucket, include_history } = validation.data;
 
       if (!url || !bucket) {
         res.status(400).json({ error: 'url and bucket are required' });

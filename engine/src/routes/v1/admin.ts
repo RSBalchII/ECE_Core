@@ -1,11 +1,25 @@
 import { Application, Request, Response } from 'express';
+import { z } from 'zod';
 import { db } from '../../core/db.js';
+import { terminalExecSchema } from '../../schemas/api-schemas.js';
 
 export function setupAdminRoutes(app: Application) {
   // Terminal Command Execution Endpoint
   app.post('/v1/terminal/exec', async (req: Request, res: Response) => {
+    // Validate request body with Zod
+    const validation = terminalExecSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({
+        error: 'Invalid terminal request',
+        details: validation.error.issues.map(e => ({
+          field: e.path.join('.'),
+          message: e.message
+        }))
+      });
+    }
+
     try {
-      const { command } = req.body;
+      const { command } = validation.data;
 
       if (!command) {
         return res.status(400).json({ error: 'Command is required' });

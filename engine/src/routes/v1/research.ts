@@ -1,15 +1,29 @@
 import { Application, Request, Response } from 'express';
+import { z } from 'zod';
 import path from 'path';
 import fs from 'fs';
 import { validate, schemas } from '../../middleware/validate.js';
 import { fetchAndProcess, searchWeb } from '../../services/research/researcher.js';
 import { ENGINE_PLUGINS } from '../../config/paths.js';
+import { researchScrapeSchema, researchUploadRawSchema, researchWebSearchSchema } from '../../schemas/api-schemas.js';
 
 export function setupResearchRoutes(app: Application) {
   // Research Plugin Endpoint
-  app.post('/v1/research/scrape', validate(schemas.researchScrape), async (req: Request, res: Response) => {
+  app.post('/v1/research/scrape', async (req: Request, res: Response) => {
+    // Validate request body with Zod
+    const validation = researchScrapeSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({
+        error: 'Invalid research scrape request',
+        details: validation.error.issues.map(e => ({
+          field: e.path.join('.'),
+          message: e.message
+        }))
+      });
+    }
+
     try {
-      const { url, category } = req.body;
+      const { url, category } = validation.data;
       if (!url) {
         res.status(400).json({ error: 'URL required' });
         return;
@@ -28,8 +42,20 @@ export function setupResearchRoutes(app: Application) {
 
   // POST /v1/research/upload-raw - Save raw content as file
   app.post('/v1/research/upload-raw', async (req: Request, res: Response) => {
+    // Validate request body with Zod
+    const validation = researchUploadRawSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({
+        error: 'Invalid upload request',
+        details: validation.error.issues.map(e => ({
+          field: e.path.join('.'),
+          message: e.message
+        }))
+      });
+    }
+
     try {
-      const { content, filename } = req.body;
+      const { content, filename } = validation.data;
       if (!content || !filename) {
         res.status(400).json({ error: 'Content and filename required' });
         return;
@@ -56,12 +82,20 @@ export function setupResearchRoutes(app: Application) {
 
   // Web Search Endpoint
   app.get('/v1/research/web-search', async (req: Request, res: Response) => {
+    // Validate query parameter with Zod
+    const validation = researchWebSearchSchema.safeParse({ q: req.query['q'] });
+    if (!validation.success) {
+      return res.status(400).json({
+        error: 'Invalid web search request',
+        details: validation.error.issues.map(e => ({
+          field: e.path.join('.'),
+          message: e.message
+        }))
+      });
+    }
+
     try {
-      const q = req.query['q'] as string;
-      if (!q) {
-        res.status(400).json({ error: 'Query required' });
-        return;
-      }
+      const { q } = validation.data;
 
       const results = await searchWeb(q);
       res.status(200).json(results);

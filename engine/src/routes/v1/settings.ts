@@ -5,11 +5,13 @@
  */
 
 import { Application, Request, Response } from 'express';
+import { z } from 'zod';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { config } from '../../config/index.js';
 import { PROJECT_ROOT, PATHS } from '../../config/paths.js';
+import { settingsUpdateSchema } from '../../schemas/api-schemas.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -116,8 +118,20 @@ export function setupSettingsRoutes(app: Application) {
 
   // PUT /v1/settings - Update all settings
   app.put('/v1/settings', async (req: Request, res: Response) => {
+    // Validate request body with Zod
+    const validation = settingsUpdateSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({
+        error: 'Invalid settings update',
+        details: validation.error.issues.map(e => ({
+          field: e.path.join('.'),
+          message: e.message
+        }))
+      });
+    }
+
     try {
-      const newSettings = req.body;
+      const newSettings = validation.data;
       
       // Validate settings structure
       if (!newSettings || typeof newSettings !== 'object') {

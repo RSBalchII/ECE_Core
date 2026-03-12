@@ -1,5 +1,7 @@
 import { Application, Request, Response } from 'express';
+import { z } from 'zod';
 import { db } from '../../core/db.js';
+import { bucketCreateSchema } from '../../schemas/api-schemas.js';
 
 export function setupTagsRoutes(app: Application) {
   // Get all buckets
@@ -25,8 +27,20 @@ export function setupTagsRoutes(app: Application) {
 
   // POST /v1/buckets - Create a new bucket
   app.post('/v1/buckets', async (req: Request, res: Response) => {
+    // Validate request body with Zod
+    const validation = bucketCreateSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({
+        error: 'Invalid bucket request',
+        details: validation.error.issues.map(e => ({
+          field: e.path.join('.'),
+          message: e.message
+        }))
+      });
+    }
+
     try {
-      const { name, location } = req.body;
+      const { name, location } = validation.data;
 
       if (!name || !name.trim()) {
         return res.status(400).json({ error: 'Bucket name is required' });

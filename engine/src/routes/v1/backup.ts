@@ -1,7 +1,9 @@
 import { Application, Request, Response } from 'express';
+import { z } from 'zod';
 import * as path from 'path';
 import { createBackup, listBackups, restoreBackup } from '../../services/backup/backup.js';
 import { getLatestBackup, validateBackup } from '../../services/backup/backup-restore.js';
+import { backupRestoreSchema } from '../../schemas/api-schemas.js';
 
 export function setupBackupRoutes(app: Application) {
   // Backup Endpoints
@@ -43,8 +45,20 @@ export function setupBackupRoutes(app: Application) {
 
   // POST /v1/backup/restore - Restore a specific backup
   app.post('/v1/backup/restore', async (req: Request, res: Response) => {
+    // Validate request body with Zod
+    const validation = backupRestoreSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({
+        error: 'Invalid backup restore request',
+        details: validation.error.issues.map(e => ({
+          field: e.path.join('.'),
+          message: e.message
+        }))
+      });
+    }
+
     try {
-      const { filename } = req.body;
+      const { filename } = validation.data;
       if (!filename) {
         res.status(400).json({ error: "Filename required" });
         return;
