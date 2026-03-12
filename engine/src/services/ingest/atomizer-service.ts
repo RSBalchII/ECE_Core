@@ -13,17 +13,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Native modules from @rbalchii packages (with fallbacks)
-let nativeFingerprint: ((text: string) => string) | null = null;
-let nativeCleanse: ((text: string) => string) | null = null;
+let wasmFingerprint: ((text: string) => string) | null = null;
+let wasmSanitize: ((text: string) => string) | null = null;
 
 try {
-    const fp = await import('@rbalchii/native-fingerprint');
-    nativeFingerprint = fp.fingerprint;
+    const fp = await import('@rbalchii/anchor-fingerprint-wasm');
+    wasmFingerprint = (text: string) => String(fp.fingerprint(text));
 } catch { /* use JS fallback */ }
 
 try {
-    const ka = await import('@rbalchii/native-keyassassin');
-    nativeCleanse = ka.cleanse;
+    const atom = await import('@rbalchii/anchor-atomizer-wasm');
+    wasmSanitize = atom.sanitize;
 } catch { /* use JS fallback */ }
 
 export class AtomizerService {
@@ -1089,10 +1089,10 @@ export class AtomizerService {
     }
 
     private generateSimHash(text: string): string {
-        // Use @rbalchii/native-fingerprint if available
-        if (nativeFingerprint) {
+        // Use @rbalchii/anchor-fingerprint-wasm if available
+        if (wasmFingerprint) {
             try {
-                return nativeFingerprint(text);
+                return wasmFingerprint(text);
             } catch { /* fall through to JS fallback */ }
         }
 

@@ -1,7 +1,7 @@
 {
   "name": "anchor-engine",
   "version": "4.6.0",
-  "description": "Anchor - Knowledge Database Engine (Pure Node/C++ DB API on Port 3160)",
+  "description": "Anchor - Knowledge Database Engine (WASM-accelerated, PGlite on Port 3160)",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -31,9 +31,11 @@
   "license": "AGPL-3.0-only",
   "dependencies": {
     "@electric-sql/pglite": "^0.2.0",
+    "@rbalchii/anchor-atomizer-wasm": "^1.0.0",
+    "@rbalchii/anchor-fingerprint-wasm": "^1.0.0",
+    "@rbalchii/anchor-keyextract-wasm": "^1.0.0",
+    "@rbalchii/anchor-tagwalker-wasm": "^1.0.0",
     "@rbalchii/dse": "^1.0.0",
-    "@rbalchii/native-fingerprint": "^1.0.0",
-    "@rbalchii/native-keyassassin": "^1.0.2",
     "@rbalchii/tag-walker": "^1.0.0",
     "axios": "^1.6.0",
     "body-parser": "^1.20.2",
