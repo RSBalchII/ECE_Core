@@ -388,40 +388,33 @@
         }
 
         STAREngine.prototype.atomize = function(text) {
-            // Split into sentences and filter for meaningful content (molecules)
+            // Split into sentences and create atoms for meaningful content
             var sentences = text.split(/[.!?]+/);
             var atoms = [];
             var self = this;
 
-            // Filter patterns that indicate non-content (headers, footers, metadata)
+            // Only filter the most obvious non-content (PG headers/footers)
             var nonContentPatterns = [
-                /^\s*chapter\s+\d+/i,           // Chapter headers
-                /^\s*part\s+\d+/i,              // Part headers
-                /^\s*section\s+\d+/i,           // Section headers
-                /^\s*\[.*\]/,                   // Bracketed notes [Illustration]
-                /^\s*\{.*\}/,                   // Brace-enclosed text
-                /^\s*[_\-*]{10,}$/,             // Decorative lines
-                /^\s*\d+\s*$/,                  // Standalone page numbers
-                /^\s*the\s+project\s+gutenberg/i,  // PG header/footer remnants
-                /^\s*copyright/i,               // Copyright notices
-                /^\s*transcriber'?s?\s+note/i,  // Transcriber notes
-                /^\s*editor'?s?\s+note/i,       // Editor notes
-                /^\s*footnote/i,                // Footnote markers
-                /^\s*end\s+of\s+/i              // "End of chapter" etc
+                /^\s*the\s+project\s+gutenberg/i,  // PG header/footer
+                /^\s*end\s+of\s+the\s+project\s+gutenberg/i,
+                /^\s*copyright\s+/i,
+                /^\s*transcriber/i,
+                /^\s*\[_?illustration/i,
+                /^\s*chapter\s+\d+/i
             ];
 
             sentences.forEach(function(sentence, idx) {
                 var trimmed = sentence.trim();
                 
-                // Skip if too short (not a meaningful molecule)
-                if (trimmed.length < 20) {
+                // Skip if too short
+                if (trimmed.length < 15) {
                     return;
                 }
                 
-                // Skip if matches non-content patterns
+                // Skip if matches obvious non-content patterns
                 for (var i = 0; i < nonContentPatterns.length; i++) {
                     if (nonContentPatterns[i].test(trimmed)) {
-                        return;  // Skip this sentence
+                        return;
                     }
                 }
 
