@@ -388,17 +388,54 @@
         }
 
         STAREngine.prototype.atomize = function(text) {
-            var sentences = text.split(/[.!?]+/).filter(function(s) { return s.trim().length > 20; });
+            // Split into sentences and filter for meaningful content (molecules)
+            var sentences = text.split(/[.!?]+/);
             var atoms = [];
             var self = this;
 
+            // Filter patterns that indicate non-content (headers, footers, metadata)
+            var nonContentPatterns = [
+                /^\s*chapter\s+\d+/i,           // Chapter headers
+                /^\s*part\s+\d+/i,              // Part headers
+                /^\s*section\s+\d+/i,           // Section headers
+                /^\s*\[.*\]/,                   // Bracketed notes [Illustration]
+                /^\s*\{.*\}/,                   // Brace-enclosed text
+                /^\s*[_\-*]{10,}$/,             // Decorative lines
+                /^\s*\d+\s*$/,                  // Standalone page numbers
+                /^\s*the\s+project\s+gutenberg/i,  // PG header/footer remnants
+                /^\s*copyright/i,               // Copyright notices
+                /^\s*transcriber'?s?\s+note/i,  // Transcriber notes
+                /^\s*editor'?s?\s+note/i,       // Editor notes
+                /^\s*footnote/i,                // Footnote markers
+                /^\s*end\s+of\s+/i              // "End of chapter" etc
+            ];
+
             sentences.forEach(function(sentence, idx) {
+                var trimmed = sentence.trim();
+                
+                // Skip if too short (not a meaningful molecule)
+                if (trimmed.length < 30) {
+                    return;
+                }
+                
+                // Skip if matches non-content patterns
+                for (var i = 0; i < nonContentPatterns.length; i++) {
+                    if (nonContentPatterns[i].test(trimmed)) {
+                        return;  // Skip this sentence
+                    }
+                }
+
                 var atomId = 'atom_' + (++self.atomCounter);
-                var tags = self.extractTags(sentence);
+                var tags = self.extractTags(trimmed);
+                
+                // Skip if no meaningful tags extracted (likely noise)
+                if (tags.length < 2) {
+                    return;
+                }
                 
                 var atom = {
                     id: atomId,
-                    content: sentence.trim(),
+                    content: trimmed,
                     tags: tags,
                     timestamp: Date.now() - (sentences.length - idx) * 1000
                 };
@@ -629,17 +666,34 @@
         }
 
         function extractBookContent(text) {
+            // Project Gutenberg files have header/footer metadata that should be excluded
+            // Format: "*** START OF THE PROJECT GUTENBERG EBOOK [TITLE] ***"
+            //         ... actual book content ...
+            //         "*** END OF THE PROJECT GUTENBERG EBOOK [TITLE] ***"
             var startMarker = '*** START OF THE PROJECT GUTENBERG';
             var endMarker = '*** END OF THE PROJECT GUTENBERG';
-            
+
             var startIndex = text.indexOf(startMarker);
             var endIndex = text.indexOf(endMarker);
-            
+
             if (startIndex !== -1 && endIndex !== -1) {
-                text = text.substring(startIndex, endIndex);
+                // Find the end of the START marker line (skip the metadata line)
+                var startOfContent = text.indexOf('\n', startIndex);
+                if (startOfContent === -1) {
+                    startOfContent = startIndex;  // Fallback if no newline found
+                } else {
+                    startOfContent += 1;  // Move past the newline character
+                }
+                
+                // Extract only the actual book content (excluding header/footer)
+                text = text.substring(startOfContent, endIndex);
             }
+
+            // Remove excessive whitespace and normalize line breaks
+            text = text.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n');
             
-            return text.substring(0, 50000);
+            // Keep reasonable chunk for demo (100KB = ~15-20k words)
+            return text.substring(0, 100000);
         }
 
         function getExampleSearches(bookId) {
