@@ -67,10 +67,10 @@ export function setupBackupRoutes(app: Application) {
       // Prevent directory traversal attacks by ensuring only the basename is used
       const safeFilename = path.basename(filename);
 
-      // Validate first
-      const validation = await validateBackup(safeFilename);
-      if (!validation.valid) {
-        res.status(400).json({ error: validation.error });
+      // Validate backup file first
+      const backupValidation = await validateBackup(safeFilename);
+      if (!backupValidation.valid) {
+        res.status(400).json({ error: backupValidation.error });
         return;
       }
 

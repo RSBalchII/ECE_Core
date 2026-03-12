@@ -214,7 +214,7 @@ export type BackupRestoreRequest = z.infer<typeof backupRestoreSchema>;
 
 export const researchScrapeSchema = z.object({
   url: z.string().url("Invalid URL"),
-  category: z.enum(['article', 'documentation', 'code', 'other']).optional()
+  category: z.enum(['article', 'paper', 'documentation', 'code']).optional()
 });
 
 export type ResearchScrapeRequest = z.infer<typeof researchScrapeSchema>;

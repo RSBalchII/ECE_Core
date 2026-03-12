@@ -29,7 +29,7 @@ export function setupResearchRoutes(app: Application) {
         return;
       }
 
-      const result = await fetchAndProcess(url, category || 'article');
+      const result = await fetchAndProcess(url, (category || 'article') as 'article' | 'paper');
       if (result.success) {
         res.status(200).json(result);
       } else {

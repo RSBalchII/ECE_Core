@@ -36,7 +36,7 @@ export function setupGitRoutes(app: Application) {
       (async () => {
         try {
           await service.syncRepo(repo.id);
-          if (includeHistory) {
+          if (include_history) {
             const token = process.env.GITHUB_TOKEN;
             await service.ingestGitHistory(repo.owner, repo.repo, repo.branch, bucket, token);
             console.log(`[API] Git history ingested for ${repo.owner}/${repo.repo}`);
@@ -49,8 +49,8 @@ export function setupGitRoutes(app: Application) {
       res.status(202).json({
         id: repo.id,
         status: 'ingesting',
-        include_history: includeHistory,
-        message: `Started ingestion for ${repo.owner}/${repo.repo}${includeHistory ? ' (with full commit history)' : ''}`,
+        include_history: include_history,
+        message: `Started ingestion for ${repo.owner}/${repo.repo}${include_history ? ' (with full commit history)' : ''}`,
       });
     } catch (error: any) {
       console.error('[API] GitHub repo registration error:', error);
