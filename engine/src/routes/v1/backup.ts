@@ -1,4 +1,5 @@
 import { Application, Request, Response } from 'express';
+import * as path from 'path';
 import { createBackup, listBackups, restoreBackup } from '../../services/backup/backup.js';
 import { getLatestBackup, validateBackup } from '../../services/backup/backup-restore.js';
 
@@ -49,15 +50,18 @@ export function setupBackupRoutes(app: Application) {
         return;
       }
 
+      // Prevent directory traversal attacks by ensuring only the basename is used
+      const safeFilename = path.basename(filename);
+
       // Validate first
-      const validation = await validateBackup(filename);
+      const validation = await validateBackup(safeFilename);
       if (!validation.valid) {
         res.status(400).json({ error: validation.error });
         return;
       }
 
       const startTime = Date.now();
-      const result = await restoreBackup(filename);
+      const result = await restoreBackup(safeFilename);
       const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
       const atomsPerSec = Math.round(result.memory_count / parseFloat(totalTime));
 
