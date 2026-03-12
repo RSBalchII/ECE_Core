@@ -601,8 +601,8 @@
             progressBar.style.display = 'block';
             progressFill.style.width = '0%';
 
-            // Use CORS proxy to fetch Gutenberg books
-            fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://www.gutenberg.org/files/' + book.id + '/' + book.id + '-0.txt'))
+            // Use CORS proxy to fetch Gutenberg books (using corsproxy.io for better reliability)
+            fetch('https://corsproxy.io/?' + encodeURIComponent('https://www.gutenberg.org/files/' + book.id + '/' + book.id + '-0.txt'))
                 .then(function(response) { return response.text(); })
                 .then(function(text) {
                     text = extractBookContent(text);
