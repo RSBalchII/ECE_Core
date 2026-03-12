@@ -52,9 +52,7 @@
     "watcher": {
         "debounce_ms": 2000,
         "stability_threshold_ms": 2000,
-        "extra_paths": [
-            "/data/data/com.termux/files/home/projects/Coding-Notes/notebook/history/important-context"
-        ]
+        "extra_paths": []
     },
     "context": {
         "relevance_weight": 0.7,
@@ -136,7 +134,11 @@
         "rate_limit_requests_per_minute": 60,
         "max_query_results": 50,
         "restrict_to_localhost": true,
-        "allowed_operations": ["query", "read_file", "get_stats"],
+        "allowed_operations": [
+            "query",
+            "read_file",
+            "get_stats"
+        ],
         "blocked_operations": []
     }
 }

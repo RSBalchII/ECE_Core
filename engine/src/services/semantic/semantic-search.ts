@@ -120,122 +120,61 @@ export async function executeSemanticSearch(
   // Use OR-based logic (|) on filtered keywords to allow conversational queries ("fuzzy" match)
   const tsQueryString = searchTerms.filter(t => t.trim().length > 0).join(' | ');
 
-  // Build query filters and parameters
-  const queryFilters: string[] = [];
-  const sqlParams: any[] = [tsQueryString]; // Start with the constructed TS query parameter
-  let paramCounter = 1; // Start with $2 since $1 is already used
-
-  // NOTE: optimization - we do NOT select a.content to prevent fetching massive blobs.
-  // We read from disk using coordinates.
-  let searchQuery = `SELECT a.id, a.source_path as source, a.timestamp, a.buckets, a.tags, a.epochs, a.provenance, a.simhash,
-         0 as score,
-         COALESCE(m.compound_id, a.compound_id) as compound_id,
-         COALESCE(m.start_byte, a.start_byte) as start_byte,
-         COALESCE(m.end_byte, a.end_byte) as end_byte,
-         a.vector_id
-    FROM atoms a
-    LEFT JOIN molecules m ON a.id = m.id
-    WHERE (to_tsvector('simple', a.content) @@ to_tsquery('simple', $1)`;
-
-  // Add Vector ID clause if we have vector hits
+  // Build query with correct parameter indexes
+  // NOTE: We do NOT select a.content to prevent fetching massive blobs.
+  // Content is read from disk using coordinates during ContextInflation.
+  const sqlParams: any[] = [tsQueryString]; // $1 = tsquery
+  
+  let vectorClause = '';
   if (vectorIds.length > 0) {
-    paramCounter++; // Increment for vectorIds
-    searchQuery += ` OR a.vector_id = ANY($${paramCounter})`;
-    sqlParams.push(vectorIds); // Push vectorIds to sqlParams
+    // $2 = vector_ids array
+    vectorClause = ` OR a.vector_id = ANY($2)`;
+    sqlParams.push(vectorIds);
   }
 
-  searchQuery += `)`;
+  let paramIndex = vectorIds.length > 0 ? 2 : 1;
+  const filterClauses: string[] = [];
 
-  // Add provenance filter
+  // Provenance filter
   if (provenance !== 'all') {
-    paramCounter++;
-    queryFilters.push(`a.provenance = $${paramCounter}`);
+    paramIndex++;
+    filterClauses.push(`a.provenance = $${paramIndex}`);
     sqlParams.push(provenance);
   }
 
-  // Add bucket filters if specified
+  // Bucket filter
   if (buckets && buckets.length > 0) {
-    paramCounter++;
-    queryFilters.push(`EXISTS(
-    SELECT 1 FROM unnest(a.buckets) as bucket WHERE bucket = ANY($${paramCounter})
-  )`);
+    paramIndex++;
+    filterClauses.push(`EXISTS(SELECT 1 FROM unnest(a.buckets) as bucket WHERE bucket = ANY($${paramIndex}))`);
     sqlParams.push(buckets);
   }
 
-  // Add tag filters if specified
+  // Tag filter
   if (scopeTags.length > 0) {
-    paramCounter++;
-    queryFilters.push(`EXISTS(
-    SELECT 1 FROM unnest(a.tags) as tag WHERE tag = ANY($${paramCounter})
-  )`);
+    paramIndex++;
+    filterClauses.push(`EXISTS(SELECT 1 FROM unnest(a.tags) as tag WHERE tag = ANY($${paramIndex}))`);
     sqlParams.push(scopeTags);
   }
 
-  // Add Vector IDs param if needed
-  if (vectorIds.length > 0) {
-    paramCounter++;
-    sqlParams.push(vectorIds);
-    // The placeholder $N was already added to the SQL string above as $paramCounter+1 (technically).
-    // Wait, paramCounter logic is tricky here because I added the placeholder dynamically.
-    // Let's fix the placeholder index.
-    // The placeholder in SQL was `ANY($${initialParamCounter + X})`? No.
-    // I should append the vector clause via standard logical flow or fix the index.
-
-    // RE-DOING SQL CONSTRUCTION for safety:
-    // ... WHERE ( ... OR ... ) AND filters ...
-    // The vector param needs to be at the correct index matching sqlParams.length + 1
+  // Build WHERE clause
+  const whereParts = [`(to_tsvector('simple', a.content) @@ to_tsquery('simple', $1)${vectorClause})`];
+  if (filterClauses.length > 0) {
+    whereParts.push(filterClauses.join(' AND '));
   }
 
-  // Combine all filter clauses with AND
-  if (queryFilters.length > 0) {
-    searchQuery += ` AND ${queryFilters.join(' AND ')} `;
-  }
-
-  // Complete the query with ordering and limit
-  searchQuery += ` ORDER BY score DESC, timestamp DESC LIMIT 50`;
-
-  // FIXING PARAM INDEXES:
-  // Re-build sqlParams and Query correctly
-  sqlParams.length = 0;
-  sqlParams.push(tsQueryString);
-  let pIdx = 2;
-
-  let clause = `to_tsvector('simple', a.content) @@ to_tsquery('simple', $1)`;
-
-  if (vectorIds.length > 0) {
-    clause = `(${clause} OR a.vector_id = ANY($${pIdx}))`;
-    sqlParams.push(vectorIds);
-    pIdx++;
-  }
-
-  let whereStr = `WHERE ${clause}`;
-
-  if (provenance !== 'all') {
-    whereStr += ` AND a.provenance = $${pIdx}`;
-    sqlParams.push(provenance);
-    pIdx++;
-  }
-  if (buckets && buckets.length > 0) {
-    whereStr += ` AND EXISTS(SELECT 1 FROM unnest(a.buckets) as bucket WHERE bucket = ANY($${pIdx}))`;
-    sqlParams.push(buckets);
-    pIdx++;
-  }
-  if (scopeTags.length > 0) {
-    whereStr += ` AND EXISTS(SELECT 1 FROM unnest(a.tags) as tag WHERE tag = ANY($${pIdx}))`;
-    sqlParams.push(scopeTags);
-    pIdx++;
-  }
-
-  searchQuery = `SELECT a.id, a.source_path as source, a.timestamp, a.buckets, a.tags, a.epochs, a.provenance, a.simhash,
-         0 as score,
-         COALESCE(m.compound_id, a.compound_id) as compound_id,
-         COALESCE(m.start_byte, a.start_byte) as start_byte,
-         COALESCE(m.end_byte, a.end_byte) as end_byte,
-         a.vector_id
-    FROM atoms a
-    LEFT JOIN molecules m ON a.id = m.id
-    ${whereStr}
-    ORDER BY timestamp DESC LIMIT 50`; // Sort by timestamp initially, we re-score in memory
+  const searchQuery = `
+    SELECT a.id, a.source_path as source, a.timestamp, a.buckets, a.tags, a.epochs, a.provenance, a.simhash,
+           0 as score,
+           COALESCE(m.compound_id, a.compound_id) as compound_id,
+           COALESCE(m.start_byte, a.start_byte) as start_byte,
+           COALESCE(m.end_byte, a.end_byte) as end_byte,
+           a.vector_id
+      FROM atoms a
+      LEFT JOIN molecules m ON a.id = m.id
+      WHERE ${whereParts.join(' AND ')}
+      ORDER BY timestamp DESC
+      LIMIT 50
+  `;
 
   try {
     const result = await db.run(searchQuery, sqlParams);
@@ -245,22 +184,33 @@ export async function executeSemanticSearch(
     const processedResults: SearchResult[] = [];
 
     for (const row of rows) {
-      // Ensure row has the expected structure
-      
       const id = String(row.id || '');
       const source = String(row.source || '');
       const startByte = typeof row.start_byte === 'number' ? row.start_byte : Number(row.start_byte);
       const endByte = typeof row.end_byte === 'number' ? row.end_byte : Number(row.end_byte);
       const rowVectorId = typeof row.vector_id === 'number' ? row.vector_id : Number(row.vector_id || 0);
 
-      let content = '';
-      // Content hydration is now handled by ContextInflator reading from disk.
-
       const rowBuckets = Array.isArray(row.buckets) ? row.buckets as string[] : (typeof row.buckets === 'string' ? [row.buckets] : []);
       const rowTags = Array.isArray(row.tags) ? row.tags as string[] : (typeof row.tags === 'string' ? [row.tags] : []);
 
-      // Calculate semantic relevance score
-      let semanticScore = calculateSemanticScore(content, queryEntities, searchTerms, entityPairs);
+      // Fetch content for scoring (not stored, just for relevance calculation)
+      let content = '';
+      let contentForScoring = '';
+      try {
+        if (source && source.startsWith('/') && startByte >= 0 && endByte > startByte) {
+          // Read content from disk for scoring
+          const fs = await import('fs');
+          const fullContent = fs.readFileSync(source, 'utf-8');
+          contentForScoring = fullContent.substring(startByte, endByte);
+          content = contentForScoring; // Store for result
+        }
+      } catch (e) {
+        // File read failed, content remains empty - scoring will be based on vector only
+        console.debug(`[SemanticSearch] Could not read content for scoring: ${source}`);
+      }
+
+      // Calculate semantic relevance score using actual content
+      let semanticScore = calculateSemanticScore(contentForScoring, queryEntities, searchTerms, entityPairs);
 
       // Calculate Vector Score
       let vectorScore = 0;
@@ -273,25 +223,6 @@ export async function executeSemanticSearch(
       if (semanticScore > 0 && vectorScore > 0) {
         score += (Math.min(semanticScore, vectorScore) * 0.5); // Boost if confirmed by both methods
       }
-
-      // If we have content (rarely here), re-calc. But content is empty. 
-      // We rely on ContextInflator later to fetch content.
-      // Wait, calculateSemanticScore relies on CONTENT! 
-      // If content is empty (we removed it from SELECT), semanticScore will be 0!
-      // This breaks FTS scoring logic unless we fetch content OR utilize the DB score (which PGlite might not return easily with ts_rank).
-      // Solution: We MUST fetch content for scoring, OR rely purely on vector/metadata score until inflation.
-      // BUT `calculateSemanticScore` is critical for FTS relevance.
-      // We SHOULD perform inflation/fetching during this loop if we want accurate scoring.
-      // OR, we select content. The comment says "optimization - we do NOT select a.content".
-      // If so, semanticScore is calculating on empty string -> 0.
-      // This means current logic is BROKEN regardless of my changes?
-      // Check line 165: `let content = '';`.
-      // Yes, `calculateSemanticScore(content, ...)` is called on empty string.
-      // So FTS "works" only by returning rows, but they all get score 0 (unless boosted by provenance).
-      // I should fix this by fetching content OR moving scoring after inflation?
-      // Inflation happens later.
-      // For now, I will proceed with logic as-is but note that FTS score is likely weak. 
-      // Vector score will now dominate, which is good for "Perfect Memory".
 
       // Apply provenance boost
       if (provenance === 'internal' && String(row[6] || '') === 'internal') {
