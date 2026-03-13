@@ -87,7 +87,7 @@ export const RuleCard: React.FC<RuleCardProps> = ({ rule, onUpdate }) => {
                     {rule.triggers.map((t: string) => (
                         <span key={t} className="px-2 py-1 bg-slate-800 rounded text-sm text-slate-200 flex items-center gap-1 border border-slate-700">
                             {t}
-                            <Button variant="icon" onClick={() => removeTrigger(t)} style={{ color: '#f87171' }}><X size={12} /></Button>
+                            <Button variant="icon" onClick={() => removeTrigger(t)} aria-label="Remove trigger" style={{ color: '#f87171' }}><X size={12} /></Button>
                         </span>
                     ))}
                 </div>
@@ -100,7 +100,7 @@ export const RuleCard: React.FC<RuleCardProps> = ({ rule, onUpdate }) => {
                         placeholder="Add trigger..."
                         className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200 focus:outline-none focus:border-slate-500"
                     />
-                    <Button variant="icon" onClick={addTrigger} className="bg-slate-800 rounded text-slate-400" style={{ padding: '4px' }}><Plus size={16} /></Button>
+                    <Button variant="icon" onClick={addTrigger} aria-label="Add trigger" className="bg-slate-800 rounded text-slate-400" style={{ padding: '4px' }}><Plus size={16} /></Button>
                 </div>
             </div>
 
@@ -111,7 +111,7 @@ export const RuleCard: React.FC<RuleCardProps> = ({ rule, onUpdate }) => {
                     {rule.exclusions.map((e: string) => (
                         <span key={e} className="px-2 py-1 bg-red-900/20 rounded text-sm text-red-300 flex items-center gap-1 border border-red-900/50">
                             {e}
-                            <Button variant="icon" onClick={() => removeExclusion(e)} style={{ color: '#fca5a5' }}><X size={12} /></Button>
+                            <Button variant="icon" onClick={() => removeExclusion(e)} aria-label="Remove exclusion" style={{ color: '#fca5a5' }}><X size={12} /></Button>
                         </span>
                     ))}
                 </div>
@@ -124,7 +124,7 @@ export const RuleCard: React.FC<RuleCardProps> = ({ rule, onUpdate }) => {
                         placeholder="Add exclusion..."
                         className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200 focus:outline-none focus:border-red-900/50"
                     />
-                    <Button variant="icon" onClick={addExclusion} className="bg-slate-800 rounded text-slate-400" style={{ padding: '4px' }}><Plus size={16} /></Button>
+                    <Button variant="icon" onClick={addExclusion} aria-label="Add exclusion" className="bg-slate-800 rounded text-slate-400" style={{ padding: '4px' }}><Plus size={16} /></Button>
                 </div>
             </div>
         </div>

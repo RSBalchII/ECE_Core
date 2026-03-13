@@ -73,3 +73,7 @@ engine/dist-android/
 
 engine/dist-win/
 coverage/
+test-mcp-db-*
+test-search-db-*
+test-distill-db-*
+test-distill-output-*

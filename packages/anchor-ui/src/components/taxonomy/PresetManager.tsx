@@ -34,8 +34,8 @@ export const PresetManager: React.FC<PresetManagerProps> = ({ presets, onSave, o
                         placeholder="Preset Name..."
                         className="bg-slate-900 border-none text-sm px-2 py-1 rounded w-32 focus:ring-1 focus:ring-purple-500 text-white outline-none"
                     />
-                    <Button variant="icon" onClick={handleSave} className="p-1 hover:text-green-400"><Save size={16} /></Button>
-                    <Button variant="icon" onClick={() => setIsSaveMode(false)} className="p-1 hover:text-red-400 text-slate-400">×</Button>
+                    <Button variant="icon" onClick={handleSave} aria-label="Save preset" className="p-1 hover:text-green-400"><Save size={16} /></Button>
+                    <Button variant="icon" onClick={() => setIsSaveMode(false)} aria-label="Cancel save" className="p-1 hover:text-red-400 text-slate-400">×</Button>
                 </div>
             ) : (
                 <Button
