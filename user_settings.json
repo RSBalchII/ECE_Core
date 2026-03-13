@@ -52,7 +52,9 @@
     "watcher": {
         "debounce_ms": 2000,
         "stability_threshold_ms": 2000,
-        "extra_paths": []
+        "extra_paths": [
+            "/data/data/com.termux/files/home/.qwen/projects/-data-data-com-termux-files-home/chats/"
+        ]
     },
     "context": {
         "relevance_weight": 0.7,

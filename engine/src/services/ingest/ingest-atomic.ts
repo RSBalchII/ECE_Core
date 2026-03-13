@@ -4,6 +4,22 @@ import { Atom, Molecule, Compound } from '../../types/atomic.js';
 import { filterTags } from '../../utils/tag-filter.js';
 import { sanitizeTagsForWrite, sanitizeTagsFromDb } from '../../utils/tag-sanitizer.js';
 
+/**
+ * Convert JS array to PostgreSQL array format
+ * ['a','b'] => '{a,b}'
+ */
+function toPgArray(arr: any[]): string {
+    if (!arr || !Array.isArray(arr)) return '{}';
+    return '{' + arr.map(v => {
+        if (v === null || v === undefined) return 'NULL';
+        const str = String(v);
+        if (str.includes(',') || str.includes('{') || str.includes('}') || str.includes('"')) {
+            return '"' + str.replace(/"/g, '""') + '"';
+        }
+        return str;
+    }).join(',') + '}';
+}
+
 export class AtomicIngestService {
 
     async ingestResult(
@@ -176,8 +192,8 @@ export class AtomicIngestService {
                         "0", // simhash
                         JSON.stringify(this.zeroVector()), // embedding
                         'internal', // provenance
-                        ['atoms'], // buckets
-                        JSON.stringify(sanitizedTags) // sanitized tags
+                        toPgArray(['atoms']), // buckets
+                        toPgArray(sanitizedTags) // sanitized tags as PostgreSQL array
                     ]
                 );
             }
@@ -286,7 +302,7 @@ export class AtomicIngestService {
                     m.molecular_signature || '0',
                     JSON.stringify(this.zeroVector()), // embedding (we don't compute embeddings here anymore)
                     m.timestamp || Date.now(),
-                    JSON.stringify(sanitizedTags), // sanitized tags
+                    toPgArray(sanitizedTags), // sanitized tags as PostgreSQL array
                     JSON.stringify(m.entities || {})
                 );
             }
@@ -430,8 +446,8 @@ export class AtomicIngestService {
                 compound.molecular_signature || "0",
                 JSON.stringify(this.zeroVector()),
                 compound.provenance,
-                buckets,
-                atoms.map(a => a.label),
+                toPgArray(buckets),
+                toPgArray(atoms.map(a => a.label)),
                 compound.id,
                 0,
                 compound.compound_body.length
@@ -474,8 +490,8 @@ export class AtomicIngestService {
                     m.molecular_signature || this.generateHash(m.content),
                     JSON.stringify(this.zeroVector()),
                     compound.provenance,
-                    buckets,
-                    specificTags,
+                    toPgArray(buckets),
+                    toPgArray(specificTags),
                     m.compoundId,
                     m.start_byte || 0,
                     m.end_byte || 0

@@ -300,9 +300,9 @@ const atomizer = new AtomizerService();
 const atomicIngest = new AtomicIngestService();
 
 async function processFile(filePath: string, event: string) {
-    // Accept markdown, text, YAML, CSV, JSON, and HTML files
+    // Accept markdown, text, YAML, CSV, JSON, JSONL, and HTML files
     if (!filePath.endsWith('.md') && !filePath.endsWith('.txt') && !filePath.endsWith('.yaml') &&
-        !filePath.endsWith('.csv') && !filePath.endsWith('.json') &&
+        !filePath.endsWith('.csv') && !filePath.endsWith('.json') && !filePath.endsWith('.jsonl') &&
         !filePath.endsWith('.html') && !filePath.endsWith('.htm')) return;
     if (filePath.includes('mirrored_brain')) return;
 
