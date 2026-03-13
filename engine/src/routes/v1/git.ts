@@ -33,9 +33,10 @@ export function setupGitRoutes(app: Application) {
       const repo = await service.registerRepo(url, bucket);
 
       // Start async ingestion (don't wait for completion)
+      // Pass repo object directly to avoid PGlite race condition
       (async () => {
         try {
-          await service.syncRepo(repo.id);
+          await service.syncRepo(repo);  // Pass object, not ID
           if (include_history) {
             const token = process.env.GITHUB_TOKEN;
             await service.ingestGitHistory(repo.owner, repo.repo, repo.branch, bucket, token);

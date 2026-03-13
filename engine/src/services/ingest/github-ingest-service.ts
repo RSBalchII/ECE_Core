@@ -386,26 +386,35 @@ export class GitHubIngestService {
   /**
    * Sync a repository (download, extract, ingest)
    */
-  async syncRepo(repoId: string): Promise<SyncResult> {
+  async syncRepo(repoIdOrRecord: string | GitHubRepoRecord): Promise<SyncResult> {
     const startTime = Date.now();
-    
-    // Get repo record
-    const result = await db.run(
-      `SELECT * FROM github_repos WHERE id = $1`,
-      [repoId]
-    );
 
-    if (!result.rows || result.rows.length === 0) {
-      throw new Error(`Repository not found: ${repoId}`);
+    let repo: GitHubRepoRecord;
+
+    // Accept either repo ID (lookup required) or repo object directly
+    if (typeof repoIdOrRecord === 'string') {
+      // Get repo record by ID
+      const result = await db.run(
+        `SELECT * FROM github_repos WHERE id = $1`,
+        [repoIdOrRecord]
+      );
+
+      if (!result.rows || result.rows.length === 0) {
+        throw new Error(`Repository not found: ${repoIdOrRecord}`);
+      }
+
+      repo = result.rows[0] as GitHubRepoRecord;
+    } else {
+      // Repo object passed directly (avoids race condition)
+      repo = repoIdOrRecord;
     }
 
-    const repo = result.rows[0] as GitHubRepoRecord;
     console.log(`[GitHub] Syncing ${repo.owner}/${repo.repo} (bucket: ${repo.bucket})`);
 
     // Update status to in_progress
     await db.run(
       `UPDATE github_repos SET last_sync_status = 'in_progress', last_error = NULL WHERE id = $1`,
-      [repoId]
+      [repo.id]
     );
 
     try {
@@ -423,7 +432,7 @@ export class GitHubIngestService {
       console.log(`[GitHub] Found ${files.length} source files`);
 
       // Quarantine old atoms from this repo (Standard 115, Section 4.5)
-      await this.quarantineOldAtoms(repoId);
+      await this.quarantineOldAtoms(repo.id);
 
       // Ingest each file
       let filesIngested = 0;
@@ -486,7 +495,7 @@ export class GitHubIngestService {
           total_size_bytes = $3,
           updated_at = CURRENT_TIMESTAMP
          WHERE id = $4`,
-        [filesIngested, totalAtoms, totalSize, repoId]
+        [filesIngested, totalAtoms, totalSize, repo.id]
       );
 
       const duration = Date.now() - startTime;
@@ -503,7 +512,7 @@ export class GitHubIngestService {
       // Update status to failed
       await db.run(
         `UPDATE github_repos SET last_sync_status = 'failed', last_error = $1 WHERE id = $2`,
-        [error.message, repoId]
+        [error.message, repo.id]
       );
 
       throw error;
@@ -513,15 +522,24 @@ export class GitHubIngestService {
   /**
    * Quarantine old atoms from a repository
    */
-  private async quarantineOldAtoms(repoId: string): Promise<void> {
-    const result = await db.run(
-      `SELECT owner, repo FROM github_repos WHERE id = $1`,
-      [repoId]
-    );
+  private async quarantineOldAtoms(repoIdOrRecord: string | GitHubRepoRecord): Promise<void> {
+    let owner: string, repo: string;
 
-    if (!result.rows || result.rows.length === 0) return;
+    if (typeof repoIdOrRecord === 'string') {
+      const result = await db.run(
+        `SELECT owner, repo FROM github_repos WHERE id = $1`,
+        [repoIdOrRecord]
+      );
 
-    const { owner, repo } = result.rows[0];
+      if (!result.rows || result.rows.length === 0) return;
+
+      owner = result.rows[0].owner;
+      repo = result.rows[0].repo;
+    } else {
+      owner = repoIdOrRecord.owner;
+      repo = repoIdOrRecord.repo;
+    }
+
     const sourcePrefix = `github:${owner}/${repo}/`;
 
     console.log(`[GitHub] Quarantining old atoms with source_path LIKE '${sourcePrefix}%'`);
