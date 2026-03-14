@@ -1,6 +1,6 @@
 # STAR Demo - Interactive Browser Demo
 
-**Live Demo:** [Open in Browser](demo/index.html)
+**Live Demo:** [Open in Browser](https://rsbalchii.github.io/anchor-engine-node/demo/index.html)
 
 A lightweight, client-side implementation of the STAR (Semantic Temporal Associative Retrieval) algorithm that runs entirely in your browser.
 
