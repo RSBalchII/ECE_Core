@@ -1,4 +1,4 @@
-# Anchor Engine ⚓
+# Anchor Engine ⚓ [Demo](https://rsbalchii.github.io/anchor-engine-node/demo/index.html) 
 
 **Deterministic semantic memory for LLMs – local-first, graph traversal, <1GB RAM**
 
