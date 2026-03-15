@@ -376,6 +376,15 @@ async function rebuildInboxFromMirror(): Promise<void> {
         for await (const absPath of walkDir(from)) {
             const rel = path.relative(from, absPath);
             const dest = path.join(to, rel);
+
+            // SECURITY FIX: Path Traversal Prevention
+            const resolvedDest = path.resolve(dest);
+            const resolvedTo = path.resolve(to);
+            if (!resolvedDest.startsWith(resolvedTo + path.sep) && resolvedDest !== resolvedTo) {
+                console.warn(`[Backup] ⚠️ Path traversal detected, skipping: ${dest}`);
+                continue;
+            }
+
             const destDir = path.dirname(dest);
             if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
             try { fs.copyFileSync(absPath, dest); } catch (e: any) {
@@ -431,6 +440,16 @@ async function rebuildFilesystemFromSources(): Promise<void> {
             .replace(/^external-inbox[\\/]/, '');
 
         const targetPath = path.join(targetDir, relativePath);
+
+        // SECURITY FIX: Path Traversal Prevention
+        const resolvedTargetPath = path.resolve(targetPath);
+        const resolvedTargetDir = path.resolve(targetDir);
+
+        if (!resolvedTargetPath.startsWith(resolvedTargetDir + path.sep) && resolvedTargetPath !== resolvedTargetDir) {
+            console.warn(`[Backup] ⚠️ Path traversal detected, skipping: ${targetPath}`);
+            continue;
+        }
+
         const targetDirPath = path.dirname(targetPath);
 
         // Create directory structure

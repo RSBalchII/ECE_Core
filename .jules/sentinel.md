@@ -1,0 +1,4 @@
+## 2024-05-18 - [Path Traversal in Backup Restore]
+**Vulnerability:** Path Traversal via unvalidated `relativePath` when extracting backup files in `engine/src/services/backup/backup.ts` and `backup-restore.ts`.
+**Learning:** `path.join(targetDir, relativePath)` is not safe if `relativePath` contains sequences like `../../` or absolute path configurations. `fs.writeFileSync()` will write outside the intended scope.
+**Prevention:** Use `path.resolve` to normalize the final path and enforce a strict boundary check using `resolvedTargetPath.startsWith(resolvedTargetDir + path.sep)` to ensure the extraction directory confines the output.

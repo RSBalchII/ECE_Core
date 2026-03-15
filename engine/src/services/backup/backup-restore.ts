@@ -242,6 +242,16 @@ async function rebuildInboxFromSources(
         }
 
         const targetPath = path.join(targetDir, relativePath);
+
+        // SECURITY FIX: Path Traversal Prevention
+        const resolvedTargetPath = path.resolve(targetPath);
+        const resolvedTargetDir = path.resolve(targetDir);
+
+        if (!resolvedTargetPath.startsWith(resolvedTargetDir + path.sep) && resolvedTargetPath !== resolvedTargetDir) {
+            console.warn(`[Phoenix] ⚠️ Path traversal detected, skipping: ${targetPath}`);
+            continue;
+        }
+
         const targetDirPath = path.dirname(targetPath);
 
         // Create directory structure
