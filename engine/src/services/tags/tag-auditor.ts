@@ -109,11 +109,8 @@ export class TagAuditor {
     
     const query = `
       SELECT tag, COUNT(*) as usage_count
-      FROM (
-        SELECT unnest(tags) as tag
-        FROM atoms
-        WHERE tags IS NOT NULL
-      ) tag_counts
+      FROM atoms, unnest(tags) as tag
+      WHERE tags IS NOT NULL
       GROUP BY tag
       HAVING COUNT(*) = 1
       ORDER BY tag
@@ -138,21 +135,18 @@ export class TagAuditor {
     console.log('[TagAuditor] Finding tag clusters...');
     
     const query = `
-      WITH tag_pairs AS (
+      WITH atom_tags AS (
+        SELECT id, tag
+        FROM atoms, unnest(tags) as tag
+        WHERE tags IS NOT NULL
+      ),
+      tag_pairs AS (
         SELECT 
           t1.tag as tag1,
           t2.tag as tag2,
           COUNT(*) as co_occurrence
-        FROM (
-          SELECT id, unnest(tags) as tag
-          FROM atoms
-          WHERE tags IS NOT NULL
-        ) t1
-        JOIN (
-          SELECT id, unnest(tags) as tag
-          FROM atoms
-          WHERE tags IS NOT NULL
-        ) t2 ON t1.id = t2.id AND t1.tag < t2.tag
+        FROM atom_tags t1
+        JOIN atom_tags t2 ON t1.id = t2.id AND t1.tag < t2.tag
         GROUP BY t1.tag, t2.tag
         HAVING COUNT(*) >= $1
       )
@@ -302,14 +296,11 @@ export class TagAuditor {
       SELECT COUNT(*) as count
       FROM (
         SELECT tag
-        FROM (
-          SELECT unnest(tags) as tag
-          FROM atoms
-          WHERE tags IS NOT NULL
-        )
+        FROM atoms, unnest(tags) as tag
+        WHERE tags IS NOT NULL
         GROUP BY tag
         HAVING COUNT(*) = 1
-      )
+      ) sub
     `;
     
     const orphanResult = await db.run(orphanQuery);

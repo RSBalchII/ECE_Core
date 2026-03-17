@@ -1,3 +1,6 @@
 ## 2024-05-18 - [N+1 Query Bottleneck in Search Service]
 **Learning:** Found an N+1 query issue in `enrichAtomsWithMoleculeTags` where a separate SQL query was being executed for each `compound_id`.
 **Action:** When working with nested loops or arrays that require data fetching, always look for opportunities to batch queries. Used `SELECT ... WHERE compound_id = ANY($1)` to fetch all molecule tags in a single query, significantly improving performance.
+## 2026-03-17 - [PostgreSQL Array Unnesting Bottleneck in TagAuditor]
+**Learning:** Materializing intermediate tables with subqueries (e.g., `SELECT tag FROM (SELECT unnest(tags) as tag FROM atoms) GROUP BY tag`) creates significant overhead in PostgreSQL query parsing and execution. The query planner performs much better when `unnest()` is evaluated inline.
+**Action:** When querying unnested arrays in Postgres, use implicit lateral joins (e.g., `FROM atoms, unnest(tags) as tag`) instead of subqueries to improve performance and avoid N+1 bottlenecks. Extract repeated unnesting subqueries into a Common Table Expression (CTE) to prevent materializing massive intermediate tables and avoid executing the set-returning function multiple times.
