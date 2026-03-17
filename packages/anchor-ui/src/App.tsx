@@ -230,6 +230,7 @@ const SearchPage = () => {
           <button
             className="hamburger-btn"
             onClick={() => setMobileDrawerOpen(true)}
+            aria-label="Open mobile menu"
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', cursor: 'pointer', transition: 'all 0.2s' }}
           >
             <span className="material-symbols-outlined">menu</span>
@@ -251,7 +252,7 @@ const SearchPage = () => {
             <span className="material-symbols-outlined" style={{ fontSize: '1.2rem' }}>add</span>
             <span>Add Column</span>
           </Button>
-          <Button onClick={() => navigate('/dashboard')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', transition: 'all 0.2s' }}>
+          <Button onClick={() => navigate('/dashboard')} aria-label="Return to Dashboard" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', transition: 'all 0.2s' }}>
             <span className="material-symbols-outlined">home</span>
           </Button>
         </div>
@@ -266,7 +267,7 @@ const SearchPage = () => {
         <div className={`mobile-drawer ${mobileDrawerOpen ? 'open' : ''}`}>
           <div className="mobile-drawer-header">
             <div className="mobile-drawer-title">Anchor Engine</div>
-            <button className="mobile-drawer-close" onClick={() => setMobileDrawerOpen(false)}>
+            <button className="mobile-drawer-close" onClick={() => setMobileDrawerOpen(false)} aria-label="Close mobile menu">
               <span className="material-symbols-outlined">close</span>
             </button>
           </div>
@@ -447,7 +448,7 @@ function App() {
       <PerformanceMonitor />
 
       <div style={{ position: 'fixed', top: '1rem', left: '1rem', zIndex: 1000 }}>
-        <Button onClick={() => navigate('/dashboard')} style={{ fontSize: '1.2rem', padding: '0.4rem 0.8rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
+        <Button onClick={() => navigate('/dashboard')} aria-label="Return to Dashboard" style={{ fontSize: '1.2rem', padding: '0.4rem 0.8rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
           ←
         </Button>
       </div>

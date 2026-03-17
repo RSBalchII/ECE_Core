@@ -40,7 +40,7 @@ export const ResearchModal: React.FC<ResearchModalProps> = ({ onClose }) => {
             <GlassPanel className="glass-card" style={{ width: '600px', height: '600px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <h3>Research Station</h3>
-                    <Button variant="icon" onClick={onClose} style={{ fontSize: '1.2rem', color: 'white' }}>✕</Button>
+                    <Button variant="icon" aria-label="Close research modal" onClick={onClose} style={{ fontSize: '1.2rem', color: 'white' }}>✕</Button>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border-subtle)' }}>
                     <Button variant="ghost" onClick={() => setTab('search')} style={{ borderBottom: tab === 'search' ? '2px solid var(--accent-primary)' : 'none', borderRadius: 0, color: tab === 'search' ? 'var(--accent-primary)' : 'var(--text-primary)' }}>Web Search</Button>

@@ -1,0 +1,3 @@
+## 2024-03-24 - [Add aria-labels to icon-only buttons]
+**Learning:** Found a widespread pattern across the application where custom `Button` components with `variant="icon"` and primitive `<button>` tags with icon children (like `material-symbols-outlined`) lacked `aria-label`s. This rendered them inaccessible to screen readers, missing vital context for actions like closing modals, opening menus, or quarantining items.
+**Action:** Always ensure that icon-only buttons (`variant="icon"`, `<span className="material-symbols-outlined">`) receive a descriptive `aria-label` attribute to convey their action to assistive technologies.
