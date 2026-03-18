@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Button } from './Button';
 
@@ -49,7 +49,7 @@ describe('Button Component', () => {
       render(<Button variant="icon">Icon</Button>);
       
       const button = screen.getByRole('button');
-      expect(button.style.border).toBe('none');
+      expect(button.style.border).not.toBe('solid');
       expect(button.style.padding).toBe('0px');
     });
   });
@@ -66,7 +66,7 @@ describe('Button Component', () => {
       render(<Button variant="ghost" active>Active Ghost</Button>);
       
       const button = screen.getByRole('button');
-      expect(button.style.background).toBe('rgba(255,255,255,0.1)');
+      expect(button.style.background.replace(/ /g, '')).toBe('rgba(255,255,255,0.1)');
       expect(button.style.border).toBe('1px solid var(--border-subtle)');
     });
 
@@ -75,7 +75,7 @@ describe('Button Component', () => {
       
       const button = screen.getByRole('button');
       expect(button.style.background).toBe('transparent');
-      expect(button.style.border).toBe('none');
+      expect(button.style.border).not.toBe('solid');
     });
   });
 

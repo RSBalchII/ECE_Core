@@ -83,7 +83,7 @@ export const GitCommandsModal: React.FC<GitCommandsModalProps> = ({ onClose }) =
             }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem' }}>
                     <h3 style={{ margin: 0 }}>Git Commands</h3>
-                    <Button variant="icon" onClick={onClose} style={{ fontSize: '1.2rem', color: 'white' }}>✕</Button>
+                    <Button variant="icon" aria-label="Close modal" onClick={onClose} style={{ fontSize: '1.2rem', color: 'white' }}>✕</Button>
                 </div>
 
                 {/* Working Directory Selection */}

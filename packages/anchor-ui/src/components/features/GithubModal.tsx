@@ -135,7 +135,7 @@ export const GithubModal: React.FC<GithubModalProps> = ({ onClose }) => {
             <GlassPanel className="glass-card" style={{ width: '500px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.5rem' }}>
                     <h3 style={{ margin: 0 }}>GitHub Repository Ingestion</h3>
-                    <Button variant="icon" onClick={onClose} style={{ fontSize: '1.2rem', color: 'white' }}>✕</Button>
+                    <Button variant="icon" aria-label="Close modal" onClick={onClose} style={{ fontSize: '1.2rem', color: 'white' }}>✕</Button>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>

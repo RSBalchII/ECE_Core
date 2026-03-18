@@ -40,7 +40,7 @@ export const ResearchModal: React.FC<ResearchModalProps> = ({ onClose }) => {
             <GlassPanel className="glass-card" style={{ width: '600px', height: '600px', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <h3>Research Station</h3>
-                    <Button variant="icon" onClick={onClose} style={{ fontSize: '1.2rem', color: 'white' }}>✕</Button>
+                    <Button variant="icon" aria-label="Close modal" onClick={onClose} style={{ fontSize: '1.2rem', color: 'white' }}>✕</Button>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border-subtle)' }}>
                     <Button variant="ghost" onClick={() => setTab('search')} style={{ borderBottom: tab === 'search' ? '2px solid var(--accent-primary)' : 'none', borderRadius: 0, color: tab === 'search' ? 'var(--accent-primary)' : 'var(--text-primary)' }}>Web Search</Button>
@@ -58,7 +58,7 @@ export const ResearchModal: React.FC<ResearchModalProps> = ({ onClose }) => {
                                 <div key={i} style={{ padding: '0.8rem', background: '#222', borderRadius: '4px' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                         <a href={r.link} target="_blank" rel="noopener noreferrer" style={{ color: '#8b5cf6', fontWeight: 'bold' }}>{r.title}</a>
-                                        <Button variant="ghost" onClick={() => handleSave(r.link)} style={{ fontSize: '0.7rem' }}>💾</Button>
+                                        <Button variant="ghost" aria-label="Save result" onClick={() => handleSave(r.link)} style={{ fontSize: '0.7rem' }}>💾</Button>
                                     </div>
                                     <div style={{ fontSize: '0.8rem', color: '#aaa' }}>{r.snippet}</div>
                                 </div>

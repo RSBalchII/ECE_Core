@@ -42,6 +42,7 @@ export const DiscoveryPanel: React.FC<DiscoveryPanelProps> = ({ suggestions, onA
                                 <span className="text-xs text-slate-500 uppercase">{entity.suggestedCategory}</span>
                                 <Button
                                     variant="icon"
+                                    aria-label="Add to suggested category"
                                     onClick={() => onAdd(entity, entity.suggestedCategory)}
                                     style={{ color: '#c084fc', opacity: 0 }}
                                     className="group-hover:opacity-100 transition-opacity hover:text-purple-300"

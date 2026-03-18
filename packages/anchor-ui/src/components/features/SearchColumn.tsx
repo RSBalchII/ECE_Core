@@ -702,7 +702,7 @@ export const SearchColumn = memo(({
                                                 <span style={{ fontSize: '0.7rem', padding: '4px 8px', borderRadius: '4px', background: '#334155', color: '#94a3b8', fontWeight: 'bold' }}>{r.provenance || 'EXT'}</span>
                                                 {!isIncluded && <span style={{ fontSize: '0.7rem', color: '#f59e0b' }}>[Truncated]</span>}
                                             </div>
-                                            <Button variant="icon" onClick={() => handleQuarantine(r.id)} style={{ color: '#ef4444', fontSize: '1.2rem', padding: '0 4px' }}>🚫</Button>
+                                            <Button variant="icon" aria-label="Quarantine item" onClick={() => handleQuarantine(r.id)} style={{ color: '#ef4444', fontSize: '1.2rem', padding: '0 4px' }}>🚫</Button>
                                         </div>
                                         <div style={{ whiteSpace: 'pre-wrap', maxHeight: '300px', overflowY: 'auto' }}>{r.content}</div>
                                     </div>
