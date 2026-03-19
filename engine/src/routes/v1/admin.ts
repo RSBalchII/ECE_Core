@@ -87,17 +87,14 @@ export function setupAdminRoutes(app: Application) {
   // DEBUG: Get tag statistics
   app.get('/v1/debug/tags', async (_req: Request, res: Response) => {
     try {
-      // Get total atom count
-      const atomCount = await db.run('SELECT COUNT(*) as count FROM atoms');
-
-      // Get total tag count
-      const tagCount = await db.run('SELECT COUNT(*) as count FROM tags');
-
-      // Get sample tags
-      const sampleTags = await db.run('SELECT name, atom_count FROM tags ORDER BY atom_count DESC LIMIT 20');
-
-      // Get tags with low atom counts
-      const lowCountTags = await db.run('SELECT COUNT(*) as count FROM tags WHERE atom_count < 3');
+      // ⚡ Bolt Optimization: Batch independent database queries concurrently
+      // This prevents N+1 query bottlenecks and reduces overall endpoint latency.
+      const [atomCount, tagCount, sampleTags, lowCountTags] = await Promise.all([
+        db.run('SELECT COUNT(*) as count FROM atoms'),
+        db.run('SELECT COUNT(*) as count FROM tags'),
+        db.run('SELECT name, atom_count FROM tags ORDER BY atom_count DESC LIMIT 20'),
+        db.run('SELECT COUNT(*) as count FROM tags WHERE atom_count < 3')
+      ]);
 
       res.status(200).json({
         atoms: atomCount.rows?.[0]?.count || 0,
