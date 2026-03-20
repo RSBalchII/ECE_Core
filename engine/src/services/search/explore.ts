@@ -142,15 +142,22 @@ async function bfsViaEdges(
     }
 
     const nextFrontier: string[] = [];
-    for (const chunk of chunks) {
+
+    // Execute all chunk queries in parallel
+    const queryPromises = chunks.map(chunk => {
       const placeholders = chunk.map((_, i) => `$${i + 2}`).join(', ');
-      const result = await db.run(
+      return db.run(
         `SELECT source_id, target_id, weight FROM edges
          WHERE (source_id IN (${placeholders}) OR target_id IN (${placeholders}))
            AND weight >= $1`,
         [minWeight, ...chunk]
       );
+    });
 
+    const results = await Promise.all(queryPromises);
+
+    // Process results synchronously to maintain graph traversal properties
+    for (const result of results) {
       for (const row of result.rows as any[]) {
         const neighbor = visited.has(row.source_id) ? row.target_id : row.source_id;
         if (!visited.has(neighbor)) {
@@ -189,16 +196,23 @@ async function bfsViaTags(
     }
 
     const nextFrontier: string[] = [];
-    for (const chunk of chunks) {
+
+    // Execute all chunk queries in parallel
+    const queryPromises = chunks.map(chunk => {
       const placeholders = chunk.map((_, i) => `$${i + 1}`).join(', ');
-      const result = await db.run(
+      return db.run(
         `SELECT DISTINCT t2.atom_id
          FROM tags t1
          JOIN tags t2 ON t1.tag = t2.tag AND t1.atom_id != t2.atom_id
          WHERE t1.atom_id IN (${placeholders})`,
         chunk
       );
+    });
 
+    const results = await Promise.all(queryPromises);
+
+    // Process results synchronously to maintain graph traversal properties
+    for (const result of results) {
       for (const row of result.rows as any[]) {
         if (!visited.has(row.atom_id)) {
           visited.add(row.atom_id);
@@ -221,25 +235,37 @@ async function fetchNodes(ids: string[]): Promise<ExploreNode[]> {
   const atomRows: any[] = [];
   const tagRows: any[] = [];
 
-  // Content queries: small chunks (25) — each row ~1KB, ~25KB per query
+  // Execute Content and Tag queries in parallel chunks
+  const contentPromises = [];
   for (let i = 0; i < ids.length; i += PGLITE_CHUNK_CONTENT) {
     const chunk = ids.slice(i, i + PGLITE_CHUNK_CONTENT);
     const placeholders = chunk.map((_, j) => `$${j + 1}`).join(', ');
-    const aResult = await db.run(
+    contentPromises.push(db.run(
       `SELECT id, content, source_path, timestamp FROM atoms WHERE id IN (${placeholders})`,
       chunk
-    );
-    atomRows.push(...(aResult.rows as any[]));
+    ));
   }
 
-  // Tag queries: larger chunks (100) — each row is just atom_id + tag string
+  const tagPromises = [];
   for (let i = 0; i < ids.length; i += PGLITE_CHUNK_IDS) {
     const chunk = ids.slice(i, i + PGLITE_CHUNK_IDS);
     const placeholders = chunk.map((_, j) => `$${j + 1}`).join(', ');
-    const tResult = await db.run(
+    tagPromises.push(db.run(
       `SELECT atom_id, tag FROM tags WHERE atom_id IN (${placeholders})`,
       chunk
-    );
+    ));
+  }
+
+  const [contentResults, tagResults] = await Promise.all([
+    Promise.all(contentPromises),
+    Promise.all(tagPromises)
+  ]);
+
+  for (const aResult of contentResults) {
+    atomRows.push(...(aResult.rows as any[]));
+  }
+
+  for (const tResult of tagResults) {
     tagRows.push(...(tResult.rows as any[]));
   }
 
@@ -339,22 +365,45 @@ async function fetchContentAtomsByHubs(
   if (hubIds.length === 0) return [];
 
   const allIds: string[] = [];
-  for (let i = 0; i < hubIds.length && allIds.length < maxCount; i += PGLITE_CHUNK_IDS) {
-    const chunk = hubIds.slice(i, i + PGLITE_CHUNK_IDS);
-    const placeholders = chunk.map((_, j) => `$${j + 1}`).join(', ');
+
+  // Parallelize by batching a controlled number of chunk queries together
+  // to avoid over-fetching while still improving throughput.
+  // E.g. fetch 3 chunks at a time (300 hubs).
+  const BATCH_SIZE = 3;
+
+  for (let i = 0; i < hubIds.length && allIds.length < maxCount; i += PGLITE_CHUNK_IDS * BATCH_SIZE) {
+    const batchPromises = [];
     const remaining = maxCount - allIds.length;
-    const result = await db.run(
-      `SELECT id FROM atoms
-       WHERE compound_id IN (${placeholders})
-         AND source_path != 'atom_source'
-         AND id NOT LIKE 'mem_%'
-       ORDER BY start_byte
-       LIMIT ${Math.min(remaining, PGLITE_CHUNK_RESULT_IDS)}`,
-      chunk
-    );
-    allIds.push(...(result.rows as any[]).map((r: any) => r.id));
+
+    // Create up to BATCH_SIZE promises
+    for (let j = 0; j < BATCH_SIZE; j++) {
+      const chunkStart = i + (j * PGLITE_CHUNK_IDS);
+      if (chunkStart >= hubIds.length) break;
+
+      const chunk = hubIds.slice(chunkStart, chunkStart + PGLITE_CHUNK_IDS);
+      const placeholders = chunk.map((_, k) => `$${k + 1}`).join(', ');
+
+      batchPromises.push(db.run(
+        `SELECT id FROM atoms
+         WHERE compound_id IN (${placeholders})
+           AND source_path != 'atom_source'
+           AND id NOT LIKE 'mem_%'
+         ORDER BY start_byte
+         LIMIT ${Math.min(remaining, PGLITE_CHUNK_RESULT_IDS)}`,
+        chunk
+      ));
+    }
+
+    const batchResults = await Promise.all(batchPromises);
+
+    // Flatten batch results maintaining order
+    for (const result of batchResults) {
+      allIds.push(...(result.rows as any[]).map((r: any) => r.id));
+    }
   }
-  return allIds;
+
+  // Trim the final result to maxCount
+  return allIds.slice(0, maxCount);
 }
 
 
