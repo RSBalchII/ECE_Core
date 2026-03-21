@@ -281,20 +281,6 @@ export class TagAuditor {
       FROM atoms
     `;
     
-    const result = await db.run(query);
-    
-    if (!result.rows || result.rows.length === 0) {
-      return {
-        avgTagsPerAtom: 0,
-        medianTagsPerAtom: 0,
-        maxTagsInAtom: 0,
-        uniqueTags: 0,
-        tagsUsedOnce: 0
-      };
-    }
-    
-    const row = result.rows[0] as any;
-    
     // Get tags used once
     // Bolt: Optimized array unnesting using implicit lateral join
     const orphanQuery = `
@@ -307,7 +293,20 @@ export class TagAuditor {
         HAVING COUNT(*) = 1
       )
     `;
+
+    const result = await db.run(query);
     
+    if (!result.rows || result.rows.length === 0) {
+      return {
+        avgTagsPerAtom: 0,
+        medianTagsPerAtom: 0,
+        maxTagsInAtom: 0,
+        uniqueTags: 0,
+        tagsUsedOnce: 0
+      };
+    }
+
+    const row = result.rows[0] as any;
     const orphanResult = await db.run(orphanQuery);
     const tagsUsedOnce = orphanResult.rows?.[0]?.count || 0;
     

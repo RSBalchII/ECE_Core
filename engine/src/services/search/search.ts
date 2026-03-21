@@ -853,9 +853,11 @@ async function _executeSearchInternal(
 
   // 2. Find Anchors (Planets)
   // Combine Engram Lookup + FTS + Molecule Search
-  const engramIds = await lookupByEngram(cleanQuery);
-  const engramResults = await hydrateEngrams(engramIds);
-  let primaryAnchors = await findAnchors(cleanQuery, Array.from(realBuckets), explicitTags, maxChars, provenance, filters);
+  // ⚡ Bolt Optimization: Run independent anchor discovery paths concurrently
+  let [engramResults, primaryAnchors] = await Promise.all([
+    lookupByEngram(cleanQuery).then(ids => hydrateEngrams(ids)),
+    findAnchors(cleanQuery, Array.from(realBuckets), explicitTags, maxChars, provenance, filters)
+  ]);
 
   // Tag-Aware Fallback (if low precision/recall on initial anchors)
   if (primaryAnchors.length < 5) {
