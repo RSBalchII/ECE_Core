@@ -266,7 +266,7 @@ describe('API Service', () => {
 
       const result = await api.quarantineAtom('atom-123');
 
-      expect(result.status).toBe('success');
+      expect(result.status).toBe(200);
     });
   });
 

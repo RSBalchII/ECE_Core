@@ -257,6 +257,7 @@ const SearchPage = () => {
           {/* Hamburger Menu Button (Mobile) */}
           <button
             className="hamburger-btn"
+            aria-label="Open mobile menu"
             onClick={() => setMobileDrawerOpen(true)}
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)', cursor: 'pointer', transition: 'all 0.2s' }}
           >
@@ -294,7 +295,7 @@ const SearchPage = () => {
         <div className={`mobile-drawer ${mobileDrawerOpen ? 'open' : ''}`}>
           <div className="mobile-drawer-header">
             <div className="mobile-drawer-title">Anchor Engine</div>
-            <button className="mobile-drawer-close" onClick={() => setMobileDrawerOpen(false)}>
+            <button className="mobile-drawer-close" aria-label="Close mobile menu" onClick={() => setMobileDrawerOpen(false)}>
               <span className="material-symbols-outlined">close</span>
             </button>
           </div>
