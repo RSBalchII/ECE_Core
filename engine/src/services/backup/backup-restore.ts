@@ -434,7 +434,9 @@ export async function validateBackup(filename: string): Promise<{
     sizeFormatted?: string;
     note?: string;
 }> {
-    const filePath = path.join(BACKUP_DIR, filename);
+    // Prevent directory traversal attacks
+    const safeFilename = path.basename(filename);
+    const filePath = path.join(BACKUP_DIR, safeFilename);
     
     if (!fs.existsSync(filePath)) {
         return { valid: false, error: 'Backup file not found' };

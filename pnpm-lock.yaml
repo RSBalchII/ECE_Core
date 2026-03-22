@@ -11,6 +11,18 @@ importers:
       '@electric-sql/pglite':
         specifier: ^0.2.0
         version: 0.2.17
+      '@rbalchii/anchor-atomizer-wasm':
+        specifier: ^1.0.0
+        version: 1.0.0
+      '@rbalchii/anchor-fingerprint-wasm':
+        specifier: ^1.0.0
+        version: 1.0.0
+      '@rbalchii/anchor-keyextract-wasm':
+        specifier: ^1.0.0
+        version: 1.0.0
+      '@rbalchii/anchor-tagwalker-wasm':
+        specifier: ^1.0.0
+        version: 1.0.0
       '@rbalchii/dse':
         specifier: ^1.0.0
         version: 1.0.1
@@ -32,6 +44,12 @@ importers:
       cheerio:
         specifier: ^1.2.0
         version: 1.2.0
+      chokidar:
+        specifier: ^4.0.0
+        version: 4.0.3
+      commander:
+        specifier: ^13.1.0
+        version: 13.1.0
       cors:
         specifier: ^2.8.5
         version: 2.8.6
@@ -44,6 +62,9 @@ importers:
       got-scraping:
         specifier: ^4.1.3
         version: 4.1.3
+      js-yaml:
+        specifier: ^4.1.1
+        version: 4.1.1
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
@@ -56,6 +77,9 @@ importers:
       typescript:
         specifier: ^5.0.0
         version: 5.9.3
+      undici:
+        specifier: ^7.8.0
+        version: 7.22.0
       uuid:
         specifier: ^13.0.0
         version: 13.0.0
@@ -111,9 +135,6 @@ importers:
       jest-junit:
         specifier: ^16.0.0
         version: 16.0.0
-      js-yaml:
-        specifier: ^4.1.1
-        version: 4.1.1
       nodemon:
         specifier: ^3.0.1
         version: 3.1.13
@@ -2114,6 +2135,10 @@ packages:
     resolution: {integrity: sha512-7VT13fmjotKpGipCW9JEQAusEPE+Ei8nl6/g4FBAmIm0GOOLMua9NDDo/DWp0ZAxCr3cPq5ZpBqmPAQgDda2Pw==}
     engines: {node: '>= 8.10.0'}
 
+  chokidar@4.0.3:
+    resolution: {integrity: sha512-Qgzu8kfBvo+cA4962jnP1KkS6Dop5NS6g7R5LFYJr4b8Ub94PPQXUksCw9PvXoeXPRRddRNC5C1JQUR2SMGtnA==}
+    engines: {node: '>= 14.16.0'}
+
   chownr@1.1.4:
     resolution: {integrity: sha512-jJ0bqzaylmJtVnNgzTeSOs8DPavpbYgEr/b0YL8/2GO3xJEhInFmhKMUnEJQjZumK7KXGFhUy89PrsJWlakBVg==}
 
@@ -2172,6 +2197,10 @@ packages:
   combined-stream@1.0.8:
     resolution: {integrity: sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==}
     engines: {node: '>= 0.8'}
+
+  commander@13.1.0:
+    resolution: {integrity: sha512-/rFeCpNJQbhSZjGVwO9RFV3xPqbnERS8MmIQzCtD/zl6gpJuV/bMLuN92oG3F7d8oDEHHRrujSXNUr8fpjntKw==}
+    engines: {node: '>=18'}
 
   commander@4.1.1:
     resolution: {integrity: sha512-NOKm8xhkzAjzFx8B2v5OAHT+u5pRQc2UCa2Vq9jYL/31o2wi9mxBA7LIFs3sV5VSC49z6pEhfbMULvShKj26WA==}
@@ -3958,6 +3987,10 @@ packages:
   readdirp@3.6.0:
     resolution: {integrity: sha512-hOS089on8RduqdbhvQ5Z37A0ESjsqz6qnRcffsMU3495FuTdqSm+7bhJ29JvIOsBDEEnan5DPu9t3To9VRlMzA==}
     engines: {node: '>=8.10.0'}
+
+  readdirp@4.1.2:
+    resolution: {integrity: sha512-GDhwkLfywWL2s6vEjyhri+eXmfH6j1L7JE27WhqLeYzoh/A3DBaYGEj2H/HFZCn/kMfim73FXxEJTw06WtxQwg==}
+    engines: {node: '>= 14.18.0'}
 
   redent@3.0.0:
     resolution: {integrity: sha512-6tDA8g98We0zd0GvVeMT9arEOnTw9qM03L9cJXaCjrip1OO764RDBLBfrB4cwzNGDj5OA5ioymC9GkizgWJDUg==}
@@ -6651,6 +6684,10 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
+  chokidar@4.0.3:
+    dependencies:
+      readdirp: 4.1.2
+
   chownr@1.1.4: {}
 
   chownr@3.0.0: {}
@@ -6701,6 +6738,8 @@ snapshots:
   combined-stream@1.0.8:
     dependencies:
       delayed-stream: 1.0.0
+
+  commander@13.1.0: {}
 
   commander@4.1.1: {}
 
@@ -8730,6 +8769,8 @@ snapshots:
   readdirp@3.6.0:
     dependencies:
       picomatch: 2.3.1
+
+  readdirp@4.1.2: {}
 
   redent@3.0.0:
     dependencies:

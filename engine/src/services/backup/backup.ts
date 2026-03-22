@@ -154,7 +154,9 @@ export async function listBackups(): Promise<string[]> {
 }
 
 export async function restoreBackup(filename: string): Promise<BackupStats> {
-    const filePath = path.join(BACKUP_DIR, filename);
+    // Prevent directory traversal attacks
+    const safeFilename = path.basename(filename);
+    const filePath = path.join(BACKUP_DIR, safeFilename);
     if (!fs.existsSync(filePath)) {
         throw new Error(`Backup file not found: ${filename}`);
     }
