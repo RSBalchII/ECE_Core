@@ -16,14 +16,17 @@ import { setupResearchRoutes } from './v1/research.js';
 import { setupAdminRoutes } from './v1/admin.js';
 import { setupSystemRoutes } from './v1/system.js';
 import { setupSettingsRoutes } from './v1/settings.js';
-import { setupStatsRoutes } from './v1/stats.js';
 import { setupEnhancedRoutes } from './enhanced-api.js';
 import { setupMemoryRoutes } from './v1/memory.js';
 import { setupDistillRoutes } from './v1/distills.js';
 import { setupEncryptionRoutes } from './v1/encryption.js';
+import { setupHealthRoutes } from './health.js';
 import { registerTestRoutes } from './test-ui.js';
 
 export function setupRoutes(app: Application) {
+  // Health check (must be first — used by load balancers & monitoring)
+  setupHealthRoutes(app);
+
   // Core data routes
   setupSearchRoutes(app);
   setupIngestRoutes(app);
@@ -34,13 +37,10 @@ export function setupRoutes(app: Application) {
   // Encryption routes (must be before system routes)
   setupEncryptionRoutes(app);
 
-  // System & admin routes
+  // System & admin routes (includes /v1/stats, /health, watchdog endpoints)
   setupSystemRoutes(app);
   setupSettingsRoutes(app);
   setupAdminRoutes(app);
-
-  // Stats endpoint
-  setupStatsRoutes(app);
 
   // External integrations
   setupGitRoutes(app);
