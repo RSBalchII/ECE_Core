@@ -911,12 +911,43 @@ export class AtomizerService {
     }
 
     private createAtom(label: string, type: Atom['type'], weight: number = 1.0): Atom {
+        // Use fingerprint WASM module for consistent hashing
+        let hash: string;
+        try {
+            // wasmModuleLoader is imported at module scope
+            const fp = this.getFingerprintFunction();
+            if (fp) {
+                // fingerprint returns bigint, convert to hex
+                const bigint = fp(label);
+                hash = bigint.toString(16).substring(0, 12);
+            } else {
+                // Fallback to MD5 if fingerprint unavailable
+                hash = crypto.createHash('md5').update(label).digest('hex').substring(0, 12);
+            }
+        } catch {
+            // Final fallback to MD5
+            hash = crypto.createHash('md5').update(label).digest('hex').substring(0, 12);
+        }
         return {
-            id: `atom_${crypto.createHash('sha256').update(label).digest('hex').substring(0, 12)}`,
+            id: `atom_${hash}`,
             label,
             type,
             weight,
         };
+    }
+
+    // Lazy reference to wasmModuleLoader to avoid circular imports
+    private _fpCache: ((text: string) => bigint) | null = null;
+    private getFingerprintFunction(): ((text: string) => bigint) | null {
+        if (this._fpCache) return this._fpCache;
+        try {
+            // Import wasmModuleLoader lazily
+            const wasmLoader = require('../../utils/wasm-module-loader.js');
+            this._fpCache = wasmLoader.wasmModuleLoader?.fingerprint || null;
+        } catch {
+            this._fpCache = null;
+        }
+        return this._fpCache;
     }
 
     /**
