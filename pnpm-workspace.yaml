@@ -1,18 +1,11 @@
 packages:
-  - packages/anchor-core
-  - packages/anchor-ui
-  - packages/api-client
-  - packages/shared
-  - packages/types
   - engine
-  - mcp-server
 
 allowBuilds:
-  esbuild: set this to true or false
-  msw: set this to true or false
-  sharp: set this to true or false
-  tree-sitter-javascript: set this to true or false
-  tree-sitter-typescript: set this to true or false
+  esbuild: true
+  sharp: true
+  tree-sitter-javascript: false
+  tree-sitter-typescript: false
 
 ignoredBuiltDependencies:
   - esbuild
