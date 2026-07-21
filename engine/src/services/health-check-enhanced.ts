@@ -6,7 +6,6 @@
  */
 
 import { db } from '../core/db.js';
-import { nativeModuleManager } from '../utils/native-module-manager.js';
 import { wasmModuleLoader } from '../utils/wasm-module-loader.js';
 import * as os from 'os';
 import * as fs from 'fs/promises';
@@ -69,34 +68,54 @@ export class HealthCheckService {
   }
 
   /**
-   * Perform comprehensive health check
+   * Perform comprehensive health check with timeout protection
    */
   public async checkHealth(): Promise<HealthStatus> {
     const components: ComponentHealth[] = [];
+    const HEALTH_CHECK_TIMEOUT_MS = 5000; // 5 second total timeout
 
-    // Check database
-    const dbHealth = await this.checkDatabaseHealth();
-    components.push(dbHealth);
+    try {
+      // Check database with timeout
+      const dbHealth = await this.withTimeout(
+        () => this.checkDatabaseHealth(),
+        HEALTH_CHECK_TIMEOUT_MS,
+        'database'
+      );
+      components.push(dbHealth);
 
-    // Check native modules
-    const nativeHealth = this.checkNativeModulesHealth();
-    components.push(nativeHealth);
+      // Check WASM modules (synchronous, no timeout needed)
+      const wasmHealth = this.checkWasmModulesHealth();
+      components.push(wasmHealth);
 
-    // Check WASM modules
-    const wasmHealth = this.checkWasmModulesHealth();
-    components.push(wasmHealth);
+      // Check file system access with timeout
+      const fsHealth = await this.withTimeout(
+        () => this.checkFileSystemHealth(),
+        HEALTH_CHECK_TIMEOUT_MS,
+        'filesystem'
+      );
+      components.push(fsHealth);
 
-    // Check file system access
-    const fsHealth = await this.checkFileSystemHealth();
-    components.push(fsHealth);
+      // Check system resources (synchronous)
+      const systemHealth = await this.withTimeout(
+        () => this.checkSystemResources(),
+        HEALTH_CHECK_TIMEOUT_MS,
+        'system-resources'
+      );
+      components.push(systemHealth);
 
-    // Check system resources
-    const systemHealth = await this.checkSystemResources();
-    components.push(systemHealth);
+      // Check performance metrics (synchronous)
+      const perfHealth = this.checkPerformanceMetrics();
+      components.push(perfHealth);
 
-    // Check performance metrics
-    const perfHealth = this.checkPerformanceMetrics();
-    components.push(perfHealth);
+    } catch (timeoutErr: any) {
+      // If the health check itself times out, return a degraded status
+      console.warn('[Health] Health check timed out:', timeoutErr.message);
+      components.push({
+        name: 'health-check',
+        status: 'degraded' as const,
+        message: `Health check timed out after ${HEALTH_CHECK_TIMEOUT_MS}ms`,
+      });
+    }
 
     // Determine overall status
     const unhealthyComponents = components.filter(c => c.status === 'unhealthy');
@@ -123,6 +142,31 @@ export class HealthCheckService {
       system: systemInfo,
       metrics,
     };
+  }
+
+  /**
+   * Execute an async function with a timeout. Returns a degraded health status if timed out.
+   */
+  private async withTimeout<T>(fn: () => Promise<T>, timeoutMs: number, componentName: string): Promise<ComponentHealth & { data?: T }> {
+    let timer: NodeJS.Timeout | undefined;
+    
+    // Start the timeout immediately
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${componentName} health check timed out after ${timeoutMs}ms`)), timeoutMs);
+    });
+
+    try {
+      const result = await Promise.race([fn(), timeoutPromise]);
+      if (timer) clearTimeout(timer);
+      return { name: componentName, status: 'healthy' as const, message: `${componentName} check passed`, data: result };
+    } catch (error: any) {
+      if (timer) clearTimeout(timer);
+      if (error.message?.includes('timed out')) {
+        console.warn(`[Health] ${componentName} timed out — returning degraded status`);
+        return { name: componentName, status: 'degraded' as const, message: `${componentName} check timed out after ${timeoutMs}ms`, data: undefined };
+      }
+      throw error; // Re-throw non-timeout errors for proper handling in the component method
+    }
   }
 
   /**
@@ -167,88 +211,8 @@ export class HealthCheckService {
   }
 
   /**
-   * Check native modules health
+   * Check WASM modules health
    */
-  private checkNativeModulesHealth(): ComponentHealth {
-    try {
-      const status = nativeModuleManager.getAllStatus();
-
-      // Check if critical native modules are loaded
-      const eceNativeStatus = status.get('ece_native');
-
-      if (!eceNativeStatus) {
-        return {
-          name: 'native-modules',
-          status: 'unhealthy',
-          message: 'Native module manager not initialized properly',
-        };
-      }
-
-      if (!eceNativeStatus.loaded) {
-        return {
-          name: 'native-modules',
-          status: 'degraded',
-          message: 'Native modules not loaded, using fallback implementations',
-          details: {
-            fallbackActive: eceNativeStatus.fallbackActive,
-            error: eceNativeStatus.error,
-          },
-        };
-      }
-
-      // Test native module functionality if loaded
-      if (!eceNativeStatus.fallbackActive) {
-        try {
-          const native = nativeModuleManager.loadNativeModule('ece_native', 'ece_native.node');
-
-          // Test basic functionality
-          if (typeof native?.fingerprint === 'function') {
-            const testHash = native.fingerprint('health check test');
-            if (typeof testHash !== 'undefined') {
-              return {
-                name: 'native-modules',
-                status: 'healthy',
-                message: 'Native modules loaded and functional',
-                details: {
-                  modulesLoaded: Array.from(status.keys()),
-                  fallbackActive: eceNativeStatus.fallbackActive,
-                },
-              };
-            }
-          }
-        } catch (error: any) {
-          return {
-            name: 'native-modules',
-            status: 'degraded',
-            message: `Native module functionality test failed: ${error.message}`,
-            details: {
-              error: error.message,
-            },
-          };
-        }
-      }
-
-      return {
-        name: 'native-modules',
-        status: eceNativeStatus.fallbackActive ? 'degraded' : 'healthy',
-        message: eceNativeStatus.fallbackActive ? 'Native modules loaded with fallback implementations' : 'Native modules loaded and operational',
-        details: {
-          fallbackActive: eceNativeStatus.fallbackActive,
-          error: eceNativeStatus.error,
-        },
-      };
-    } catch (error: any) {
-      return {
-        name: 'native-modules',
-        status: 'unhealthy',
-        message: `Native module check failed: ${error.message}`,
-        details: {
-          error: error.message,
-        },
-      };
-    }
-  }
-
   /**
    * Check WASM modules health (Standard 013)
    */

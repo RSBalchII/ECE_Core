@@ -22,6 +22,8 @@ import { setupDistillRoutes } from './v1/distills.js';
 import { setupEncryptionRoutes } from './v1/encryption.js';
 import { setupHealthRoutes } from './health.js';
 import { registerTestRoutes } from './test-ui.js';
+import { setupStatsRoutes } from './v1/stats.js';
+import { setupMoleculesRoutes } from './v1/molecules.js';
 
 export function setupRoutes(app: Application) {
   // Health check (must be first — used by load balancers & monitoring)
@@ -37,10 +39,16 @@ export function setupRoutes(app: Application) {
   // Encryption routes (must be before system routes)
   setupEncryptionRoutes(app);
 
+  // Molecules routes (post-Standard 051 migration)
+  setupMoleculesRoutes(app);
+
   // System & admin routes (includes /v1/stats, /health, watchdog endpoints)
   setupSystemRoutes(app);
   setupSettingsRoutes(app);
   setupAdminRoutes(app);
+
+  // Stats endpoint
+  setupStatsRoutes(app);
 
   // External integrations
   setupGitRoutes(app);

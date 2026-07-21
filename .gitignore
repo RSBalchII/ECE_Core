@@ -211,7 +211,14 @@ zenodo.json
 # ============================================
 
 # Engine source and build
-engine/
+!engine/src/
+!engine/tests/
+!engine/package.json
+!engine/tsconfig*.json
+!engine/pnpm-workspace.yaml
+engine/node_modules/
+engine/dist/
+engine/build/
 
 # Tests and test utilities
 tests/
