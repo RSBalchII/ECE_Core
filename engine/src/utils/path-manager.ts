@@ -124,21 +124,21 @@ export class PathManager {
    * Get context directory path (Internal Configuration/Tags)
    */
   public getContextDir(): string {
-    return path.resolve(this.basePath, '..', 'context');
+    return PATHS.CONTEXT_DIR;
   }
 
   /**
    * Get models directory path
    */
   public getModelsDir(): string {
-    return path.resolve(this.basePath, '../..', 'models');
+    return PATHS.MODELS_DIR;
   }
 
   /**
    * Get logs directory path
    */
   public getLogsDir(): string {
-    return path.resolve(this.basePath, 'logs');
+    return PATHS.LOGS_DIR;
   }
 
   /**
@@ -160,7 +160,7 @@ export class PathManager {
    * Get user settings path
    */
   public getUserSettingsPath(): string {
-    return path.resolve(this.basePath, 'user_settings.json');
+    return PATHS.USER_SETTINGS;
   }
 
   /**

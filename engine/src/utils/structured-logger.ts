@@ -75,8 +75,9 @@ function truncateLogFiles(maxLines: number = MAX_LINES_PER_FILE): void {
   }
 }
 
-// Truncate all existing logs at startup to MAX_LINES_PER_FILE (500)
-truncateLogFiles(MAX_LINES_PER_FILE);
+// Truncate all existing logs at startup to 10,000 lines
+truncateLogFiles(10000);
+
 
 // Custom format for structured logging
 const structuredFormat = winston.format.combine(
@@ -92,12 +93,12 @@ const logger = winston.createLogger({
   level: 'silly', // Capture all log levels including debug
   format: structuredFormat,
   transports: [
-    // Main anchor_engine.log file with size-based rotation (10KB)
+    // Main anchor_engine.log file with size-based rotation (10MB)
     new DailyRotateFile({
       filename: path.join(LOGS_DIR, 'anchor_engine.log'),
       datePattern: 'YYYY-MM-DD',
       zippedArchive: false,
-      maxSize: '10k',
+      maxSize: '10m',
       maxFiles: '7d',
       format: format.combine(
         format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
