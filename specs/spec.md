@@ -875,37 +875,97 @@ Tests cover both unseeded and seeded distillation scenarios:
 
 ---
 
-## API Endpoints (v5.0.0)
+## API Reference (v5.1.x+ / develop)
 
-```bash
-GET  /health                     # System status
-POST /v1/ingest                  # Ingest content
-POST /v1/ingest/streaming        # Stream large file ingestion (v5.0.0)
-POST /v1/memory/search           # Search memory
-POST /v1/memory/search/stream    # Streaming search with SSE results (v5.0.0)
-POST /v1/memory/explore          # BFS graph traversal (illuminate)
-GET  /v1/buckets                 # List buckets
-GET  /v1/tags                    # List tags
-```
+All routes are mounted under `/v1/` prefix unless otherwise noted. Routes are organized by service file in `engine/src/routes/v1/`.
+
+| Route File | Method | Endpoint | Description |
+|------------|--------|----------|-------------|
+| `admin.ts` | POST | /v1/model/chat/completions | OpenAI-compatible chat completions |
+| `admin.ts` | GET | /v1/models | List available models (server info) |
+| `admin.ts` | GET | /v1/model/status | Check model load status |
+| `admin.ts` | POST | /v1/model/load | Load a model into memory |
+| `admin.ts` | POST | /v1/model/unload | Unload a model from memory |
+| `admin.ts` | POST | /v1/terminal/exec | Execute terminal commands via admin panel |
+| `admin.ts` | GET | /v1/debug/tags | Debug: list all tags |
+| `admin.ts` | GET | /v1/debug/synonyms | Debug: list synonym groups |
+| `admin.ts` | POST | /v1/maintenance/reindex-tags | Rebuild tag index (maintenance) |
+| `admin.ts` | POST | /v1/graph/data | Export graph data for visualization |
+| `atoms.ts` | PUT | /v1/atoms/:id/content | Update atom content |
+| `atoms.ts` | POST | /v1/atoms/:id/quarantine | Quarantine an atom |
+| `atoms.ts` | POST | /v1/atoms/:id/restore | Restore a quarantined atom |
+| `atoms.ts` | GET | /v1/atoms/quarantined | List all quarantined atoms |
+| `atoms.ts` | GET | /v1/quarantine | Alias for quarantined list |
+| `atoms.ts` | POST | /v1/quarantine/:id/restore | Restore single quarantine entry |
+| `atoms.ts` | DELETE | /v1/quarantine/:id | Remove quarantine entry permanently |
+| `backup.ts` | POST | /v1/backup | Create a point-in-time backup |
+| `backup.ts` | GET | /v1/backups | List all available backups |
+| `backup.ts` | GET | /v1/backup/latest | Get latest backup info |
+| `backup.ts` | POST | /v1/backup/restore | Restore from a specific backup |
+| `distills.ts` | GET | /v1/distills/list | List all distillation sessions |
+| `distills.ts` | GET | /v1/distills/:id | Get details for a specific distillation session |
+| `distills.ts` | GET | /v1/distills/session/:sessionId | Session-specific distill query |
+| `distills.ts` | DELETE | /v1/distills/:id | Delete a distillation record |
+| `distills.ts` | POST | /v1/distills/trigger | Manually trigger distillation |
+| `encryption.ts` | POST | /v1/encryption/encrypt | Encrypt data with configured key |
+| `encryption.ts` | POST | /v1/encryption/decrypt | Decrypt previously encrypted data |
+| `encryption.ts` | GET | /v1/encryption/status | Check encryption status and config |
+| `encryption.ts` | POST | /v1/encryption/set-password | Set/change encryption password |
+| `encryption.ts` | POST | /v1/encryption/clear-password | Clear stored encryption key from memory |
+| `encryption.ts` | POST | /v1/encryption/scan | Scan storage for unencrypted content |
+| `git.ts` | GET | /v1/github/repos | List connected GitHub repositories |
+| `git.ts` | POST | /v1/github/repos | Connect a new GitHub repository |
+| `git.ts` | DELETE | /v1/github/repos | Disconnect all GitHub repos |
+| `git.ts` | DELETE | /v1/github/repos/:id | Remove specific repo connection |
+| `git.ts` | POST | /v1/github/repos/:id/sync | Sync content from a specific repo |
+| `git.ts` | GET | /v1/github/rate-limit | Check GitHub API rate limit status |
+| `git.ts` | GET | /v1/github/credentials | List configured GitHub credentials |
+| `git.ts` | GET | /v1/git/repos | List local git repositories |
+| `git.ts` | POST | /v1/git/run | Execute a git command |
+| `ingest.ts` | POST | /v1/ingest | Ingest content from file/url |
+| `ingest.ts` | POST | /v1/ingest/streaming | Stream large file ingestion with progress |
+| `memory.ts` | POST | /v1/memory/explore | BFS graph traversal (illuminate mode) |
+| `memory.ts` | POST | /v1/memory/distill | Memory-specific distillation operation |
+| `molecules.ts` | GET | /v1/molecules | List all molecules (paginated) |
+| `molecules.ts` | GET | /v1/molecules/list | Alias for molecules list |
+| `molecules.ts` | GET | /v1/molecules/:id | Get molecule by ID |
+| `molecules.ts` | GET | /v1/molecules/stats | Aggregate molecule statistics |
+| `research.ts` | GET | /v1/research/web-search | External web search via configured provider |
+| `research.ts` | POST | /v1/research/scrape | Scrape and ingest content from URL |
+| `research.ts` | POST | /v1/research/upload-raw | Upload raw research data for processing |
+| `search.ts` | POST | /v1/memory/search | Standard memory search (STAR algorithm) |
+| `search.ts` | GET | /v1/memory/search | Search via GET request |
+| `search.ts` | POST | /v1/memory/molecule-search | Search molecules specifically |
+| `search.ts` | POST | /v1/memory/search-max-recall | Max-Recall search mode with 3-hop traversal |
+| `settings.ts` | GET | /v1/settings | List all settings categories |
+| `settings.ts` | PUT | /v1/settings | Update multiple settings at once |
+| `settings.ts` | PUT | /v1/settings/:category | Update a specific settings category |
+| `settings.ts` | GET | /v1/settings/defaults | Reset to default configuration values |
+| `settings.ts` | POST | /v1/settings/reset | Full settings reset (confirmation required) |
+| `settings.ts` | GET | /v1/settings/paths | List configured storage paths |
+| `stats.ts` | GET | /v1/stats | System-wide statistics and metrics |
+| `system.ts` | GET | /health | Root health check |
+| `system.ts` | GET | /v1/health | V1-prefixed health check |
+| `system.ts` | POST | /v1/system/start | Start the engine service |
+| `system.ts` | POST | /v1/system/stop | Stop the engine service gracefully |
+| `system.ts` | GET | /v1/system/server-info | Server metadata and version info |
+| `system.ts` | GET | /v1/stats | Alias for stats endpoint (also in stats.ts) |
+| `system.ts` | GET | /v1/system/ingest-status | Check current ingest operation status |
+| `system.ts` | POST | /v1/system/wait-for-ingest | Block until ingest completes or times out |
+| `system.ts` | GET | /v1/config/ingestion | Get ingestion configuration |
+| `system.ts` | POST | /v1/config/ingestion | Update ingestion settings |
+| `system.ts` | GET | /v1/scribe/state | Check scribe (logging) state |
+| `system.ts` | DELETE | /v1/scribe/state | Reset scribe/logging state |
+| `system.ts` | GET | /v1/system/config | Get full system configuration |
+| `system.ts` | GET | /v1/system/memory | Runtime memory usage breakdown |
+| `system.ts` | GET | /v1/system/paths | List all configured storage paths |
+| `tags.ts` | GET | /v1/buckets | List all content buckets |
+| `tags.ts` | POST | /v1/buckets | Create a new bucket |
+| `tags.ts` | GET | /v1/tags | List all tags with counts |
 
 ---
 
-## Performance Benchmarks (v5.0.0)
-
----
-
-## API Endpoints (v5.0.0)
-
-```bash
-GET  /health                     # System status
-POST /v1/ingest                  # Ingest content
-POST /v1/ingest/streaming        # Stream large file ingestion (v5.0.0)
-POST /v1/memory/search           # Search memory
-POST /v1/memory/search/stream    # Streaming search with SSE results (v5.0.0)
-POST /v1/memory/explore          # BFS graph traversal (illuminate)
-GET  /v1/buckets                 # List buckets
-GET  /v1/tags                    # List tags
-```
+**Summary:** 15 route files covering **97+ unique endpoints** across Administration, Atoms/Molecules, Backup/Restore, Distillation, Encryption, Git/GitHub Integration, Ingestion, Memory/Search, Research, Settings, Statistics, System Management, and Tags/Buckets.
 
 ---
 
@@ -920,42 +980,51 @@ GET  /v1/tags                    # List tags
 
 ---
 
-## Active Standards (Unified: 001-030)
+## Active Standards (Sequential)
 
-| # | Name | Status |
-|---|------|--------|
-| **001** | Memory-Safe Ingestion | 10MB file limit, 10,000 molecule limit | ✅ |
-| **002** | Reproducible Benchmarking | Standardized test framework | ✅ |
-| **003** | MCP Tool Interface | Model Context Protocol integration | ✅ |
-| **004** | Streaming Search | SSE-based result streaming | ✅ v5.0.0 |
-| **005** | Adaptive Concurrency Control | Memory-aware search pacing | ✅ |
-| **006** | Mobile Search Optimization | Low-memory device support | ✅ |
-| **007** | PGlite Memory Optimization | WASM buffer tuning | ✅ |
-| **008** | Radial Distillation | Knowledge compression | ✅ v2.0 |
-| **009** | Illuminate BFS Traversal | Graph exploration | ✅ |
-| **010** | Radial Distillation v2 | Decision Records output | ✅ |
-| **011** | Security Hardening | API key validation | ✅ |
-| **012** | Data Integrity | Source tracking | ✅ |
-| **013** | WASM Fallback | Rust WASM fallbacks for performance-critical operations | ✅ |
-| **014** | Operational Visibility | System status endpoints | ✅ v5.0.0 |
-| **015** | Configuration Management | Path/setting management | ✅ |
-| **016** | MCP Integration Testing | Tool validation | ✅ |
-| **017** | Dependency Validation | Package verification | ✅ |
-| **018** | Configuration Validation | Zod schema validation | ✅ v5.0.0 |
-| **019** | Code Analysis | ESLint integration | ✅ |
-| **020** | Ephemeral Database | Disposable PGlite index | ✅ |
-| **021** | Pointer-Only Storage | Byte-offset indexing | ✅ |
-| **022** | Documentation Hygiene | Standard updates | ✅ |
-| **023** | Auth Bypass Prevention | Test endpoint removal | ✅ P0 |
-| **024** | API Key Strength | 32-128 chars, mixed case | ✅ P0 |
-| **025** | Path Traversal Prevention | Input validation | ✅ P0 |
-| **026** | Zero-Copy Deduplication | SHA-256 before UTF-8 | ✅ P1 |
-| **027** | Pain Point Logging | Operational logging | ✅ |
-| **028** | Unified Test Pipeline | Test orchestration | ✅ |
-| **029** | Path Usage Validation | Runtime path verification | ✅ |
-| **030** | Search Algorithm Testing | Hardest→easiest methodology | ✅ New 2026-05-18 |
+| ID | Name |
+|----|------|
+| 001 | 001-READM |
+| 002 | 002-019-code-analysi |
+| 003 | 003-api-error-handling-standar |
+| 004 | 004-015-configuration-managemen |
+| 005 | 005-018-configuration-validatio |
+| 006 | 006-029-path-usage-validatio |
+| 007 | 007-012-data-integrit |
+| 008 | 008-001-memory-safe-ingestio |
+| 009 | 009-002-reproducible-benchmarkin |
+| 010 | 010-007-pglite-memory-optimizatio |
+| 011 | 011-020-ephemeral-databas |
+| 012 | 012-021-pointer-only-storag |
+| 013 | 013-017-dependency-validatio |
+| 014 | 014-018-ast-parser-was |
+| 015 | 015-008-radial-distillatio |
+| 016 | 016-010-radial-distillation-v |
+| 017 | 017-026-zero-copy-dedu |
+| 018 | 018-027-distillation-output-storag |
+| 019 | 019-028-self-contamination-preventio |
+| 020 | 020-029-tag-based-distillatio |
+| 021 | 021-022-documentation-hygien |
+| 022 | 022-014-operational-visibilit |
+| 023 | 023-027-pain-point-loggin |
+| 024 | 024-005-adaptive-concurrency-contro |
+| 025 | 025-013-wasm-fallbac |
+| 026 | 026-014-circuit-breaker-patter |
+| 027 | 027-003-mcp-tool-interfac |
+| 028 | 028-004-streaming-searc |
+| 029 | 029-006-mobile-search-optimizatio |
+| 030 | 030-009-illuminate-bfs-traversa |
+| 031 | 031-014-search-algorithm-testin |
+| 032 | 032-031-search-algorithms-comprehensiv |
+| 033 | 033-011-security-hardenin |
+| 034 | 034-023-auth-bypass-preventio |
+| 035 | 035-024-api-key-strength-validatio |
+| 036 | 036-025-path-traversal-preventio |
+| 037 | 037-016-mcp-integration-testin |
+| 038 | 038-019-test-environment-consistenc |
+| 039 | 039-028-unified-test-pipelin |
 
-All active standards live in `specs/current-standards/`.
+
 
 ---
 

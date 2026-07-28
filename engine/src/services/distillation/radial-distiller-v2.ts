@@ -16,7 +16,7 @@ import { pathManager } from '../../utils/path-manager.js';
 import { getMirrorPath } from '../mirror/mirror.js';
 import { recordDistill } from './distill-manager.js';
 import { wasmModuleLoader } from '../../utils/wasm-module-loader.js';
-import { config } from '../../config/index.js';
+import { config, PATHS } from '../../config/index.js';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -498,7 +498,7 @@ function extractTemporalMetadata(content: string, sourcePath: string, mtime: num
   // 2. Git history (graceful degradation — skip if git unavailable)
   try {
     const gitLog = execSync(`git log -1 --format="%ai" -- "${sourcePath}"`, {
-      cwd: pathManager.getNotebookDir(),
+      cwd: path.join(PATHS.INBOX_DIR, '..'),
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
       timeout: 3000,
@@ -1173,7 +1173,7 @@ async function tagBasedDistill(request: RadialDistillRequest): Promise<{
       }
 
       // Try notebook directory with relative path
-      const notebookDir = pathManager.getNotebookDir();
+      const notebookDir = path.join(PATHS.FALLBACK_DATA_DIR, 'notebook');
       const localPath = path.join(notebookDir, sourcePath);
       attempts.push({ name: 'Notebook path', path: localPath, isFallback: true });
 
@@ -1353,9 +1353,9 @@ async function finalizeDistillation(
     outputSize = yamlOutput.length;
 
     if (shouldSaveToFile) {
-      const distillsDir = path.join(pathManager.getNotebookDir(), 'distills');
+      const distillsDir = path.join(PATHS.DISTILLS_DIR);
       if (!fs.existsSync(distillsDir)) fs.mkdirSync(distillsDir, { recursive: true });
-      outputPath = request.output_path || path.join(
+      const outputPath = path.join(
         distillsDir,
         `distilled_nested_${new Date().toISOString().replace(/[:.]/g, '-')}.yaml`,
       );
@@ -1376,9 +1376,9 @@ async function finalizeDistillation(
     outputSize = jsonOutput.length;
 
     if (shouldSaveToFile) {
-      const distillsDir = path.join(pathManager.getNotebookDir(), 'distills');
+      const distillsDir = path.join(PATHS.DISTILLS_DIR);
       if (!fs.existsSync(distillsDir)) fs.mkdirSync(distillsDir, { recursive: true });
-      outputPath = request.output_path || path.join(
+      const outputPath = path.join(
         distillsDir,
         `distilled_full_${new Date().toISOString().replace(/[:.]/g, '-')}.json`,
       );
@@ -1402,9 +1402,9 @@ async function finalizeDistillation(
     outputSize = jsonOutput.length;
 
     if (shouldSaveToFile) {
-      const distillsDir = path.join(pathManager.getNotebookDir(), 'distills');
+      const distillsDir = path.join(PATHS.DISTILLS_DIR);
       if (!fs.existsSync(distillsDir)) fs.mkdirSync(distillsDir, { recursive: true });
-      outputPath = request.output_path || path.join(
+      const outputPath = path.join(
         distillsDir,
         `distilled_standards_${new Date().toISOString().replace(/[:.]/g, '-')}.json`,
       );
@@ -1428,9 +1428,9 @@ async function finalizeDistillation(
     outputSize = yamlOutput.length;
 
     if (shouldSaveToFile) {
-      const distillsDir = path.join(pathManager.getNotebookDir(), 'distills');
+      const distillsDir = path.join(PATHS.DISTILLS_DIR);
       if (!fs.existsSync(distillsDir)) fs.mkdirSync(distillsDir, { recursive: true });
-      outputPath = request.output_path || path.join(
+      const outputPath = path.join(
         distillsDir,
         `distilled_${new Date().toISOString().replace(/[:.]/g, '-')}.yaml`,
       );
@@ -1603,14 +1603,14 @@ export async function radialDistill(request: RadialDistillRequest): Promise<Radi
     };
 
     // Phase 1D-3: Deduplicate file reads — each unique path is read only once.
-    const notebookDir = pathManager.getNotebookDir();
+    const mirrorDir = PATHS.MIRRORED_BRAIN_DIR;
 
     type PathEntry = { localPath: string; moleculeIdx: number };
     const seenPaths = new Set<string>();
     const uniqueEntries: PathEntry[] = [];
     for (const [idx, molecule] of molecules.entries()) {
       if (!molecule.source_path) continue;
-      const localPath = path.join(notebookDir, molecule.source_path);
+      const localPath = path.join(mirrorDir, molecule.source_path);
       if (!seenPaths.has(localPath)) {
         seenPaths.add(localPath);
         uniqueEntries.push({ localPath, moleculeIdx: idx });
@@ -1639,7 +1639,7 @@ export async function radialDistill(request: RadialDistillRequest): Promise<Radi
       if (!molecule.source_path) continue;
       if (isDistillationOutput(molecule.source_path)) continue;
 
-      const localPath = path.join(notebookDir, molecule.source_path);
+      const localPath = path.join(mirrorDir, molecule.source_path);
       const content = contentCache.get(localPath) ?? '';
       const mtime = mtimeCache.get(localPath) ?? Date.now();
 

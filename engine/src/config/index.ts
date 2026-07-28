@@ -299,7 +299,16 @@ interface Config {
     TOKEN_BUDGET_DEFAULT: number;
     INGESTION_PROFILE: 'code' | 'notes' | 'chat' | 'default';
   };
-}
+
+  // Density Query Configuration (Standard 086) — RAG tier thresholds for density queries
+  DENSITY: {
+    LIGHT_DOC_THRESHOLD: number;   // mol_count >= this → light tier (well-known concept)
+    MEDIUM_DOC_THRESHOLD: number;  // mol_count >= this → medium tier
+    LIGHT_RAG_LIMIT: number;       // doc limit to pass to external RAG for light tier
+    MEDIUM_RAG_LIMIT: number;      // doc limit for medium tier
+    HEAVY_RAG_LIMIT: number;       // doc limit for heavy tier (0 = all available)
+  };
+};
 
 // Default configuration
 const DEFAULT_CONFIG: Config = {
@@ -507,6 +516,15 @@ const DEFAULT_CONFIG: Config = {
     TOKEN_BUDGET_DEFAULT: parseInt(process.env['ANCHOR_TOKEN_BUDGET_DEFAULT'] || '2000', 10),
     INGESTION_PROFILE: (process.env['ANCHOR_INGESTION_PROFILE'] as 'code' | 'notes' | 'chat' | 'default') || 'default',
   },
+
+  // Density Query Configuration (Standard 086) — RAG tier thresholds for density queries
+  DENSITY: {
+    LIGHT_DOC_THRESHOLD: parseInt(process.env['ANCHOR_DENSITY_LIGHT_THRESHOLD'] || '50', 10),
+    MEDIUM_DOC_THRESHOLD: parseInt(process.env['ANCHOR_DENSITY_MEDIUM_THRESHOLD'] || '5', 10),
+    LIGHT_RAG_LIMIT: parseInt(process.env['ANCHOR_DENSITY_LIGHT_RAG_LIMIT'] || '10', 10),
+    MEDIUM_RAG_LIMIT: parseInt(process.env['ANCHOR_DENSITY_MEDIUM_RAG_LIMIT'] || '25', 10),
+    HEAVY_RAG_LIMIT: parseInt(process.env['ANCHOR_DENSITY_HEAVY_RAG_LIMIT'] || '0', 10), // 0 = all available
+  },
 };
 
 // Configuration loader
@@ -599,7 +617,10 @@ function loadConfig(): Config {
         if (userSettings.watcher.debounce_ms !== undefined) loadedConfig.WATCHER_DEBOUNCE_MS = userSettings.watcher.debounce_ms;
         if (userSettings.watcher.stability_threshold_ms !== undefined) loadedConfig.WATCHER_STABILITY_THRESHOLD_MS = userSettings.watcher.stability_threshold_ms;
         if (userSettings.watcher.extra_paths) loadedConfig.WATCHER_EXTRA_PATHS = userSettings.watcher.extra_paths;
-        if (userSettings.watcher.auto_start !== undefined) loadedConfig.WATCHER_AUTO_START = userSettings.watcher.auto_start;
+        if (userSettings.watcher.auto_start !== undefined) {
+          loadedConfig.WATCHER_AUTO_START = userSettings.watcher.auto_start;
+          loadedConfig.WATCHER.AUTO_START = userSettings.watcher.auto_start;
+        }
         if (userSettings.watcher.wipe_mirrored_brain_on_shutdown !== undefined) loadedConfig.WATCHER_WIPE_MIRRORED_BRAIN_ON_SHUTDOWN = userSettings.watcher.wipe_mirrored_brain_on_shutdown;
       }
 

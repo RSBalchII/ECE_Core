@@ -14,6 +14,7 @@
 
 import * as v8 from 'v8';
 import { config } from '../config/index.js';
+import { logLRU } from '../utils/structured-logger.js';
 
 // --- Types ---
 
@@ -385,21 +386,25 @@ export class LRUCache<K, V> {
         if (this.cache.size > targetSize) {
           this.resize(targetSize);
         }
-        console.log(
-          `[LRUCache] CRITICAL: Evicted to ${targetSize} entries (memory: ${percentageUsed.toFixed(1)}%)`
-        );
+        logLRU('warn', `CRITICAL: Evicted to ${targetSize} entries (memory: ${percentageUsed.toFixed(1)}%)`, {
+          targetSize,
+          memoryPercent: percentageUsed,
+          cacheSize: this.cache.size,
+        });
       } else if (percentageUsed >= this.memoryPressureThreshold) {
         // High pressure: Evict 30% of cache (but keep minimum floor of 20 entries)
         const targetSize = Math.max(20, Math.floor(this.maxEntries * 0.7));
         if (this.cache.size > targetSize) {
           this.resize(targetSize);
         }
-        console.log(
-          `[LRUCache] HIGH PRESSURE: Evicted to ${targetSize} entries (memory: ${percentageUsed.toFixed(1)}%)`
-        );
+        logLRU('info', `HIGH PRESSURE: Evicted to ${targetSize} entries (memory: ${percentageUsed.toFixed(1)}%)`, {
+          targetSize,
+          memoryPercent: percentageUsed,
+          cacheSize: this.cache.size,
+        });
       }
     } catch (error) {
-      console.error('[LRUCache] Memory check failed:', error);
+      logLRU('warn', 'Memory check failed', { error: String(error) });
     }
   }
 

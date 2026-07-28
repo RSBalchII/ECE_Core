@@ -7,6 +7,7 @@
 import type { Application, Request, Response } from 'express';
 import { StructuredLogger } from '../../utils/structured-logger.js';
 import { getAllDistills, getDistill, getDistillsBySession, deleteDistill } from '../../services/distillation/distill-manager.js';
+import { radialDistill } from '../../services/distillation/radial-distiller-v2.js';
 
 export function setupDistillRoutes(app: Application) {
   // GET /v1/distills/list - List all distills (newest first)
@@ -99,6 +100,59 @@ export function setupDistillRoutes(app: Application) {
     } catch (error: any) {
       StructuredLogger.error('DISTILL_DELETE_ERROR', error, { id: id });
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /v1/distills/trigger - Manually trigger radial distillation
+  app.post('/v1/distills/trigger', async (req: Request, res: Response) => {
+    try {
+      const {
+        seed_query,
+        seed_ids,
+        radius = 2000,
+        output_format = 'decision-records',
+        output_path,
+        export_to_inbox = false,
+      } = req.body as any;
+
+      StructuredLogger.info('DISTILL_TRIGGER', {
+        seed_query: seed_query || seed_ids || 'all',
+        radius,
+        output_format,
+      });
+
+      const radialRequest = {
+        seed: seed_ids ? { compound_ids: seed_ids } : { query: seed_query },
+        radius,
+        max_radius: radius * 2,
+        output_format,
+        output_path,
+        export_to_inbox,
+      };
+
+      const result = await radialDistill(radialRequest);
+
+      res.status(200).json({
+        status: 'success',
+        message: 'Distillation complete',
+        result: {
+          compounds_processed: result.stats.compounds_processed,
+          blocks_total: result.stats.blocks_total,
+          blocks_unique: result.stats.blocks_unique,
+          compression_ratio: result.stats.compression_ratio,
+          duration_ms: result.stats.duration_ms,
+          memory_peak_mb: result.stats.memory_peak_mb,
+          output: result.output,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error: any) {
+      StructuredLogger.error('DISTILL_TRIGGER_ERROR', error);
+      res.status(500).json({
+        error: 'Distillation failed',
+        message: error.message,
+        timestamp: new Date().toISOString(),
+      });
     }
   });
 }

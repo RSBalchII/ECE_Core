@@ -291,7 +291,6 @@ export class HealthCheckService {
       // Check critical directories
       const criticalPaths = [
         pathManager.getDatabasePath(),
-        pathManager.getNotebookDir(),
         pathManager.getContextDir(),
         pathManager.getLogsDir(),
       ];

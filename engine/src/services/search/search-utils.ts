@@ -14,7 +14,7 @@ import { ContextInflator } from './context-inflator.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getMirrorPath, MIRRORED_BRAIN_PATH } from '../mirror/mirror.js';
-import { NOTEBOOK_DIR } from '../../config/paths.js';
+import { PATHS } from '../../config/paths.js';
 
 /**
  * Remove inline hashtag tokens from content (Standard 123).
@@ -295,7 +295,7 @@ async function inflateSnippetFromDisk(snippet: CoalescedSnippet): Promise<string
     if (!fs.existsSync(mirrorPath)) {
       absolutePath = path.isAbsolute(snippet.source)
         ? snippet.source
-        : path.join(NOTEBOOK_DIR, snippet.source);
+        : path.join(MIRRORED_BRAIN_PATH, snippet.source);
     }
 
     if (!fs.existsSync(absolutePath)) return null;

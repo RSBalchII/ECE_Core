@@ -61,14 +61,14 @@ export interface Molecule {
 }
 
 export interface Compound {
-    id: string;          // memory_id
-    molecules: string[]; // Pointers to Molecule IDs
-    atoms: string[];     // Aggregate set of Atom IDs (formerly tags)
+    id?: string;          // memory_id — optional since compounds table is deprecated
+    molecules?: string[]; // Pointers to Molecule IDs — optional
+    atoms?: string[];     // Aggregate set of Atom IDs (formerly tags) — optional
 
-    // Metadata
-    path: string;
-    timestamp: number;
-    provenance: 'internal' | 'external' | 'quarantine';
-    molecular_signature: string; // 64-bit Hamming SimHash
+    // Metadata — all optional since compounds table is deprecated
+    path?: string;
+    timestamp?: number;
+    provenance?: 'internal' | 'external' | 'quarantine';
+    molecular_signature?: string; // 64-bit Hamming SimHash
     // NOTE: compound_body removed - content read from filesystem via path + byte offsets
 }

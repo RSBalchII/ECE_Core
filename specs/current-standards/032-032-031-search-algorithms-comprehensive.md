@@ -323,10 +323,10 @@ ANCHOR_ENABLE_STREAMING_RESULTS=false # Enable streaming endpoint
 
 ---
 
-## 2. Exact Search
+## 2. Exact Search (Deprecated — use context budget)
 
+**Status:** ⚠️ DEPRECATED — use `max_chars: 500` on `/v1/memory/search` instead  
 **Primary Algorithm:** FTS only, no physics walker  
-**Endpoint:** `POST /v1/memory/search` with prefix `exact:`  
 **Use Case:** Precise document lookup by known IDs or exact terms
 
 ### 2.1 Architecture
@@ -361,9 +361,9 @@ Exact search bypasses the expensive physics walker and semantic scoring entirely
 
 | Scenario | Example Query | Why Exact Search |
 |----------|--------------|------------------|
-| Known atom ID | `exact: atom_abc123` | Direct lookup, fastest possible |
-| Precise file search | `exact: @code authentication.md` | No semantic noise |
-| Configuration retrieval | `exact: #config #database` | Get exact tag matches only |
+
+| Precise file search | Use `max_chars: 500` on `/v1/memory/search` with `@code authentication.md` |
+| Configuration retrieval | Use `max_chars: 500` on `/v1/memory/search` with `#config #database` |
 
 ### 2.3 Performance Characteristics
 
@@ -376,10 +376,11 @@ Exact search bypasses the expensive physics walker and semantic scoring entirely
 
 ---
 
-## 3. Deep Search (Max-Recall)
+## 3. Deep Search (Max-Recall) — Now via Context Budget
 
+**Status:** ✅ INTEGRATED — trigger via `max_chars` on `/v1/memory/search`  
 **Primary Algorithm:** Multi-hop graph traversal with zero temporal decay  
-**Endpoint:** `POST /v1/memory/search-max-recall` or prefix `deep:`  
+**Endpoint:** `POST /v1/memory/search` with `max_chars: 262144` (256K)  
 **Use Case:** Comprehensive corpus coverage, research queries
 
 ### 3.1 Architecture Overview
@@ -1091,17 +1092,15 @@ interface ExploreRequest {
 - ✅ Most use cases where no specific mode is needed
 - ⚠️ Avoid for very large token budgets (>16K tokens)
 
-#### Exact Search
-- ✅ Looking up known atom IDs or file paths
-- ✅ Precise configuration or metadata queries
-- ✅ Performance-critical operations
-- ❌ Not suitable for semantic understanding
+#### Exact Search (Deprecated)
+- ⚠️ Use `max_chars: 500` on `/v1/memory/search` instead
+- For known atom IDs or precise lookups, reduce context budget on regular search
 
-#### Deep Search (Max-Recall)
+#### Deep Search (Max-Recall via Context Budget)
 - ✅ Research and comprehensive knowledge extraction
 - ✅ Queries requiring deep relationship discovery
-- ✅ Large token budgets (>16K tokens)
-- ⚠️ Use sparingly due to high memory usage
+- ✅ Set `max_chars: 262144` (256K) to enable max-recall mode
+- ⚠️ High memory usage — use sparingly
 
 #### Illuminate BFS
 - ✅ Understanding corpus narrative and structure
@@ -1125,12 +1124,17 @@ interface ExploreRequest {
 
 | Prefix | Algorithm | Endpoint | Use Case |
 |--------|-----------|----------|----------|
-| *(none)* | STAR Auto | `/v1/memory/search` | Default semantic search |
-| `exact:` | Exact Search | `/v1/memory/search` | Precise lookup |
-| `deep:` | Deep Search | `/v1/memory/search-max-recall` | Comprehensive coverage |
+| *(none)* | STAR Auto (max-recall via context budget) | `/v1/memory/search` | Default semantic search |
 | `illuminate:` (empty) | Illuminate Global | `/v1/memory/explore` | Corpus narrative |
 | `illuminate:<query>` | Explore Query-Based | `/v1/memory/explore` | Topic exploration |
 | `explore:<query>` | Explore Query-Based | `/v1/memory/explore` | Same as illuminate with query |
+| `density:` | Density Analysis | `/v1/memory/search` | Corpus analysis & RAG tiers |
+| `distill:` | Distill List/Query | `/v1/memory/search` | Distillation files |
+
+**Note:** `exact:`, `fast:`, and `deep:` prefixes were removed. Regular search handles their purpose:
+- **Exact lookup**: Use `max_chars: 500` on `/v1/memory/search` for precise, low-context results
+- **Fast search**: Use `max_chars: 2000` with `strategy: 'standard'` for speed-optimized results
+- **Deep/max-recall search**: Use `max_chars: 262144` (256K) to trigger max-recall mode with comprehensive context budget
 
 ---
 
@@ -1161,13 +1165,14 @@ curl -X POST http://localhost:3160/v1/memory/search \
   -H "Content-Type: application/json" \
   -d '{"query":"authentication database connection"}'
 
-# Exact Search
+# Regular Search (with context budget for precision)
 curl -X POST http://localhost:3160/v1/memory/search \
   -H "Content-Type: application/json" \
-  -d '{"query":"exact: atom_abc123","max_chars":500}'
+  -d '{"query":"atom_abc123","max_chars":500}'
 
 # Deep Search (Max-Recall)
-curl -X POST http://localhost:3160/v1/memory/search-max-recall \
+# Max-recall is now a context budget toggle on /v1/memory/search (use max_chars: 262144 for 256K context)
+curl -X POST http://localhost:3160/v1/memory/search \
   -H "Content-Type: application/json" \
   -d '{"query":"architecture memory optimization"}'
 

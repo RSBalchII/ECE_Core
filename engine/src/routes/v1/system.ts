@@ -72,6 +72,66 @@ export function setupSystemRoutes(app: Application) {
     }
   });
 
+  // GET /v1/health - API-consistent health check (alias for /health)
+  app.get('/v1/health', async (_req: Request, res: Response) => {
+    try {
+      // Check database connectivity
+      const result = await db.run('SELECT 1 as healthy');
+      const dbHealthy = result.rows?.[0]?.healthy === 1;
+
+      // Check critical directories exist
+      const fs = await import('fs');
+      const criticalDirs = [
+        PATHS.INBOX_DIR,
+        PATHS.EXTERNAL_INBOX_DIR,
+        PATHS.CONTEXT_DIR,
+      ];
+
+      const dirsExist = await Promise.all(
+        criticalDirs.map(async dir => {
+          try {
+            await fs.promises.access(dir, fs.constants.R_OK);
+            return true;
+          } catch {
+            return false;
+          }
+        }),
+      );
+
+      const allDirsOk = dirsExist.every(d => d);
+
+      if (dbHealthy && allDirsOk) {
+        res.status(200).json({
+          status: 'healthy',
+          timestamp: new Date().toISOString(),
+          checks: {
+            database: 'connected',
+            directories: 'accessible',
+          },
+        });
+      } else {
+        res.status(503).json({
+          status: 'unhealthy',
+          timestamp: new Date().toISOString(),
+          checks: {
+            database: dbHealthy ? 'connected' : 'disconnected',
+            directories: allDirsOk ? 'accessible' : 'some missing',
+          },
+        });
+      }
+    } catch (error: any) {
+      res.status(503).json({
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        error: error.message,
+        checks: {
+          database: 'error',
+          directories: 'unknown',
+        },
+      });
+    }
+  });
+
   // POST /v1/system/start - Start/restart the engine
   // Note: This is primarily for MCP agent control
   app.post('/v1/system/start', async (req: Request, res: Response) => {
@@ -140,13 +200,14 @@ export function setupSystemRoutes(app: Application) {
   // GET /v1/system/server-info - Get server metadata
   app.get('/v1/system/server-info', async (req: Request, res: Response) => {
     try {
+      const uptimeSeconds = Math.floor(process.uptime());
       res.json({
         status: 'success',
         server_info: {
-          is_running: serverStartTime !== null && !isServerShuttingDown,
+          is_running: !isServerShuttingDown,
           is_shutting_down: isServerShuttingDown,
-          started_at: serverStartTime?.toISOString() || null,
-          uptime_seconds: serverStartTime ? Math.floor((Date.now() - serverStartTime.getTime()) / 1000) : 0,
+          started_at: new Date(Date.now() - uptimeSeconds * 1000).toISOString(),
+          uptime_seconds: uptimeSeconds,
           port: config.PORT,
           host: config.HOST,
           version: config.VERSION,

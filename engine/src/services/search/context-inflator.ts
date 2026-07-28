@@ -3,7 +3,7 @@ import * as path from 'path';
 import { db } from '../../core/db.js';
 import type { SearchResult } from './search.js';
 import { getMirrorPath, MIRRORED_BRAIN_PATH } from '../mirror/mirror.js';
-import { NOTEBOOK_DIR } from '../../config/paths.js';
+import { PATHS } from '../../config/paths.js';
 import { processWithAdaptiveConcurrency, getOptimalBatchSize } from '../../utils/adaptive-concurrency.js';
 import { batchFetchCompounds } from '../../utils/db-batch.js';
 
@@ -266,7 +266,7 @@ export class ContextInflator {
         if (!fileExists) {
              absolutePath = path.isAbsolute(pathInfo.filePath)
                 ? pathInfo.filePath
-                : path.join(NOTEBOOK_DIR, pathInfo.filePath);
+                : path.join(MIRRORED_BRAIN_PATH, pathInfo.filePath);
 
              try {
                 await fs.promises.access(absolutePath, fs.constants.F_OK);
@@ -655,7 +655,7 @@ export class ContextInflator {
         if (!fs.existsSync(mirrorPath)) {
             absolutePath = path.isAbsolute(meta.path)
                 ? meta.path
-                : path.join(NOTEBOOK_DIR, meta.path);
+                : path.join(MIRRORED_BRAIN_PATH, meta.path);
         }
 
         if (!fs.existsSync(absolutePath)) return [];

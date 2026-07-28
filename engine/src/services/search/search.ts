@@ -32,6 +32,8 @@ import {
   expandConversationalQuery, getRelatedTagsForQuery,
 } from './query-parser.js';
 
+import { handlePrefixQuery } from './density-handler.js';
+
 import type {
   SearchResult } from './search-utils.js';
 import {
@@ -1141,7 +1143,6 @@ export async function executeMoleculeSearch(
   bucket?: string,
   buckets?: string[],
   maxChars: number = config.SEARCH.max_chars_default,
-  deep: boolean = false,
   provenance: 'internal' | 'external' | 'quarantine' | 'all' = 'all',
   explicitTags: string[] = [],
   userContext?: UserContext,
@@ -1380,6 +1381,12 @@ export async function smartChatSearch(
   useMaxRecall: boolean = false,
   userContext?: UserContext,
 ): Promise<{ context: string; results: SearchResult[]; strategy: string; splitQueries?: string[]; metadata?: any; toAgentString: () => string }> {
+
+  // Check for special query prefixes first (density:, distill:) — handle before regular search
+  const prefixResult = await handlePrefixQuery(query, buckets, maxChars, tags);
+  if (prefixResult) {
+    return { ...prefixResult, strategy: 'prefix', toAgentString: () => JSON.stringify(prefixResult) };
+  }
 
   const isLongQuery = query.length > 100;
   let initial = { results: [] as SearchResult[], context: '', toAgentString: () => '' };

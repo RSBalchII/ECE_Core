@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 // Fix module load error by using explicit relative path
 import { db } from './core/db.js';
 import { config } from './config/index.js';
-import { MODELS_DIR, PATHS, PROJECT_ROOT as EngineProjectRoot } from './config/paths.js';
+import { PATHS, PROJECT_ROOT as EngineProjectRoot } from './config/paths.js'; // MODELS_DIR removed — deprecated, no model-running features exist
 import { apiKeyAuth } from './middleware/auth.js';
 import { pathManager } from './utils/path-manager.js';
 import { StructuredLogger } from './utils/structured-logger.js';
@@ -235,39 +235,6 @@ app.get('/health', async (_req, res) => {
 // Set up API routes that can handle uninitialized state
 // Use more specific patterns to avoid conflicts with health route
 
-// Model Listing Endpoint (for UI)
-app.get('/v1/models', (req, res) => {
-  try {
-    // Use the robust path from configuration (imported statically)
-    let modelPath = config.LLM_MODEL_DIR || MODELS_DIR;
-
-    // If config has a relative path, resolve it against LOCAL_DATA_DIR
-    if (config.LLM_MODEL_DIR && !path.isAbsolute(config.LLM_MODEL_DIR)) {
-      modelPath = path.join(PATHS.LOCAL_DATA_DIR, config.LLM_MODEL_DIR);
-    }
-
-    if (!existsSync(modelPath)) {
-      return res.json({ object: 'list', data: [] });
-    }
-
-    // Read directory
-    import('fs').then(fsModule => {
-      const files = fsModule.readdirSync(modelPath).filter(file => file.endsWith('.gguf'));
-      const models = files.map(file => ({
-        id: file,
-        object: 'model',
-        created: Math.floor(Date.now() / 1000),
-        owned_by: 'anchor-os',
-      }));
-      res.json({ object: 'list', data: models });
-    });
-  } catch (error) {
-    console.error('[Engine] Error listing models:', error);
-    res.status(500).json({ error: (error as Error).message });
-  }
-});
-
-
 
 // Set up the catch-all route for UI (should be LAST)
 // Catch-all moved to end of startServer to avoid intercepting dynamic routes
@@ -381,7 +348,7 @@ async function startServer() {
 
       synonymPromise.then(async synonyms => {
         // Save to auto-generated path (cleared on shutdown)
-        const synonymPath = path.join(pathManager.getNotebookDir(), 'synonym-ring-auto.json');
+        const synonymPath = path.join(PATHS.FALLBACK_DATA_DIR, 'synonym-ring-auto.json');
         await generator.saveSynonymRings(synonyms, synonymPath);
         console.log(`[Startup] ✅ Synonym rings generated and saved to ${synonymPath}`);
       }).catch(error => {
@@ -441,7 +408,7 @@ process.on('SIGINT', async () => {
     // 1. Wipe PGlite Database (index/cache) - controlled by database.wipe_on_shutdown
     const shouldWipeDb = config.DATABASE?.WIPE_ON_SHUTDOWN === true;
     if (shouldWipeDb) {
-      const dbPath = process.env.PGLITE_DB_PATH || path.join(PATHS.LOCAL_DATA_DIR, 'context', 'context.db');
+      const dbPath = process.env.PGLITE_DB_PATH || path.join(PATHS.FALLBACK_DATA_DIR, 'context', 'context.db');
       if (existsSync(dbPath)) {
         console.log('[Shutdown] Wiping PGlite database (database.wipe_on_shutdown=true)...');
         try {
@@ -457,7 +424,7 @@ process.on('SIGINT', async () => {
     }
 
     // 2. Wipe SQLite3 context.db (anchor-core FFI database)
-    const contextDbPath = path.join(PATHS.LOCAL_DATA_DIR, 'context', 'context.db');
+    const contextDbPath = path.join(PATHS.FALLBACK_DATA_DIR, 'context', 'context.db');
     if (existsSync(contextDbPath) && shouldWipeDb) {
       console.log('[Shutdown] Wiping SQLite3 context.db (anchor-core FFI)...');
       try {
@@ -525,7 +492,7 @@ process.on('SIGINT', async () => {
     }
 
     // 6. Clear Auto-Generated Synonym Rings (derived from data, regenerated on start)
-    const synonymPath = path.join(PATHS.NOTEBOOK_DIR, 'synonym-ring-auto.json');
+    const synonymPath = path.join(PATHS.FALLBACK_DATA_DIR, 'notebook', 'synonym-ring-auto.json');
     if (existsSync(synonymPath)) {
       console.log('[Shutdown] Clearing auto-generated synonym rings...');
       try {
@@ -537,7 +504,7 @@ process.on('SIGINT', async () => {
     }
 
     // 6. Clear Tag Audit Cache (derived from tags, regenerated on demand)
-    const tagAuditPath = path.join(PATHS.LOCAL_DATA_DIR, 'notebook', 'tag-audit-cache.json');
+    const tagAuditPath = path.join(PATHS.FALLBACK_DATA_DIR, 'notebook', 'tag-audit-cache.json');
     if (existsSync(tagAuditPath)) {
       console.log('[Shutdown] Clearing tag audit cache...');
       try {

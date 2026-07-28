@@ -29,8 +29,9 @@ const ANCHOR_ROOT = path.resolve(
   path.join(homedir(), '.anchor')
 );
 
-// Define local-data directory under .anchor (Standard 110 compliance)
-const LOCAL_DATA_DIR = path.join(ANCHOR_ROOT, 'local-data');
+// Fallback base directory under .anchor for data directories.
+// When user_settings.json provides absolute paths, they take precedence.
+const FALLBACK_DATA_DIR = path.join(ANCHOR_ROOT, 'local-data');
 
 // Load user_settings.json from .anchor/ (primary) or project root (fallback)
 try {
@@ -44,22 +45,20 @@ try {
   // Ignore errors - will use defaults
 }
 
+// Helper: resolve a path from user_settings override or fallback default
+function resolveDataDir(key: string): string {
+  const override = userSettings.paths?.[key];
+  if (override && typeof override === 'string') {
+    return path.resolve(override);
+  }
+  return path.join(FALLBACK_DATA_DIR, key);
+}
+
 // Path configuration with user_settings.json overrides
 // Priority: Environment variables > user_settings.json > defaults
-export const NOTEBOOK_DIR = path.resolve(
-  process.env.NOTEBOOK_DIR ||
-  userSettings.paths?.notebook ||
-  path.join(LOCAL_DATA_DIR, 'notebook')
-);
 
-export const CONTEXT_DIR = path.resolve(
-  process.env.CONTEXT_DIR ||
-  userSettings.paths?.context ||
-  path.join(LOCAL_DATA_DIR, 'context')
-);
-
-export const MODELS_DIR = path.resolve(process.env.MODELS_DIR || path.join(LOCAL_DATA_DIR, 'models'));
-export const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(LOCAL_DATA_DIR, 'dist'));
+export const CONTEXT_DIR = process.env.CONTEXT_DIR || resolveDataDir('context');
+export const DIST_DIR = process.env.DIST_DIR || resolveDataDir('dist');
 export const BASE_PATH = PROJECT_ROOT;
 
 // Standard 110: Logs directory under .anchor for centralized logging
@@ -87,30 +86,28 @@ export const TEST_DBS_DIR = path.resolve(
 export const PATHS = {
   PROJECT_ROOT,
   ANCHOR_ROOT,
-  LOCAL_DATA_DIR,
+  FALLBACK_DATA_DIR,
   CONTEXT_DIR,
-  MODELS_DIR,
   DIST_DIR,
   BACKUPS_DIR: path.resolve(process.env.BACKUPS_DIR || userSettings.paths?.backups || path.join(ANCHOR_ROOT, 'backups')),
   LOGS_DIR,
   CONTEXT_DATA_DIR,
   TEST_DBS_DIR,
-  CONFIG_FILE: path.join(LOCAL_DATA_DIR, 'sovereign.yaml'),
+  CONFIG_FILE: path.join(FALLBACK_DATA_DIR, 'sovereign.yaml'),
   USER_SETTINGS: path.join(ANCHOR_ROOT, 'user_settings.json'),
   DATABASE_FILE: path.join(CONTEXT_DIR, 'context.db'),
-  NOTEBOOK_DIR,
   // Standard 110: Centralized user data paths under local-data/
-  INBOX_DIR: path.resolve(process.env.INBOX_DIR || userSettings.paths?.inbox || path.join(LOCAL_DATA_DIR, 'inbox')),
-  EXTERNAL_INBOX_DIR: path.resolve(process.env.EXTERNAL_INBOX_DIR || userSettings.paths?.external_inbox || path.join(LOCAL_DATA_DIR, 'external-inbox')),
-  DISTILLS_DIR: path.resolve(process.env.DISTILLS_DIR || userSettings.paths?.distills || path.join(LOCAL_DATA_DIR, 'distills')),
-  MIRRORED_BRAIN_DIR: path.resolve(process.env.MIRRORED_BRAIN_DIR || userSettings.paths?.mirrored_brain || path.join(LOCAL_DATA_DIR, 'mirrored_brain')),
-  SESSIONS_DIR: path.resolve(process.env.SESSIONS_DIR || userSettings.paths?.sessions || path.join(LOCAL_DATA_DIR, 'sessions')),
+  INBOX_DIR: path.resolve(process.env.INBOX_DIR || userSettings.paths?.inbox || path.join(FALLBACK_DATA_DIR, 'inbox')),
+  EXTERNAL_INBOX_DIR: path.resolve(process.env.EXTERNAL_INBOX_DIR || userSettings.paths?.external_inbox || path.join(FALLBACK_DATA_DIR, 'external-inbox')),
+  DISTILLS_DIR: path.resolve(process.env.DISTILLS_DIR || userSettings.paths?.distills || path.join(FALLBACK_DATA_DIR, 'distills')),
+  MIRRORED_BRAIN_DIR: path.resolve(process.env.MIRRORED_BRAIN_DIR || userSettings.paths?.mirrored_brain || path.join(ANCHOR_ROOT, 'mirror_brain')),
+  SESSIONS_DIR: path.resolve(process.env.SESSIONS_DIR || userSettings.paths?.sessions || path.join(FALLBACK_DATA_DIR, 'sessions')),
   LIBRARIES_DIR: path.join(CONTEXT_DIR, 'libraries'),
   MIRRORS_DIR: path.join(CONTEXT_DIR, 'mirrors'),
   ENGINE_BIN: path.join(PROJECT_ROOT, 'engine', 'bin'),
   ENGINE_SRC: path.join(PROJECT_ROOT, 'engine', 'src'),
   ENGINE_DIST: path.join(PROJECT_ROOT, 'engine', 'dist'),
-  ENGINE_CONTEXT: path.join(LOCAL_DATA_DIR, 'engine-context'),
+  ENGINE_CONTEXT: path.join(FALLBACK_DATA_DIR, 'engine-context'),
   ENGINE_PLUGINS: path.join(PROJECT_ROOT, 'engine', 'plugins'),
   DESKTOP_OVERLAY_SRC: path.join(PROJECT_ROOT, 'packages', 'desktop-overlay', 'src'),
   DESKTOP_OVERLAY_DIST: path.join(PROJECT_ROOT, 'packages', 'desktop-overlay', 'dist'),
@@ -121,9 +118,9 @@ try {
   fs.mkdirSync(ANCHOR_ROOT, { recursive: true });
 
   // Create subdirectories if they don't exist
-  const subdirs = ['inbox', 'external-inbox', 'distills', 'mirrored_brain', 'sessions', 'logs', 'backups', 'notebook', 'context', 'models', 'dist', 'context_data', 'test-dbs'];
+  const subdirs = ['inbox', 'external-inbox', 'distills', 'mirrored_brain', 'sessions', 'logs', 'backups', 'context', 'models', 'dist', 'context_data', 'test-dbs'];
   for (const subdir of subdirs) {
-    const subdirPath = path.join(LOCAL_DATA_DIR, subdir);
+    const subdirPath = path.join(FALLBACK_DATA_DIR, subdir);
     if (!fs.existsSync(subdirPath)) {
       fs.mkdirSync(subdirPath, { recursive: true });
     }
@@ -136,16 +133,6 @@ try {
     if (!fs.existsSync(subdirPath)) {
       fs.mkdirSync(subdirPath, { recursive: true });
     }
-  }
-
-  // Also ensure notebook directories exist (for backward compatibility)
-  try {
-    fs.mkdirSync(NOTEBOOK_DIR, { recursive: true });
-    fs.mkdirSync(path.join(NOTEBOOK_DIR, 'inbox'), { recursive: true });
-    fs.mkdirSync(path.join(NOTEBOOK_DIR, 'external-inbox'), { recursive: true });
-    fs.mkdirSync(path.join(NOTEBOOK_DIR, 'distills'), { recursive: true });
-  } catch (e) {
-    // Ignore errors - directories may already exist
   }
 } catch (e) {
   // Ignore errors - directories may already exist

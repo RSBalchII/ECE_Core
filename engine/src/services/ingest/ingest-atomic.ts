@@ -13,7 +13,9 @@ export class AtomicIngestService {
         onProgress?: (step: number, totalSteps: number, description: string) => void,
     ) {
         const startTime = Date.now();
-        const filename = compound.path.split(/[/\\]/).pop() || compound.path;
+        // Compound fields are optional since compounds table is deprecated — use fallbacks
+        const compoundPath = compound.path || '';
+        const filename = compoundPath.split(/[/\\]/).pop() || compound.id || 'unnamed';
 
         console.log(`[AtomicIngest] ⏱️ START Persisting: ${filename} (${molecules.length} molecules, ${atoms.length} atoms)`);
 
@@ -22,7 +24,7 @@ export class AtomicIngestService {
             const provenanceType = compound.provenance || 'internal';
             // Ensure provenanceType is only 'internal' or 'external' (not 'quarantine')
             const validProvenanceType = (provenanceType as 'internal' | 'external') || 'internal';
-        const signature = compound.molecular_signature || this.generateCompoundSignature(compound.id, compound.path);
+        const signature = compound.molecular_signature || this.generateCompoundSignature(compound.id ?? '', compoundPath);
         await this._ingestResultInTransaction(
             compound, molecules, atoms, buckets, validProvenanceType, signature, onProgress
         );
@@ -41,6 +43,8 @@ export class AtomicIngestService {
         molecularSignature: string,
         onProgress?: (step: number, totalSteps: number, description: string) => void,
     ) {
+        // Compound fields are optional since compounds table is deprecated — use fallbacks
+        const compoundPath = compound.path || '';
         const totalSteps = 5; // Total persistence steps (removed compound persist)
         let currentStep = 0;
 
@@ -70,15 +74,18 @@ export class AtomicIngestService {
         // 2. Persist Molecules
         const moleculesStart = Date.now();
         if (molecules.length > 0) {
-            await this.batchWriteMolecules(molecules, molecularSignature, provenanceType, compound.path);
+            await this.batchWriteMolecules(molecules, molecularSignature, provenanceType, compoundPath);
         }
         console.log(`[AtomicIngest] ⏱️ Molecules persisted: ${((Date.now() - moleculesStart) / 1000).toFixed(2)}s`);
         onProgress?.(++currentStep, totalSteps, `Persisted ${molecules.length} molecules`);
 
-        // 3. Persist Atom Edges (Graph)
+        // 3. Persist Atom Edges (Graph) — compound.atoms is optional since compounds table deprecated
         const edgesStart = Date.now();
         if (compound.atoms && compound.atoms.length > 0) {
-            await this.batchWriteEdges(compound.id, compound.atoms);
+            await this.batchWriteEdges(compound.id!, compound.atoms);
+        } else {
+            // No atoms to link — skip edge creation gracefully
+            console.log(`[AtomicIngest] ⏱️ No edges to persist (no compound.atoms)`);
         }
         console.log(`[AtomicIngest] ⏱️ Edges persisted: ${Date.now() - edgesStart}ms`);
 
@@ -312,6 +319,9 @@ export class AtomicIngestService {
         provenanceType: 'internal' | 'external',
     ) {
         // 1. Write Compound Row (pointer-only, no content) — uses molecule-level signature/provenance
+        const cId = compound.id || crypto.randomUUID();
+        const cPath = compound.path || '';
+        const cTimestamp = compound.timestamp || Date.now();
         await db.run(
             `INSERT INTO atoms (id, source_path, timestamp, simhash, embedding, provenance, buckets, tags, compound_id, start_byte, end_byte)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -327,15 +337,15 @@ export class AtomicIngestService {
                start_byte = EXCLUDED.start_byte,
                end_byte = EXCLUDED.end_byte`,
             [
-                compound.id,
-                compound.path,
-                compound.timestamp,
+                cId,
+                cPath,
+                cTimestamp,
                 molecularSignature || '0',
                 JSON.stringify(this.zeroVector()),
                 provenanceType,
                 buckets,
                 atoms.map(a => a.label),
-                compound.id,
+                cId,
                 0,
                 0, // end_byte - not applicable for compound-level atom entry
             ],
@@ -371,8 +381,8 @@ export class AtomicIngestService {
 
                 values.push(
                     m.id,
-                    compound.path,
-                    m.timestamp || compound.timestamp,
+                    cPath,
+                    m.timestamp || cTimestamp,
                     molecularSignature,
                     JSON.stringify(this.zeroVector()),
                     provenanceType,

@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.0.0] - 2025-07-xx
+
+### Breaking Changes - Search API
+- Removed `exact:`, `fast:`, and `deep:` prefix support from search queries — these prefixes were aliases for specific backend behaviors that are no longer needed
+- The `/v1/memory/search-max-recall` endpoint remains available but is not required; max-recall behavior can be achieved on regular search by setting a high context budget (e.g., `max_chars: 262144`)
+- Max-recall is now integrated into regular search as a context budget toggle — set `max_chars` to a large value (≥256K) to get comprehensive retrieval across all phases
+
+### Fixes - Search API
+- Removed dead code: unused `deep` boolean parameter from search.ts, dead `searchType` property from density PREFIXES object in index.html, duplicate closing brace in PREFIXES object initialization
+
 ## [5.1.0] - 2026-05-19 — Architecture Clarifications (Standards 027, 028, 029, 031, 051)
 
 ### 📚 Architecture Standards & Documentation

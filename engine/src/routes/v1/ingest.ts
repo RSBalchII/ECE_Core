@@ -107,7 +107,7 @@ export function setupIngestRoutes(app: Application) {
         try {
           // Generate a proper relative path for the mirror (not absolute-style @inbox/...)
           const ext = '.md'; // Default extension for text uploads
-          const safeId = compound.id.replace(/[^a-zA-Z0-9]/g, '-');
+          const safeId = (compound.id || '').replace(/[^a-zA-Z0-9]/g, '-');
           const mirrorPath = `inbox/${Date.now()}_${safeId}.${ext}`;
 
           // Write raw content to mirrored brain filesystem using writeContentToMirror helper

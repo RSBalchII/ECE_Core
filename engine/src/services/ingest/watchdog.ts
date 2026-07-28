@@ -10,11 +10,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { db } from '../../core/db.js';
-import { NOTEBOOK_DIR, PROJECT_ROOT, PATHS } from '../../config/paths.js';
+import { PROJECT_ROOT, PATHS } from '../../config/paths.js';
 import { ingestAtoms } from './ingest.js';
 import { config } from '../../config/index.js';
 import { pathManager } from '../../utils/path-manager.js';
 import { systemStatus } from '../system-status.js';
+import { StructuredLogger } from '../../utils/structured-logger.js';
 
 let watcher: chokidar.FSWatcher | null = null;
 const IGNORE_PATTERNS = /(^|[\/\\])\../; // Ignore dotfiles
@@ -36,7 +37,7 @@ async function triggerPostIngestionSynonyms() {
 
     // Set new timeout to generate synonyms after ingestion stops
     ingestionTimeout = setTimeout(async () => {
-        console.log('[Watchdog] Post-ingestion synonym generation starting...');
+        StructuredLogger.info('WATCHDOG_POST_INGESTION_SYNONYMS_START', {});
         try {
             const { AutoSynonymGenerator } = await import('../synonyms/auto-synonym-generator.js');
             const generator = new AutoSynonymGenerator();
@@ -47,9 +48,9 @@ async function triggerPostIngestionSynonyms() {
             }
             const synonymPath = path.join(synonymDir, 'synonym-ring-auto.json');
             await generator.saveSynonymRings(synonyms, synonymPath);
-            console.log(`[Watchdog] ✅ Post-ingestion synonym rings saved to ${synonymPath}`);
+            StructuredLogger.info('WATCHDOG_POST_INGESTION_SYNONYMS_COMPLETE', { path: synonymPath });
         } catch (error: any) {
-            console.warn('[Watchdog] Post-ingestion synonym generation failed:', error.message);
+            StructuredLogger.warn('WATCHDOG_POST_INGESTION_SYNONYMS_FAILED', { error: error.message });
         }
     }, INGESTION_DEBOUNCE_MS);
 }
@@ -57,45 +58,35 @@ async function triggerPostIngestionSynonyms() {
 export async function startWatchdog(customPaths?: string[]): Promise<void> {
     if (watcher) return;
 
-    // If custom paths provided, use them instead of default inbox/external-inbox
+    // If custom paths provided, use them instead of inbox/external-inbox
     const pathsToUse = customPaths && customPaths.length > 0 ? customPaths : [];
 
-    if (!fs.existsSync(NOTEBOOK_DIR)) {
-        console.warn(`[Watchdog] Notebook directory not found: ${NOTEBOOK_DIR}. Skipping watch.`);
-        return;
-    }
-
-    // If no paths provided, use defaults (inbox and external-inbox)
+    // Verify inbox and external-inbox exist (Standard 051: Ephemeral Index)
     if (pathsToUse.length === 0) {
         const inbox = PATHS.INBOX_DIR;
         const externalInbox = PATHS.EXTERNAL_INBOX_DIR;
 
-        // Auto-create inbox directories if missing (Standard 051: Ephemeral Index)
-        // These are gitignored and should be created on-demand
         if (!fs.existsSync(inbox)) {
             fs.mkdirSync(inbox, { recursive: true });
-            console.log(`[Watchdog] Created inbox directory: ${inbox}`);
+            StructuredLogger.info('WATCHDOG_CREATED_INBOX', { path: inbox });
         }
         if (!fs.existsSync(externalInbox)) {
             fs.mkdirSync(externalInbox, { recursive: true });
-            console.log(`[Watchdog] Created external-inbox directory: ${externalInbox}`);
+            StructuredLogger.info('WATCHDOG_CREATED_EXTERNAL_INBOX', { path: externalInbox });
         }
 
         // P0 Critical Fix: Auto-enable watchdog when extra_paths is configured
         const extraPaths = config.WATCHER_EXTRA_PATHS || [];
         if (extraPaths.length > 0) {
-            console.log(`🔍 Watchdog auto-enabled: watching ${extraPaths.length} extra path(s)`);
-            extraPaths.forEach((p: string) => {
-                console.log(`   • ${p}`);
-            });
+            StructuredLogger.info('WATCHDOG_AUTO_ENABLED', { extraPathCount: extraPaths.length, paths: extraPaths });
         }
 
-        console.log(`[Watchdog] Starting watch on: ${inbox} and ${externalInbox}`);
+        StructuredLogger.info('WATCHDOG_STARTING', { inbox, externalInbox });
 
         // Validate extra paths (already logged above if configured)
         const validExtraPaths = extraPaths.filter((p: string) => {
             if (fs.existsSync(p)) return true;
-            console.warn(`[Watchdog] Extra path not found: ${p}`);
+            StructuredLogger.warn('WATCHDOG_EXTRA_PATH_NOT_FOUND', { path: p });
             return false;
         });
 
@@ -104,9 +95,9 @@ export async function startWatchdog(customPaths?: string[]): Promise<void> {
         // Custom paths provided - validate they exist
         for (const p of pathsToUse) {
             if (!fs.existsSync(p)) {
-                console.warn(`[Watchdog] Path does not exist: ${p}`);
+                StructuredLogger.warn('WATCHDOG_PATH_NOT_FOUND', { path: p });
             } else {
-                console.log(`[Watchdog] Watching custom path: ${p}`);
+                StructuredLogger.info('WATCHDOG_WATCHING_CUSTOM_PATH', { path: p });
             }
         }
     }
@@ -121,18 +112,27 @@ export async function startWatchdog(customPaths?: string[]): Promise<void> {
         },
     });
 
-    watcher
-        .on('add', path => processFile(path, 'add'))
-        .on('change', path => processFile(path, 'change'))
-        .on('addDir', path => console.log(`[Watchdog] Detected new directory: ${path}`));
+    watcher.on('add', path => processFile(path, 'add'));
+    watcher.on('change', path => processFile(path, 'change'));
+    watcher.on('addDir', path => StructuredLogger.info('WATCHDOG_NEW_DIRECTORY', { path }));
+
+    // CRITICAL FIX: Trigger initial ingestion of all existing files immediately when polling starts.
+    // This couples ingestion with polling so no file gets missed on startup.
+    triggerManualIngest().then((result) => {
+        if (result.status === 'success') {
+            StructuredLogger.info('WATCHDOG_INITIAL_SCAN_COMPLETE', result);
+        } else {
+            StructuredLogger.error('WATCHDOG_INITIAL_SCAN_FAILED', new Error(result.message));
+        }
+    }).catch((err) => {
+        StructuredLogger.error('WATCHDOG_INITIAL_INGESTION_ERROR', err);
+    });
 
     // .on('unlink', (path) => deleteFile(path)); // Implement delete logic later
 }
 
 // Dynamic Path Management
 export function getWatchedPaths(): string[] {
-    if (!watcher) return [];
-
     return [PATHS.INBOX_DIR, PATHS.EXTERNAL_INBOX_DIR, ...(config.WATCHER_EXTRA_PATHS || [])];
 }
 
@@ -144,9 +144,9 @@ export async function addWatchPath(newPath: string): Promise<boolean> {
     // Add to watcher if it's running
     if (watcher) {
         watcher.add(newPath);
-        console.log(`[Watchdog] Added dynamic watch path: ${newPath}`);
+        StructuredLogger.info(`[Watchdog] Added dynamic watch path: ${newPath}`);
     } else {
-        console.log(`[Watchdog] Path saved for later (watchdog not running): ${newPath}`);
+        StructuredLogger.info(`[Watchdog] Path saved for later (watchdog not running);: ${newPath}`);
     }
 
     // Update Config (In-Memory)
@@ -167,11 +167,11 @@ export async function addWatchPath(newPath: string): Promise<boolean> {
                 if (!settings.watcher.extra_paths.includes(newPath)) {
                     settings.watcher.extra_paths.push(newPath);
                     await fs.promises.writeFile(settingsPath, JSON.stringify(settings, null, 4));
-                    console.log('[Watchdog] Persisted path to user_settings.json');
+                    StructuredLogger.info('[Watchdog] Persisted path to user_settings.json');
                 }
             }
         } catch (e: any) {
-            console.error(`[Watchdog] Failed to persist settings: ${e.message}`);
+            StructuredLogger.error(`[Watchdog] Failed to persist settings: ${e.message}`);
         }
     }
 
@@ -181,10 +181,19 @@ export async function addWatchPath(newPath: string): Promise<boolean> {
 export async function removeWatchPath(pathToRemove: string): Promise<boolean> {
     // Remove from chokidar watcher if it exists (watchdog is running)
     if (watcher) {
-        watcher.unwatch(pathToRemove);
-        console.log(`[Watchdog] Removed watch path: ${pathToRemove}`);
+        // Use a timeout to prevent unwatch from hanging indefinitely (test showed 10s+ hangs)
+        const unwatchPromise = watcher.unwatch(pathToRemove);
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('unwatch timed out after 5s')), 5000);
+        });
+        try {
+            await Promise.race([unwatchPromise, timeoutPromise]);
+            StructuredLogger.info(`[Watchdog] Removed watch path: ${pathToRemove}`);
+        } catch (e: any) {
+            StructuredLogger.warn(`[Watchdog] unwatch timed out for ${pathToRemove} — continuing anyway: ${e.message}`);
+        }
     } else {
-        console.log(`[Watchdog] Path marked for removal (watchdog not running): ${pathToRemove}`);
+        StructuredLogger.info(`[Watchdog] Path marked for removal (watchdog not running);: ${pathToRemove}`);
     }
 
     // Update Config (In-Memory)
@@ -201,11 +210,11 @@ export async function removeWatchPath(pathToRemove: string): Promise<boolean> {
                 if (settings.watcher && settings.watcher.extra_paths) {
                     settings.watcher.extra_paths = settings.watcher.extra_paths.filter((p: string) => p !== pathToRemove);
                     await fs.promises.writeFile(settingsPath, JSON.stringify(settings, null, 4));
-                    console.log('[Watchdog] Persisted path removal to user_settings.json');
+                    StructuredLogger.info('[Watchdog] Persisted path removal to user_settings.json');
                 }
             }
         } catch (e: any) {
-            console.error(`[Watchdog] Failed to persist settings removal: ${e.message}`);
+            StructuredLogger.error(`[Watchdog] Failed to persist settings removal: ${e.message}`);
         }
     }
 
@@ -219,7 +228,7 @@ export async function stopWatchdog(): Promise<void> {
     if (watcher) {
         await watcher.close();
         watcher = null;
-        console.log('[Watchdog] Stopped watching files');
+        StructuredLogger.info('[Watchdog] Stopped watching files');
     }
 }
 
@@ -241,8 +250,8 @@ export async function triggerManualIngest(): Promise<{ status: string; message: 
         const inbox = PATHS.INBOX_DIR;
         const externalInbox = PATHS.EXTERNAL_INBOX_DIR;
 
-        console.log(`[ManualIngest] Inbox directory: ${inbox}`);
-        console.log(`[ManualIngest] External inbox directory: ${externalInbox}`);
+        StructuredLogger.info(`[ManualIngest] Inbox directory: ${inbox}`);
+        StructuredLogger.info(`[ManualIngest] External inbox directory: ${externalInbox}`);
 
         if (!fs.existsSync(inbox)) {
             return { status: 'error', message: 'Inbox directory not found' };
@@ -253,7 +262,7 @@ export async function triggerManualIngest(): Promise<{ status: string; message: 
 
         // Scan inbox directory
         const files = fs.readdirSync(inbox, { recursive: true }) as string[];
-        console.log(`[ManualIngest] Found ${files.length} items in inbox`);
+        StructuredLogger.info(`[ManualIngest] Found ${files.length} items in inbox`);
 
         for (const file of files) {
             const filePath = path.join(inbox, file);
@@ -263,19 +272,19 @@ export async function triggerManualIngest(): Promise<{ status: string; message: 
             if (IGNORE_PATTERNS.test(file)) continue;
 
             filesProcessed++;
-            console.log(`[ManualIngest] Processing file ${filesProcessed}: ${filePath}`);
+            StructuredLogger.info(`[ManualIngest] Processing file ${filesProcessed}: ${filePath}`);
 
             // Trigger actual ingestion by calling processFile
             try {
                 const result = await processFile(filePath, 'manual');
                 if (result.ingested) {
                     filesIngested++;
-                    console.log(`[ManualIngest] Successfully ingested file ${filesIngested}: ${filePath}`);
+                    StructuredLogger.info(`[ManualIngest] Successfully ingested file ${filesIngested}: ${filePath}`);
                 } else {
-                    console.log(`[ManualIngest] Skipped file ${filePath}: ${result.reason}`);
+                    StructuredLogger.info(`[ManualIngest] Skipped file ${filePath}: ${result.reason}`);
                 }
             } catch (error: any) {
-                console.error(`[ManualIngest] Failed to process ${file}:`, error.message);
+                StructuredLogger.error(`[ManualIngest] Failed to process ${file}:`, error.message);
             }
         }
 
@@ -297,7 +306,7 @@ export async function triggerManualIngest(): Promise<{ status: string; message: 
                         filesIngested++;
                     }
                 } catch (error: any) {
-                    console.error(`[ManualIngest] Failed to process ${file}:`, error.message);
+                    StructuredLogger.error(`[ManualIngest] Failed to process ${file}:`, error.message);
                 }
             }
         }
@@ -306,13 +315,13 @@ export async function triggerManualIngest(): Promise<{ status: string; message: 
         const extraPaths = config.WATCHER_EXTRA_PATHS || [];
         for (const extraPath of extraPaths) {
             if (!fs.existsSync(extraPath)) {
-                console.log(`[ManualIngest] Extra path does not exist: ${extraPath}`);
+                StructuredLogger.info(`[ManualIngest] Extra path does not exist: ${extraPath}`);
                 continue;
             }
 
-            console.log(`[ManualIngest] Scanning extra path: ${extraPath}`);
+            StructuredLogger.info(`[ManualIngest] Scanning extra path: ${extraPath}`);
             const extraFiles = fs.readdirSync(extraPath, { recursive: true }) as string[];
-            console.log(`[ManualIngest] Found ${extraFiles.length} items in extra path`);
+            StructuredLogger.info(`[ManualIngest] Found ${extraFiles.length} items in extra path`);
 
             for (const file of extraFiles) {
                 const filePath = path.join(extraPath, file);
@@ -321,18 +330,18 @@ export async function triggerManualIngest(): Promise<{ status: string; message: 
                 if (IGNORE_PATTERNS.test(file)) continue;
 
                 filesProcessed++;
-                console.log(`[ManualIngest] Processing file ${filesProcessed}: ${filePath}`);
+                StructuredLogger.info(`[ManualIngest] Processing file ${filesProcessed}: ${filePath}`);
 
                 try {
                     const result = await processFile(filePath, 'manual');
                     if (result.ingested) {
                         filesIngested++;
-                        console.log(`[ManualIngest] Successfully ingested file ${filesIngested}: ${filePath}`);
+                        StructuredLogger.info(`[ManualIngest] Successfully ingested file ${filesIngested}: ${filePath}`);
                     } else {
-                        console.log(`[ManualIngest] Skipped file ${filePath}: ${result.reason}`);
+                        StructuredLogger.info(`[ManualIngest] Skipped file ${filePath}: ${result.reason}`);
                     }
                 } catch (error: any) {
-                    console.error(`[ManualIngest] Failed to process ${file}:`, error.message);
+                    StructuredLogger.error(`[ManualIngest] Failed to process ${file}:`, error.message);
                 }
             }
         }
@@ -353,7 +362,7 @@ export async function triggerManualIngest(): Promise<{ status: string; message: 
         errorMessage += '. Permission denied. Please check directory permissions.';
       }
 
-      console.error('[Watchdog] Manual ingest error:', errorMessage);
+      StructuredLogger.error('[Watchdog] Manual ingest error:', errorMessage);
 
       return {
             status: 'error',
@@ -374,21 +383,21 @@ const atomizer = new AtomizerService();
 const atomicIngest = new AtomicIngestService();
 
 async function processFile(filePath: string, event: string): Promise<{ ingested: boolean; reason?: string }> {
-    console.log(`[Watchdog] Starting processFile: ${filePath}, event: ${event}`);
+    StructuredLogger.info(`[Watchdog] Starting processFile: ${filePath}, event: ${event}`);
 
     // Accept markdown, text, YAML, CSV, JSON, JSONL, and HTML files
     if (!filePath.endsWith('.md') && !filePath.endsWith('.txt') && !filePath.endsWith('.yaml') &&
         !filePath.endsWith('.csv') && !filePath.endsWith('.json') && !filePath.endsWith('.jsonl') &&
         !filePath.endsWith('.html') && !filePath.endsWith('.htm')) {
-        console.log(`[Watchdog] Skipping: ${filePath} - unsupported extension`);
+        StructuredLogger.info(`[Watchdog] Skipping: ${filePath} - unsupported extension`);
         return { ingested: false, reason: 'unsupported_extension' };
     }
     if (filePath.includes('mirrored_brain')) {
-        console.log(`[Watchdog] Skipping: ${filePath} - mirrored_brain path`);
+        StructuredLogger.info(`[Watchdog] Skipping: ${filePath} - mirrored_brain path`);
         return { ingested: false, reason: 'mirrored_brain' };
     }
 
-    console.log(`[Watchdog] Detected ${event}: ${filePath}`);
+    StructuredLogger.info(`[Watchdog] Detected ${event}: ${filePath}`);
 
     // Set system status to ingesting
     systemStatus.setState('ingesting', `Processing: ${path.basename(filePath)}`);
@@ -397,9 +406,10 @@ async function processFile(filePath: string, event: string): Promise<{ ingested:
         const buffer = await fs.promises.readFile(filePath);
         if (buffer.length === 0) return { ingested: false, reason: 'empty_file' };
 
-        // 1. Calculate File Hash (Raw)
+        // Calculate File Hash and Relative Path using correct source directory
         const fileHash = crypto.createHash('sha256').update(buffer).digest('hex');
-        const relativePath = path.relative(NOTEBOOK_DIR, filePath);
+        const sourceDir = filePath.includes('external-inbox') ? PATHS.EXTERNAL_INBOX_DIR : PATHS.INBOX_DIR;
+        const relativePath = path.relative(sourceDir, filePath);
         const content = buffer.toString('utf8');
 
         // 2. Check Source Table (Change Detection)
@@ -408,7 +418,7 @@ async function processFile(filePath: string, event: string): Promise<{ ingested:
 
         // Handle potential null result
         if (!sourceResult || !sourceResult.rows) {
-            console.log(`[Watchdog] No existing record for path: ${relativePath}`);
+            StructuredLogger.info(`[Watchdog] No existing record for path: ${relativePath}`);
         }
 
         if (sourceResult && sourceResult.rows && sourceResult.rows.length > 0) {
@@ -423,13 +433,13 @@ async function processFile(filePath: string, event: string): Promise<{ ingested:
                 existingHash = row.hash;
             }
             if (existingHash === fileHash) {
-                console.log(`[Watchdog] File unchanged (hash match): ${relativePath}`);
+                StructuredLogger.info(`[Watchdog] File unchanged (hash match);: ${relativePath}`);
                 systemStatus.setState('idle');
                 return { ingested: false, reason: 'hash_match' };
             }
         }
 
-        console.log(`[Watchdog] Processing Pipeline: ${relativePath}`);
+        StructuredLogger.info(`[Watchdog] Processing Pipeline: ${relativePath}`);
         systemStatus.setProgress(0, 100, 'Starting ingestion...');
 
         // 3. DETERMINE METADATA
@@ -473,7 +483,7 @@ async function processFile(filePath: string, event: string): Promise<{ ingested:
 
         // Skip ingestion if transient data was detected
         if (!atomizeResult) {
-            console.log(`[Watchdog] ⚠️ SKIP: ${relativePath} - Transient data, skipping ingestion`);
+            StructuredLogger.info(`[Watchdog] ⚠️ SKIP: ${relativePath} - Transient data, skipping ingestion`);
             return { ingested: false, reason: 'transient_data' };
         }
 
@@ -508,25 +518,25 @@ async function processFile(filePath: string, event: string): Promise<{ ingested:
             ],
         );
 
-        console.log(`[Watchdog] Sync Complete: ${relativePath}`);
+        StructuredLogger.info(`[Watchdog] Sync Complete: ${relativePath}`);
 
         // Standard 016: Invalidate search cache after successful watchdog ingestion
         try {
             const { searchCache } = await import('../search/search.js');
             searchCache.clear();
-            console.log('[Watchdog] ✅ Search cache invalidated after ingestion');
+            StructuredLogger.info('[Watchdog] ✅ Search cache invalidated after ingestion');
         } catch (e) {
-            console.warn('[Watchdog] Could not invalidate search cache:', e);
+            StructuredLogger.warn('[Watchdog] Could not invalidate search cache:', e as any);
         }
 
         // Trigger Mirror: write cleaned content from original file (Standard 051 - Pointer Only)
         // Since compound_body is removed, we read from the original file and sanitize
-        console.log('[Watchdog] Preparing mirror write from original file...');
-        console.log(`[Watchdog] compound exists: ${!!compound}`);
-        console.log(`[Watchdog] provenance: ${provenance}`);
+        StructuredLogger.info('[Watchdog] Preparing mirror write from original file...');
+        StructuredLogger.info(`[Watchdog] compound exists: ${!!compound}`);
+        StructuredLogger.info(`[Watchdog] provenance: ${provenance}`);
 
         try {
-            console.log('[Watchdog] Importing mirror and atomizer modules...');
+            StructuredLogger.info('[Watchdog] Importing mirror and atomizer modules...');
             const { writeMirroredFile } = await import('../mirror/mirror.js');
             const fs = await import('fs');
             
@@ -538,12 +548,12 @@ async function processFile(filePath: string, event: string): Promise<{ ingested:
             const atomizer = new AtomizerService();
             const cleanContent = atomizer.sanitize(originalContent, filePath);
             
-            console.log('[Watchdog] Writing sanitized content to mirror...');
+            StructuredLogger.info('[Watchdog] Writing sanitized content to mirror...');
             await writeMirroredFile(relativePath, cleanContent, provenance);
-            console.log('[Watchdog] ✓ Mirror write completed successfully');
+            StructuredLogger.info('[Watchdog] ✓ Mirror write completed successfully');
         } catch (e: any) {
-            console.error('[Watchdog] ✗ Mirror write failed:', e.message);
-            console.error('[Watchdog] Stack trace:', e.stack);
+            StructuredLogger.error(`[Watchdog] ✗ Mirror write failed: ${e.message}`, undefined, { original: String(e) });
+            StructuredLogger.debug('[Watchdog] Stack trace', e);
         }
 
         // Trigger post-ingestion synonym generation (debounced)
@@ -553,7 +563,7 @@ async function processFile(filePath: string, event: string): Promise<{ ingested:
         if (typeof (global as any).gc === 'function') (global as any).gc();
         systemStatus.setState('idle');
         systemStatus.clearProgress();
-        console.log('[SystemStatus] Ingestion complete, system ready for search');
+        StructuredLogger.info('[SystemStatus] Ingestion complete, system ready for search');
 
         return { ingested: true };
 
@@ -570,10 +580,10 @@ async function processFile(filePath: string, event: string): Promise<{ ingested:
         errorMessage += '. Token limit exceeded - content may be too large for ingestion.';
       }
 
-      console.error(`[Watchdog] ${errorMessage}`);
+      StructuredLogger.error(`[Watchdog] ${errorMessage}`);
       systemStatus.setState('idle');
       systemStatus.clearProgress();
 
       return { ingested: false, reason: 'processing_error' };
     }
-}
+}""

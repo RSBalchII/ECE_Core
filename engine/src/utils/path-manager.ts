@@ -114,24 +114,10 @@ export class PathManager {
   }
 
   /**
-   * Get notebook directory path
-   */
-  public getNotebookDir(): string {
-    return PATHS.NOTEBOOK_DIR;
-  }
-
-  /**
    * Get context directory path (Internal Configuration/Tags)
    */
   public getContextDir(): string {
     return PATHS.CONTEXT_DIR;
-  }
-
-  /**
-   * Get models directory path
-   */
-  public getModelsDir(): string {
-    return PATHS.MODELS_DIR;
   }
 
   /**

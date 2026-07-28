@@ -389,6 +389,48 @@ export const logWithContext = {
 // Export the base logger as well
 export { logger, metricsTracker };
 
+/**
+ * LRU Cache Logger - Writes to dedicated .log file, NO console output.
+ * Suppresses the memory-pressure eviction noise from lru-cache.ts
+ */
+import { createLogger as createWinstonLogger } from 'winston';
+const LRUCACHE_LOG_FILE = path.join(LOGS_DIR, 'lru_cache.log');
+
+// Ensure LRU log directory exists
+if (!fs.existsSync(LRUCACHE_LOG_FILE.replace(/[^/]+$/, ''))) {
+  fs.mkdirSync(path.dirname(LRUCACHE_LOG_FILE), { recursive: true });
+}
+
+export const LRUCacheLogger = createWinstonLogger({
+  level: 'info', // Only info and above — suppress debug/silly noise
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: false }), // No stack traces for LRU messages
+    winston.format.json(),
+  ),
+  transports: [
+    new DailyRotateFile({
+      filename: 'lru_cache.log',
+      datePattern: 'YYYY-MM-DD',
+      zippedArchive: false,
+      maxSize: '5m',
+      maxFiles: '3d',
+      format: winston.format.combine(
+        winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+        winston.format.printf(({ timestamp, level, message, ...metadata }) => {
+          const metaStr = Object.keys(metadata).length > 0 ? ` ${JSON.stringify(metadata)}` : '';
+          return `[${timestamp}] [${level.toUpperCase()}] LRUCACHE: ${message}${metaStr}`;
+        }),
+      ),
+    }),
+  ],
+});
+
+// Helper to log LRU events without console noise
+export function logLRU(level: 'info' | 'warn', message: string, meta?: Record<string, any>): void {
+  LRUCacheLogger[level](message, meta || {});
+}
+
 // Export a function to get formatted metrics for monitoring endpoints
 export function getFormattedMetrics(): string {
   const metrics = metricsTracker.getAllMetrics();

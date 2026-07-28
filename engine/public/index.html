@@ -515,12 +515,10 @@
 
             // Search prefixes: route query to the right algorithm
             const PREFIXES = {
-                'distill:':    { algo: 'distill',    label: 'Distill (semantic compression)' },
-                'illuminate:': { algo: 'illuminate', label: 'Illuminate (BFS graph traversal)' },
-                'explore:':    { algo: 'illuminate', label: 'Illuminate (BFS graph traversal)' },
-                'deep:':       { algo: 'deep',       label: 'Deep (max-recall multi-hop)' },
-                'exact:':      { algo: 'exact',      label: 'Exact (FTS only)' },
-                'fast:':       { algo: 'fast',       label: 'Fast (FTS, no physics)' },
+                'distill:':      { algo: 'distill',    label: 'Distill (semantic compression)' },
+                'illuminate:':   { algo: 'illuminate', label: 'Illuminate (corpus BFS)' },
+                'explore:':      { algo: 'explore',    label: 'Explore (query BFS)' },
+                'density:':      { algo: 'density',    label: 'Density (corpus analysis & RAG tiers)' },
             };
 
             const parseQuery = (raw) => {
@@ -1072,7 +1070,7 @@
                                 className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-lg px-3 sm:px-4 py-2.5 focus:border-cyan-500/50 outline-none transition-colors text-sm sm:text-base"
                             />
                             <div className="flex items-center gap-2 flex-shrink-0">
-                                <div style={{position:'relative',display:'inline-block'}} title="Search prefixes&#10;distill:           — lossless semantic compression (LLM)&#10;illuminate:        — corpus spine (global BFS, auto-budget)&#10;illuminate: topic  — BFS from seed topic&#10;explore:           — same as illuminate&#10;deep:              — max-recall multi-hop&#10;exact:             — FTS only, no physics&#10;(none)             — automatic STAR search">
+                                <div style={{position:'relative',display:'inline-block'}} title="Search prefixes&#10;distill:           — lossless semantic compression (LLM)&#10;illuminate:        — corpus spine (global BFS, auto-budget)&#10;illuminate: topic  — BFS from seed topic&#10;explore:           — BFS from seed query&#10;density:          — corpus analysis & RAG tiers&#10;(none)             — automatic STAR search (max-recall via context budget)">
                                   <span style={{cursor:'help',opacity:0.5,fontSize:'0.8rem',padding:'0 6px'}}>?</span>
                                 </div>
                                 <button onClick={handleSearch} disabled={loading} className="btn-primary min-w-[80px] sm:min-w-[100px] text-sm sm:text-base px-3 sm:px-4 py-2.5">

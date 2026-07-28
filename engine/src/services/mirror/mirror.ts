@@ -9,7 +9,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import yaml from 'js-yaml';
 import { db } from '../../core/db.js';
-import { NOTEBOOK_DIR } from '../../config/paths.js';
 import PATHS from '../../config/paths.js';
 
 export const MIRRORED_BRAIN_PATH = PATHS.MIRRORED_BRAIN_DIR;
@@ -51,10 +50,11 @@ export async function createMirror() {
             provenanceDir = '@quarantine';
         }
 
-        // Resolve source path
+        // Resolve source path — files live in inbox or external-inbox based on prefix
         let sourcePath = dbPath;
         if (!path.isAbsolute(sourcePath)) {
-            sourcePath = path.join(NOTEBOOK_DIR, sourcePath);
+            const sourceDir = dbPath.startsWith('external-inbox') ? PATHS.EXTERNAL_INBOX_DIR : PATHS.INBOX_DIR;
+            sourcePath = path.join(sourceDir, sourcePath);
         }
 
         if (!fs.existsSync(sourcePath)) {

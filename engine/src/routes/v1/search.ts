@@ -19,8 +19,8 @@ export function setupSearchRoutes(app: Application) {
 
     try {
       const body = req.body as SearchRequest;
-      if (!body.query) {
-        res.status(400).json({ error: 'Query is required' });
+      if (!body.query || body.query.trim() === '') {
+        res.status(400).json({ error: 'Query is required and cannot be empty or whitespace-only' });
         return;
       }
 
@@ -216,8 +216,6 @@ export function setupSearchRoutes(app: Application) {
         undefined, // bucket
         allBuckets,
         budget,
-        false, // deep
-        'all', // provenance
         tags,
         body.user_context,
       );
