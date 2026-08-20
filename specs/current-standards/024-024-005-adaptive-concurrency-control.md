@@ -41,36 +41,37 @@ Define an adaptive concurrency system that automatically adjusts processing mode
 | **Adaptive** | 2-8GB | 5 | Laptops, small servers |
 | **Parallel** | > 8GB | 20 or CPU count | Workstations, high-memory servers |
 
-### 2.2 Configuration Priority Chain
+### 2.2 Configuration Priority Chain (v5.2.0+)
 
 Configuration is resolved in this priority order (highest to lowest):
 
 1. **Function parameters** - Direct call to `processWithAdaptiveConcurrency(items, processor, { batchSize: 10 })`
-2. **user_settings.json** - `"adaptive_concurrency": { "environment": "low_memory" }`
+2. **Database (`app_settings` table)** - Queried at runtime via `getSetting('adaptive_concurrency.environment')`
 3. **Environment variables** - `ANCHOR_CONCURRENCY_ENV=low_memory`
 4. **Auto-detection** - System memory analysis
 5. **Defaults** - Sequential mode as safe fallback
 
-### 2.3 Configuration Schema
+### 2.3 Configuration Schema (v5.2.0+)
 
 ```typescript
 interface AdaptiveConcurrencyConfig {
-  // Environment mode override
+  // Environment mode override (stored in DB)
   environment?: 'auto' | 'low_memory' | 'high_memory';
   
-  // Memory thresholds (MB)
+  // Memory thresholds (MB, stored in DB)
   sequential_threshold_mb?: number;  // Default: 2048
   parallel_threshold_mb?: number;    // Default: 8192
   
-  // Concurrency limits
+  // Concurrency limits (stored in DB)
   max_concurrency?: number;          // Default: 5
   low_memory_batch_size?: number;    // Default: 1
   high_memory_batch_size?: number;   // Default: 20
 }
 ```
 
-**user_settings.json location:**
+**Initial import from `user_settings.json` (v5.2.0+):**
 ```json
+// user_settings.json (only used for initial import to DB)
 {
   "adaptive_concurrency": {
     "environment": "auto",
@@ -81,6 +82,12 @@ interface AdaptiveConcurrencyConfig {
     "high_memory_batch_size": 20
   }
 }
+```
+
+After import, settings are queried from the database at runtime:
+```typescript
+const environment = await getSetting('adaptive_concurrency.environment') || 'auto';
+const sequentialThreshold = await getSetting('adaptive_concurrency.sequential_threshold_mb') || 2048;
 ```
 
 ---
@@ -228,21 +235,18 @@ const inflatedTerms = await processWithAdaptiveConcurrency(
 |----------|--------|-------------|
 | `ANCHOR_CONCURRENCY_ENV` | `auto`, `low_memory`, `high_memory` | Force specific mode |
 
-### 4.2 User Settings
+### 4.2 Database Settings (v5.2.0+)
 
-Location: `user_settings.json` (project root)
+All settings are stored in the `app_settings` table and queried at runtime via `getSetting()`. Initial values are imported from `user_settings.json` on first startup only.
 
-```json
-{
-  "adaptive_concurrency": {
-    "environment": "auto",
-    "sequential_threshold_mb": 2048,
-    "parallel_threshold_mb": 8192,
-    "max_concurrency": 5,
-    "low_memory_batch_size": 1,
-    "high_memory_batch_size": 20
-  }
-}
+```bash
+# Query current settings from DB
+curl -X POST http://localhost:3000/v1/settings \
+  -H "Content-Type: application/json" \
+  -d '{"key":"adaptive_concurrency.environment","value":"auto"}'
+
+# Verify stored value
+curl -X GET http://localhost:3000/v1/settings/adaptive_concurrency.environment
 ```
 
 ### 4.3 UI Toggle

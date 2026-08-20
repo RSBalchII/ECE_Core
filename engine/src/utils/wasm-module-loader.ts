@@ -329,13 +329,18 @@ export class WasmModuleLoader {
 
   // Fingerprint operations
   public fingerprint(text: string): bigint {
-    // Always available via fallback
-    return fingerprint_fn!(text);
+    // Guard against the async init window where fingerprint_fn is still null.
+    if (!fingerprint_fn) {
+      return fallbackFingerprint(text);
+    }
+    return fingerprint_fn(text);
   }
 
   public distance(a: bigint, b: bigint): number {
-    // Always available via fallback
-    return distance_fn!(a, b);
+    if (!distance_fn) {
+      return fallbackDistance(a, b);
+    }
+    return distance_fn(a, b);
   }
 
   // Atomizer operations

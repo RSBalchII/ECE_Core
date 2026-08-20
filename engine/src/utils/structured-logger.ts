@@ -22,8 +22,8 @@ const PROJECT_ROOT = path.resolve(__dirname, '../../..');
 // Create logs directory at .anchor/logs
 const LOGS_DIR = PATHS.LOGS_DIR;
 
-// Import MAX_LINES_PER_FILE from unified test logger (default 500)
-import { MAX_LINES_PER_FILE } from '../services/unified-test-logger.js';
+// Maximum lines per log file before truncation
+const MAX_LINES_PER_FILE = 500;
 if (!fs.existsSync(LOGS_DIR)) {
   fs.mkdirSync(LOGS_DIR, { recursive: true });
 }
@@ -390,16 +390,10 @@ export const logWithContext = {
 export { logger, metricsTracker };
 
 /**
- * LRU Cache Logger - Writes to dedicated .log file, NO console output.
+ * LRU Cache Logger - Writes to dedicated .log file in LOGS_DIR, NO console output.
  * Suppresses the memory-pressure eviction noise from lru-cache.ts
  */
 import { createLogger as createWinstonLogger } from 'winston';
-const LRUCACHE_LOG_FILE = path.join(LOGS_DIR, 'lru_cache.log');
-
-// Ensure LRU log directory exists
-if (!fs.existsSync(LRUCACHE_LOG_FILE.replace(/[^/]+$/, ''))) {
-  fs.mkdirSync(path.dirname(LRUCACHE_LOG_FILE), { recursive: true });
-}
 
 export const LRUCacheLogger = createWinstonLogger({
   level: 'info', // Only info and above — suppress debug/silly noise
@@ -411,6 +405,7 @@ export const LRUCacheLogger = createWinstonLogger({
   transports: [
     new DailyRotateFile({
       filename: 'lru_cache.log',
+      dirname: LOGS_DIR,
       datePattern: 'YYYY-MM-DD',
       zippedArchive: false,
       maxSize: '5m',

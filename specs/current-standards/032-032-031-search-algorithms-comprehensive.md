@@ -292,9 +292,12 @@ ANCHOR_SEARCH_RESULTS_BATCH_SIZE=20  # Results per batch (streaming)
 ANCHOR_ENABLE_STREAMING_RESULTS=false # Enable streaming endpoint
 ```
 
-#### User Settings (`user_settings.json`)
+#### Legacy User Settings (`user_settings.json`) — Initial Import Only (v5.2.0+)
+
+> **Note:** `user_settings.json` is a legacy format used ONLY for initial import into the `app_settings` table on first startup. After that, all settings are queried from the database at runtime via `getSetting()`. Changes at runtime do not require a restart. The file is also updated when DB settings change via API to ensure persistence across engine restarts.
 
 ```json
+// LEGACY FORMAT — initial import only; primary config now lives in app_settings table (DB)
 {
   "memory": {
     "throttle_start_mb": 1500,
@@ -319,6 +322,43 @@ ANCHOR_ENABLE_STREAMING_RESULTS=false # Enable streaming endpoint
     }
   }
 }
+```
+
+#### Database Settings (`app_settings` table) — Primary Config (v5.2.0+)
+
+All search and memory settings are now stored in the `app_settings` table as flat key-value pairs:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `memory.throttle_start_mb` | 1500 | Memory threshold to start throttling searches |
+| `memory.throttle_max_mb` | 2500 | Memory threshold above which searches are rejected |
+| `memory.emergency_stop_mb` | 3500 | Emergency stop threshold — all operations halted |
+| `search.results_batch_size` | 20 | Results per batch for streaming endpoints |
+| `search.enable_streaming_results` | true | Enable SSE-based streaming search results |
+| `search.mobile.max_radius` | 2000 | Max radial search radius on mobile devices |
+| `search.mobile.max_results_per_term` | 5 | Max results per term in mobile mode |
+| `search.mobile.sequential_inflation` | true | Sequential context inflation for memory safety |
+| `search.desktop.max_radius` | 32000 | Max radial search radius on desktop |
+| `search.desktop.max_results_per_term` | 10 | Max results per term in desktop mode |
+
+Runtime query pattern:
+```sql
+SELECT value FROM app_settings WHERE key = 'search.mobile.max_radius';
+-- Returns: {"value": "2000", "type": "integer"}
+```
+
+API update (no restart needed):
+```bash
+curl -X POST http://localhost:3000/v1/settings \
+  -H "Content-Type: application/json" \
+  -d '{"key": "search.desktop.max_radius", "value": "48000"}'
+# Settings applied immediately — no restart required
+```
+
+**After import, settings are queried from the database:**
+```typescript
+const streamingEnabled = await getSetting('memory.enable_streaming_results') || true;
+const maxRadius = await getSetting('search.mobile.max_radius') || 2000;
 ```
 
 ---

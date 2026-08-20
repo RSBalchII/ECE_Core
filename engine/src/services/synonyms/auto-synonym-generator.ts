@@ -20,6 +20,7 @@ import { db } from '../../core/db.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { executor } from '../../utils/memory-aware-executor.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -320,12 +321,16 @@ export class AutoSynonymGenerator {
   async generateSynonymRings(): Promise<Record<string, string[]>> {
     console.log('[SynonymGenerator] Generating synonym rings from all strategies...');
 
-    // Run all strategies in parallel
-    const [cooccurrence, neighborhood, simhash] = await Promise.all([
-      this.mineCooccurrenceSynonyms(),
-      this.mineTagNeighborhoodSynonyms(),
-      this.mineSimHashSynonyms(),
-    ]);
+    // Run all strategies — tagNeighborhood and simhash are O(N²), so use bounded concurrency (v5.2.0+)
+    const [cooccurrence, neighborhood, simhash] = await executor.process(
+      [
+        () => this.mineCooccurrenceSynonyms(),
+        () => this.mineTagNeighborhoodSynonyms(),
+        () => this.mineSimHashSynonyms(),
+      ],
+      async fn => fn(),
+      { maxConcurrency: 2, memoryThresholdMB: 1400 }, // Simhash is O(N²); bound to prevent heap spikes
+    );
 
     // Build synonym rings directly from each strategy
     // No need for multi-strategy voting - each strategy has its own quality filters

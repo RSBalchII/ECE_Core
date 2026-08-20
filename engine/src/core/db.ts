@@ -14,6 +14,7 @@ import { PGlite } from '@electric-sql/pglite';
 const __filename = fileURLToPath(import.meta.url);
 
 import { pathManager } from '../utils/path-manager.js';
+import { dbSerializer } from '../utils/db-connection-serializer.js';
 
 export class Database {
   private dbInstance: any = null;
@@ -407,6 +408,27 @@ export class Database {
       throw e;
     }
 
+    // Create App Settings table (v5.2.0+ Database-Backed Configuration)
+    try {
+      await this.run(`
+        CREATE TABLE IF NOT EXISTS app_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          type TEXT DEFAULT 'string',
+          description TEXT,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      
+      // Index for fast lookups by key prefix
+      await this.run('CREATE INDEX IF NOT EXISTS idx_app_settings_key ON app_settings(key)');
+      
+      console.log("[DB] 'app_settings' table initialized (v5.2.0+).");
+    } catch (e: any) {
+      console.error('[DB] Error creating app_settings table:', e);
+      throw e;
+    }
+
     // Create Atom Positions table (Lazy Molecule Inflation)
     // Tracks where atoms (keywords) appear in compounds for radial inflation
     try {
@@ -544,7 +566,11 @@ export class Database {
   }
 
   /**
-   * Run a query against the database
+   * Run a query against the database (v5.2.0+ serialized)
+   *
+   * All queries are routed through DbConnectionSerializer to prevent PGlite
+   * connection corruption ("cannot drop active portal", deadlocks).
+   * Queries execute FIFO — only one runs at a time.
    */
   async run(query: string, params?: any[]) {
     const { config } = await import('../config/index.js');
@@ -558,8 +584,8 @@ export class Database {
         throw new Error('Database not initialized');
       }
 
-      // PGlite returns objects by default which works with our named fields
-      const result = await this.dbInstance.query(query, params || []);
+      // Route through serializer — ensures single-connection safety with PGlite WASM
+      const result = await dbSerializer.execute(this.dbInstance, query, params);
       return result;
     } catch (e: any) {
       // Don't log transaction control statements as errors
@@ -572,7 +598,7 @@ export class Database {
   }
 
   /**
-   * Run a FTS search query
+   * Run a FTS search query (v5.2.0+ serialized)
    */
   async search(query: string) {
     if (this.dbInstance === null) {
@@ -580,7 +606,8 @@ export class Database {
     }
 
     // For now, use a simple LIKE query since full-text search may not be available
-    const result = await this.dbInstance.query(
+    const result = await dbSerializer.execute(
+      this.dbInstance,
       'SELECT * FROM atoms WHERE content LIKE ?',
       [`%${query}%`],
     );

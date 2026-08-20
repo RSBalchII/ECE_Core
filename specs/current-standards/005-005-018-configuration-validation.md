@@ -4,21 +4,23 @@
 **Created:** 2026-03-22  
 **Pain Point:** Hardcoded defaults, missing API key, and path issues caused startup failures with unclear error messages.
 
-## Problem
+## Problem (v5.2.0+)
 
-Configuration issues discovered at runtime:
+Configuration issues discovered at runtime — now with database-backed settings:
 
 1. Default API key `"bolt-memory-secret"` hardcoded in multiple places
 2. Port mismatch between engine (3161) and MCP (3160) defaults
-3. Missing `user_settings.json` caused silent failures
+3. Missing `user_settings.json` caused silent failures (only used for initial import to DB)
 4. Invalid paths caused database errors after startup
 5. No clear indication of what was misconfigured
 
+**Key Change:** Settings are now stored in `app_settings` table and queried at runtime, not loaded from file on startup.
+
 ## Requirements
 
-### CONF-001: Fail Fast on Missing Required Configuration
+### CONF-001: Fail Fast on Missing Required Configuration (v5.2.0+)
 
-Engine MUST fail immediately on startup if required configuration is missing:
+Engine MUST fail immediately on startup if required configuration is missing — now checking database settings:
 
 ```typescript
 // config/validation.ts
@@ -30,10 +32,10 @@ interface RequiredConfig {
   required: boolean;
 }
 
-function validateRequiredConfig(): void {
+async function validateRequiredConfig(): Promise<void> {
   const required: RequiredConfig[] = [
-    { key: 'server.port', value: config.PORT, source: 'user_settings.json', required: true },
-    { key: 'server.api_key', value: config.API_KEY, source: 'user_settings.json', required: true },
+    { key: 'server.port', value: await getSetting('server.port'), source: 'app_settings table', required: true },
+    { key: 'server.api_key', value: await getSetting('server.api_key'), source: 'app_settings table', required: true },
     { key: 'database.path', value: PATHS.database, source: 'config/paths.ts', required: true },
   ];
 
@@ -44,11 +46,13 @@ function validateRequiredConfig(): void {
     missing.forEach(m => {
       console.error(`   ✗ ${m.key}: not set (expected in ${m.source})`);
     });
-    console.error('\nPlease update user_settings.json or set environment variables.\n');
+    console.error('\nPlease run /v1/settings/import to load initial config, or set ANCHOR_API_KEY env var.\n');
     process.exit(1);
   }
 }
 ```
+
+**Note:** On first startup, settings are imported from `user_settings.json` into the database. After that, all configuration comes from the DB.
 
 ### CONF-002: Startup Banner Shows Configuration Status
 
@@ -81,7 +85,7 @@ const API_KEY = process.env.ANCHOR_API_KEY || 'bolt-memory-secret';
 // ✅ CORRECT: Require explicit configuration
 const API_KEY = process.env.ANCHOR_API_KEY || settings.server?.api_key;
 if (!API_KEY) {
-  console.error('✗ API_KEY not configured. Set ANCHOR_API_KEY or server.api_key in user_settings.json');
+  console.error('✗ API_KEY not configured. Set ANCHOR_API_KEY env var or configure via /v1/settings API.');
   process.exit(1);
 }
 ```
@@ -140,7 +144,7 @@ async function isPortAvailable(port: number): Promise<boolean> {
 // Before starting Express
 if (!(await isPortAvailable(config.PORT))) {
   console.error(`✗ Port ${config.PORT} is already in use`);
-  console.error('  Kill the existing process or change server.port in user_settings.json');
+  console.error('  Kill the existing process or change server.port via /v1/settings API');
   process.exit(1);
 }
 ```

@@ -11,6 +11,7 @@ import { composeRollingContext } from '../../core/inference/context_manager.js';
 import { wasmModuleLoader } from '../../utils/wasm-module-loader.js';
 import type { SemanticCategory } from '../../types/taxonomy.js';
 import { ContextInflator } from './context-inflator.js';
+import { getSetting } from '../settings.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getMirrorPath, MIRRORED_BRAIN_PATH } from '../mirror/mirror.js';
@@ -570,8 +571,9 @@ ${s.content}
 /**
  * Helper to filter tags for display (User Request: Hide Year Numbers)
  */
-export function filterDisplayTags(tags: string[]): string[] {
-    if (!config.SEARCH?.hide_years_in_tags) return tags;
-    // Remove if exactly 4 digits (approx year check)
-    return tags.filter(t => !/^\d{4}$/.test(t));
+export async function filterDisplayTags(tags: string[]): Promise<string[]> {
+  const hideYears = await getSetting('search.hide_years_in_tags', false);
+  if (!hideYears) return tags;
+  // Remove if exactly 4 digits (approx year check)
+  return tags.filter(t => !/^\d{4}$/.test(t));
 }

@@ -1,6 +1,7 @@
 import type { Application, Request, Response } from 'express';
 import { db } from '../../core/db.js';
 import { getState, clearState } from '../../services/scribe/scribe.js';
+import { setSetting, getSetting, getSettingsByPrefix } from '../../services/settings.js';
 import { PATHS, PROJECT_ROOT } from '../../config/paths.js';
 import { config } from '../../config/index.js';
 import { validate, schemas } from '../../middleware/validate.js';
@@ -346,18 +347,32 @@ export function setupSystemRoutes(app: Application) {
       }
 
       // Apply updates to runtime config
-      if (updates.concept_density) config.INGESTION.CONCEPT_DENSITY = updates.concept_density;
-      if (updates.tag_threshold !== undefined) config.INGESTION.TAG_THRESHOLD = updates.tag_threshold;
-      if (updates.dedup_strength) config.INGESTION.DEDUP_STRENGTH = updates.dedup_strength;
-      if (updates.token_budget_default !== undefined) config.INGESTION.TOKEN_BUDGET_DEFAULT = updates.token_budget_default;
-      if (updates.ingestion_profile) config.INGESTION.INGESTION_PROFILE = updates.ingestion_profile;
+      
+      // Map old config keys to new DB key format and write through settings service (DB + file sync)
+      const keyMap: Record<string, string> = {
+        concept_density: 'ingestion.concept_density',
+        tag_threshold: 'ingestion.tag_threshold',
+        dedup_strength: 'ingestion.dedup_strength',
+        token_budget_default: 'ingestion.token_budget_default',
+        ingestion_profile: 'ingestion.ingestion_profile',
+      };
+
+      for (const [oldKey, dbKey] of Object.entries(keyMap)) {
+        if (updates[oldKey as keyof typeof updates] !== undefined) {
+          await setSetting(dbKey, updates[oldKey as keyof typeof updates]);
+        }
+      }
+
+      // Read back from DB to return current state (already imported above)
+      const ingestionSettings = await getSettingsByPrefix('ingestion.');
 
       console.log('[Config] Ingestion config updated:', updates);
 
       res.json({
         status: 'success',
-        message: 'Ingestion config updated',
-        config: config.INGESTION,
+        message: 'Ingestion config updated (persisted to database)',
+        config: ingestionSettings,
+
       });
     } catch (error: any) {
       console.error('Update ingestion config error:', error);
@@ -442,7 +457,7 @@ export function setupSystemRoutes(app: Application) {
   // POST /v1/system/paths - Add a new path to watch
   app.post('/v1/system/paths', async (req: Request, res: Response) => {
     try {
-      const { path: newPath } = req.body;
+      const { path: newPath, force = false } = req.body;
       if (!newPath) {
         res.status(400).json({ error: 'Path is required' });
         return;
@@ -474,7 +489,64 @@ export function setupSystemRoutes(app: Application) {
         resolvedPathToUse = resolvedPath;
       }
 
-      const { addWatchPath } = await import('../../services/ingest/watchdog.js');
+      // DIRECTORY SIZE AWARENESS: Check if the directory has many files or large total size
+            let dirStats: { fileCount: number; totalSizeBytes: number; warning?: string } | null = null;
+            try {
+                const stats = await fs.promises.stat(resolvedPathToUse);
+                if (stats.isDirectory()) {
+                    // Count files and estimate total size recursively
+                    let fileCount = 0;
+                    let totalSizeBytes = 0;
+                    function walkDir(dir: string) {
+                        const entries = fs.readdirSync(dir, { withFileTypes: true });
+                        for (const entry of entries) {
+                            if (entry.isDirectory()) {
+                                // Skip node_modules and .git directories
+                                if (entry.name === 'node_modules' || entry.name === '.git')
+                                    continue;
+                                walkDir(pathModule.join(dir, entry.name));
+                            }
+                            else {
+                                fileCount++;
+                                try {
+                                    const fileStats = fs.statSync(pathModule.join(dir, entry.name));
+                                    totalSizeBytes += fileStats.size;
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                    walkDir(resolvedPathToUse);
+                    dirStats = { fileCount, totalSizeBytes };
+                    // Warn if directory has many files or large size (but don't block unless force=false)
+                    const warningThresholdFiles = 50;
+                    const warningThresholdSize = 10 * 1024 * 1024; // 10MB
+                    let warningMessage;
+                    if (fileCount > warningThresholdFiles || totalSizeBytes > warningThresholdSize) {
+                        const sizeMB = Math.round(totalSizeBytes / 1024 / 1024);
+                        warningMessage = `WARNING: Directory contains ${fileCount} files (${sizeMB}MB). This may cause high memory usage during enrichment. Use ?force=true to bypass this check.`;
+                    }
+                    dirStats.warning = warningMessage;
+                }
+            }
+            catch (e) {
+                // If we can't stat the directory, just proceed without warnings
+                console.log('[API] Could not analyze directory size:', e);
+            }
+            
+            const { addWatchPath } = await import('../../services/ingest/watchdog.js');
+      if (!force && dirStats?.warning) {
+        // Reject with warning unless force=true is passed
+        res.status(409).json({
+          status: 'rejected',
+          message: dirStats.warning,
+          path: resolvedPathToUse,
+          fileCount: dirStats.fileCount,
+          totalSizeBytes: dirStats.totalSizeBytes,
+          suggestion: 'Add ?force=true to bypass this warning and add the path anyway.',
+        });
+        return;
+      }
       const success = await addWatchPath(resolvedPathToUse);
 
       res.status(200).json({
@@ -567,18 +639,17 @@ export function setupSystemRoutes(app: Application) {
     }
   });
 
-  // Configuration endpoint to provide runtime configuration to clients
   app.get('/v1/config', async (_req: Request, res: Response) => {
-    try {
-      // Import config here to avoid circular dependencies
-      const { config } = await import('../../config/index.js');
+      try {
+        // Configuration endpoint to provide runtime configuration (reads from DB)
+        const searchStrategy = await getSetting('search.strategy', 'semantic');
 
       const serverConfig = {
         port: config.PORT,
         host: config.HOST,
         server_url: `http://${config.HOST}:${config.PORT}`,
         llm_provider: config.LLM_PROVIDER,
-        search_strategy: config.SEARCH.strategy,
+        search_strategy: searchStrategy,
         features: config.FEATURES,
       };
 

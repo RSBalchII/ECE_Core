@@ -1,9 +1,0 @@
-
-[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90mC:/Users/rsbii/Projects/anchor-engine-node[39m
-
-[31mNo test files found, exiting with code 1
-[39m
-[2mfilter: [22m[33mengine/tests/unit/*.test.ts[39m
-[2minclude: [22m[33mengine/tests/**/*.test.ts[39m
-[2mexclude:  [22m[33m**/node_modules/**[2m, [22m**/dist/**[2m, [22m**/.git/**[2m, [22m**/coverage/**[39m
-

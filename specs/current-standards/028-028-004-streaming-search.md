@@ -147,13 +147,44 @@ if (streamingMode) {
 
 ---
 
-## 4. Configuration
+## 4. Configuration (v5.2.0+)
 
-### 4.1 User Settings
+### 4.1 Database Settings (`app_settings` table)
 
-**File:** `user_settings.json`
+All streaming configuration is now stored in the database and queried at request time:
+
+```sql
+-- Example settings rows
+| key | value | description | source |
+|-----|-------|-------------|--------|
+| `memory.search_results_batch_size` | `20` | Results per batch | db |
+| `memory.enable_streaming_results` | `true` | Enable streaming endpoint | db |
+| `memory.throttle_start_mb` | `1500` | Start throttling searches | db |
+```
+
+**Query at runtime:**
+```typescript
+const batchSize = await getSetting('memory.search_results_batch_size') || 20;
+const enabled = await getSetting('memory.enable_streaming_results');
+```
+
+### 4.2 Environment Variables (Override DB)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ANCHOR_HEAP_PRESSURE_MB` | 500 | Downgrade max-recall threshold |
+| `ANCHOR_THROTTLE_START_MB` | 800 | Start throttling searches |
+| `ANCHOR_THROTTLE_MAX_MB` | 1200 | Reject searches above |
+| `ANCHOR_EMERGENCY_STOP_MB` | 1500 | Emergency stop threshold |
+| `ANCHOR_SEARCH_RESULTS_BATCH_SIZE` | 20 | Results per batch |
+| `ANCHOR_ENABLE_STREAMING_RESULTS` | false | Enable streaming endpoint |
+
+### 4.3 Initial Import from user_settings.json (v5.2.0+)
+
+On first startup, settings are imported from the file into the database:
 
 ```json
+// user_settings.json (only used for initial import)
 {
   "memory": {
     "throttle_start_mb": 1500,
@@ -165,16 +196,14 @@ if (streamingMode) {
 }
 ```
 
-### 4.2 Environment Variables
+After import, the database becomes source of truth. Runtime changes go through API:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ANCHOR_HEAP_PRESSURE_MB` | 500 | Downgrade max-recall threshold |
-| `ANCHOR_THROTTLE_START_MB` | 800 | Start throttling searches |
-| `ANCHOR_THROTTLE_MAX_MB` | 1200 | Reject searches above |
-| `ANCHOR_EMERGENCY_STOP_MB` | 1500 | Emergency stop threshold |
-| `ANCHOR_SEARCH_RESULTS_BATCH_SIZE` | 20 | Results per batch |
-| `ANCHOR_ENABLE_STREAMING_RESULTS` | false | Enable streaming endpoint |
+```bash
+# Change batch size without restart
+curl -X POST http://localhost:3160/v1/settings/memory.search_results_batch_size \
+  -H "Content-Type: application/json" \
+  -d '{"value": 30}'
+```
 
 ---
 
@@ -295,7 +324,7 @@ If streaming is disabled (`enable_streaming_results: false`):
 if (!isStreamingEnabled()) {
   res.status(503).json({
     error: 'Streaming search not enabled',
-    message: 'Set enable_streaming_results: true in user_settings.json'
+    message: 'Set enable_streaming_results via POST /v1/settings with key "memory.enable_streaming_results"'
   });
 }
 ```
@@ -319,21 +348,14 @@ UI gracefully falls back to regular search.
 
 ### 10.1 For Users
 
-1. Update `user_settings.json`:
-```json
-{
-  "memory": {
-    "throttle_start_mb": 1500,
-    "throttle_max_mb": 2500,
-    "emergency_stop_mb": 3500,
-    "search_results_batch_size": 20,
-    "enable_streaming_results": true
-  }
-}
-```
+1. Update via API (v5.2.0+):
+   ```bash
+   curl -X POST http://localhost:3000/v1/settings \
+     -H "Content-Type: application/json" \
+     -d '{"key":"memory.enable_streaming_results","value":true}'
+   ```
 
-2. Restart engine
-3. Use ⚡ button in UI to toggle streaming
+2. Use ⚡ button in UI to toggle streaming
 
 ### 10.2 For Developers
 

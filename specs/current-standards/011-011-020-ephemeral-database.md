@@ -216,12 +216,12 @@ pnpm restart
 
 ## Operational Guidelines
 
-### Startup Checklist
+### Startup Checklist (v5.2.0+)
 
 ```bash
-# 1. Verify wipe_on_startup is true (default)
-grep "wipe_on_startup" user_settings.json
-# Expected: "wipe_on_startup": true
+# 1. Verify wipe_on_startup is true in database (default)
+curl http://localhost:3160/v1/settings/database.wipe_on_startup
+# Expected: {"key":"database.wipe_on_startup","value":true,"source":"db"}
 
 # 2. Start the engine
 pnpm start
@@ -230,12 +230,13 @@ pnpm start
 # [DB] Removing existing database directory...
 # [DB] Clearing mirrored_brain directory...
 # [Startup] Regenerating mirrored_brain/ from inbox/...
+# [Config] Imported settings from user_settings.json into app_settings table
 
 # 4. Verify health
 curl http://localhost:3160/health
 ```
 
-### Recovery from Corruption
+### Recovery from Corruption (v5.2.0+)
 
 **Symptoms of Database Corruption:**
 - Ingestion hangs indefinitely
@@ -261,14 +262,14 @@ curl http://localhost:3160/v1/ingest/status
 tail -f engine/logs/server.log
 ```
 
-### Backup Strategy
+### Backup Strategy (v5.2.0+)
 
 **What to Back Up:**
 ```bash
 # Source of truth - BACKUP THESE
 local-data/inbox/
 local-data/external-inbox/
-user_settings.json
+user_settings.json  # Only for initial import; DB is source of truth after v5.2.0
 
 # Optional - can be regenerated
 mirrored_brain/  # Rebuilt from inbox/
@@ -283,7 +284,7 @@ mkdir -p "$BACKUP_DIR"
 
 cp -r local-data/inbox "$BACKUP_DIR/"
 cp -r local-data/external-inbox "$BACKUP_DIR/"
-cp user_settings.json "$BACKUP_DIR/"
+cp user_settings.json "$BACKUP_DIR/"  # For initial import only
 
 echo "Backup complete: $BACKUP_DIR"
 ```
@@ -305,7 +306,23 @@ pnpm start
 
 ## Configuration Reference
 
-### user_settings.json
+### Database (`app_settings` table) — v5.2.0+
+
+```json
+// Stored in app_settings table, queried via getSetting('database.wipe_on_startup')
+{
+  "key": "database.wipe_on_startup",
+  "value": true,
+  "type": "boolean"
+}
+```
+
+| Value | Behavior | Use Case |
+|-------|----------|----------|
+| `true` | Wipe and rebuild on every startup | **Default - always use this** |
+| `false` | Retain database across restarts | ⚠️ Only for debugging - not recommended |
+
+### Legacy: user_settings.json (Initial Import Only)
 
 ```json
 {
@@ -315,10 +332,7 @@ pnpm start
 }
 ```
 
-| Value | Behavior | Use Case |
-|-------|----------|----------|
-| `true` | Wipe and rebuild on every startup | **Default - always use this** |
-| `false` | Retain database across restarts | ⚠️ Only for debugging - not recommended |
+> **Note:** `user_settings.json` is only used for initial import into the database on first startup. After that, all settings are stored in and queried from the `app_settings` table via `getSetting()`. Changes at runtime do not require a restart.
 
 ### Environment Variables
 

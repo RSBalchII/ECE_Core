@@ -1,3 +1,0 @@
-[32m[INFO][0m [2026-05-21T04:39:19.686Z] Starting live-fire tests with flags: --full ; echo EXIT_CODE=0
-[36m[DEBUG][0m [2026-05-21T04:39:19.731Z] Executing: node "c:\Users\rsbii\Projects\anchor-engine-node\scripts\live-fire-test-suite.mjs" --full
-[36m[DEBUG][0m [2026-05-21T04:39:19.748Z] Spawning node process for: c:\Users\rsbii\Projects\anchor-engine-node\scripts\live-fire-test-suite.mjs --full

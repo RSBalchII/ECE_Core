@@ -14,15 +14,15 @@ Anchor Engine exposes HTTP APIs and MCP tools that may contain sensitive data. S
 
 ## Requirements
 
-### SEC-001: No Default Credentials
+### SEC-001: No Default Credentials (v5.2.0+)
 1. Never ship hardcoded API keys, passwords, or secrets in source code
 2. Engine must fail to start with clear error message if authentication is not configured
-3. Example error: `Error: API key required. Set server.api_key in user_settings.json`
+3. Settings are stored in `app_settings` table and validated at runtime
 
 ```typescript
-// ✅ CORRECT: Fail fast with clear message
-if (!config.server.api_key) {
-  console.error('API key required. Set server.api_key in user_settings.json');
+// ✅ CORRECT: Fail fast — settings queried from DB
+if (!await getSetting('server.api_key')) {
+  console.error('API key required. Set server.api_key via /v1/settings or import from user_settings.json on first startup.');
   process.exit(1);
 }
 

@@ -58,8 +58,20 @@ export class AtomicIngestService {
         }
         const uniqueAtoms = Array.from(uniqueAtomsMap.values());
 
+        // Map each atom to its parent molecule's SimHash fingerprint (molecular_signature),
+        // so the atoms.simhash column carries a real 64-bit SimHash for near-duplicate detection.
+        const simhashByAtom = new Map<string, string>();
+        for (const mol of molecules) {
+            if (!mol.molecular_signature) continue;
+            for (const atomId of mol.atoms ?? []) {
+                if (!simhashByAtom.has(atomId)) {
+                    simhashByAtom.set(atomId, mol.molecular_signature);
+                }
+            }
+        }
+
         if (uniqueAtoms.length > 0) {
-            await this.batchWriteAtoms(uniqueAtoms, provenanceType);
+            await this.batchWriteAtoms(uniqueAtoms, provenanceType, simhashByAtom);
         }
         console.log(`[AtomicIngest] ⏱️ Atoms persisted: ${Date.now() - atomsStart}ms`);
         onProgress?.(++currentStep, totalSteps, `Persisted ${uniqueAtoms.length} atoms`);
@@ -115,7 +127,7 @@ export class AtomicIngestService {
         onProgress?.(++currentStep, totalSteps, `Finalized positions`);
     }
 
-    private async batchWriteAtoms(atoms: Atom[], provenanceType: 'internal' | 'external') {
+    private async batchWriteAtoms(atoms: Atom[], provenanceType: 'internal' | 'external', simhashByAtom?: Map<string, string>) {
         const chunkSize = 50;
 
         for (let i = 0; i < atoms.length; i += chunkSize) {
@@ -139,7 +151,7 @@ export class AtomicIngestService {
                         atom.id,
                         'atom_source', // source_path
                         Date.now(), // timestamp
-                        '0', // simhash
+                        simhashByAtom?.get(atom.id) ?? null, // simhash (parent molecule's 64-bit SimHash)
                         JSON.stringify(this.zeroVector()), // embedding
                         provenanceType, // provenance
                         ['atoms'], // buckets
@@ -237,7 +249,7 @@ export class AtomicIngestService {
                 values.push(
                     m.id,
                     m.content || '',
-                    molecularSignature,
+                    m.compoundId || null, // compound_id must be the real compound ID (inflator joins on it), not a hash
                     m.sequence,
                     m.start_byte || 0,
                     m.end_byte || 0,
@@ -245,7 +257,7 @@ export class AtomicIngestService {
                     // numeric_value: PostgreSQL real has range ~1E±37, clamp out-of-range to null
                     (m.numeric_value !== undefined && m.numeric_value !== null && Math.abs(m.numeric_value) < 1e37) ? m.numeric_value : null,
                     m.numeric_unit || null,
-                    molecularSignature,
+                    m.molecular_signature || molecularSignature, // per-molecule WASM SimHash (file-level only as fallback)
                     JSON.stringify(this.zeroVector()), // embedding (we don't compute embeddings here anymore)
                     m.timestamp || Date.now(),
                     JSON.stringify(m.tags || []),
@@ -383,7 +395,7 @@ export class AtomicIngestService {
                     m.id,
                     cPath,
                     m.timestamp || cTimestamp,
-                    molecularSignature,
+                    m.molecular_signature || molecularSignature, // per-molecule SimHash (fallback: file-level)
                     JSON.stringify(this.zeroVector()),
                     provenanceType,
                     buckets,

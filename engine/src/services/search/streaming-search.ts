@@ -13,6 +13,7 @@ import { StructuredLogger } from '../../utils/structured-logger.js';
 import type { SearchResult } from './search-utils.js';
 import type { UserContext } from '../../types/context.js';
 import { logSearchResults } from './search-results-logger.js';
+import { getSetting } from '../settings.js';
 
 export interface StreamingSearchOptions {
   query: string;
@@ -74,7 +75,8 @@ export async function* executeStreamingSearch(
   options: StreamingSearchOptions,
 ): AsyncGenerator<StreamingSearchEvent> {
   const startTime = Date.now();
-  const batchSize = options.batchSize || config.MEMORY?.SEARCH_RESULTS_BATCH_SIZE || 20;
+  const settings = await getSetting('memory.search_results_batch_size', 20);
+  const batchSize = options.batchSize ?? (settings as number) ?? 20;
 
   try {
     StructuredLogger.info('STREAMING_SEARCH_START', {

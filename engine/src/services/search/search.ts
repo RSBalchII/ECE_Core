@@ -22,6 +22,7 @@ import { ContextInflator } from './context-inflator.js';
 import { Timer } from '../../utils/timer.js';
 import { systemStatus } from '../system-status.js';
 import { processWithAdaptiveConcurrency } from '../../utils/adaptive-concurrency.js';
+import { getSetting, setSetting } from '../settings.js';
 
 // --- Imports from extracted modules ---
 import {
@@ -304,6 +305,25 @@ function heapUsedMB(): number {
 }
 
 /**
+ * Get all search-related settings from database (v5.2.0+)
+ */
+async function getSearchSettings() {
+  const [maxCharsDefault, maxCharsLimit, ftsWindowSize, hideYearsInTags] = await Promise.all([
+    getSetting('search.max_chars_default', 524288),
+    getSetting('search.max_chars_limit', 1048576),
+    getSetting('search.fts_window_size', 3),
+    getSetting('search.hide_years_in_tags', false),
+  ]);
+
+  return {
+    MAX_CHARS_DEFAULT: maxCharsDefault ?? 524288,
+    MAX_CHARS_LIMIT: maxCharsLimit ?? 1048576,
+    FTS_WINDOW_SIZE: ftsWindowSize ?? 3,
+    HIDE_YEARS_IN_TAGS: hideYearsInTags ?? false,
+  };
+}
+
+/**
  * Memory-aware throttling: slows down or blocks searches based on memory pressure
  * Returns true if search should proceed, false if it should be rejected
  * Standard 127/134/135: Configurable memory thresholds
@@ -345,17 +365,20 @@ export async function findAnchors(
   query: string,
   buckets: string[] = [],
   tags: string[] = [],
-  _maxChars: number = config.SEARCH.max_chars_default,
+  _maxChars?: number,
   provenance: 'internal' | 'external' | 'quarantine' | 'all' = 'all',
   filters?: { type?: string; minVal?: number; maxVal?: number; },
   fuzzy: boolean = false,
 ): Promise<SearchResult[]> {
+  const settings = await getSearchSettings();
+  const maxChars = _maxChars ?? settings.MAX_CHARS_DEFAULT;
+  
   try {
     const sanitizedQuery = sanitizeFtsQuery(query);
     if (!sanitizedQuery) return [];
 
     // 0. Dynamic Atom Scaling
-    const tokenBudget = Math.floor(_maxChars / 4);
+    const tokenBudget = Math.floor(maxChars / 4);
     const avgTokensPerAtom = 60; // Tuned for better density
     const targetAtomCount = Math.max(10, Math.ceil(tokenBudget / avgTokensPerAtom));
 
@@ -784,33 +807,38 @@ export async function findAnchors(
     // Intercept: Read content from Mirror (if source_path exists)
     // For atoms without source files (chat history), keep DB content
 
+    // Parallelize mirror reads with bounded concurrency (v5.2.0+) — prevents heap spikes
     const { getMirrorPath } = await import('../mirror/mirror.js');
     const fs = await import('fs');
+    const { executor } = await import('../../utils/memory-aware-executor.js');
 
-    // Parallelize mirror reads for performance (non-blocking I/O)
-    await Promise.all(anchors.map(async anchor => {
-      // Skip mirror read if no source_path (chat history atoms)
-      if (!anchor.source || anchor.source.trim() === '') {
-        return; // Keep DB content
-      }
-
-      try {
-        // Calculate Mirror Path
-        const mirrorPath = getMirrorPath(anchor.source, anchor.provenance);
-
-        // Check if exists and read async
-        try {
-          const liveContent = await fs.promises.readFile(mirrorPath, 'utf-8');
-          if (liveContent && liveContent.length > 0) {
-            anchor.content = liveContent;
-          }
-        } catch (err) {
-          // Ignore ENOENT (file missing) or other read errors
+    await executor.process(
+      anchors,
+      async anchor => {
+        // Skip mirror read if no source_path (chat history atoms)
+        if (!anchor.source || anchor.source.trim() === '') {
+          return; // Keep DB content
         }
-      } catch (e: any) {
-        // Fail silently -> Keep DB content
-      }
-    }));
+
+        try {
+          // Calculate Mirror Path
+          const mirrorPath = getMirrorPath(anchor.source, anchor.provenance);
+
+          // Check if exists and read async
+          try {
+            const liveContent = await fs.promises.readFile(mirrorPath, 'utf-8');
+            if (liveContent && liveContent.length > 0) {
+              anchor.content = liveContent;
+            }
+          } catch (err) {
+            // Ignore ENOENT (file missing) or other read errors
+          }
+        } catch (e: any) {
+          // Fail silently -> Keep DB content
+        }
+      },
+      { maxConcurrency: 5, gcHintEvery: 0 }, // File reads are fast; bounded concurrency prevents too many open handles
+    );
 
     // === TAG ENRICHMENT: Merge molecule tags with atom tags ===
     // This provides richer contextual associations for LLMs by showing
@@ -840,13 +868,16 @@ export async function findAnchors(
 export async function executeSearch(
   query: string,
   buckets?: string[],
-  maxChars: number = config.SEARCH.max_chars_default,
+  maxChars?: number,
   provenance: 'internal' | 'external' | 'quarantine' | 'all' = 'all',
   explicitTags: string[] = [],
   filters?: { type?: string; minVal?: number; maxVal?: number; },
   useMaxRecall: boolean = false,
   userContext?: UserContext,
 ): Promise<{ context: string; results: SearchResult[]; toAgentString: () => string; metadata?: any }> {
+  const settings = await getSearchSettings();
+  const resolvedMaxChars = maxChars ?? settings.MAX_CHARS_DEFAULT;
+  
   console.log(`[Search] executeSearch (Physics Engine V2) called with provenance: ${provenance}`);
   const startTime = Date.now();
 
@@ -855,7 +886,7 @@ export async function executeSearch(
   const release = await acquireSearchLock();
   try {
     return await _executeSearchInternal(
-      query, buckets, maxChars, provenance,
+      query, buckets, resolvedMaxChars, provenance,
       explicitTags, filters, useMaxRecall, userContext, startTime,
     );
   } finally {
@@ -867,7 +898,7 @@ export async function executeSearch(
 async function _executeSearchInternal(
   query: string,
   buckets?: string[],
-  maxChars: number = config.SEARCH.max_chars_default,
+  maxChars?: number,
   provenance: 'internal' | 'external' | 'quarantine' | 'all' = 'all',
   explicitTags: string[] = [],
   filters?: { type?: string; minVal?: number; maxVal?: number; },
@@ -875,6 +906,9 @@ async function _executeSearchInternal(
   userContext?: UserContext,
   startTime: number = Date.now(),
 ): Promise<{ context: string; results: SearchResult[]; toAgentString: () => string; metadata?: any }> {
+  const settings = await getSearchSettings();
+  let resolvedMaxChars = maxChars ?? settings.MAX_CHARS_DEFAULT;
+
   // Memory-aware throttling: slow down or reject searches based on memory pressure
   const throttleResult = await throttleSearchForMemory();
   if (!throttleResult.proceed) {
@@ -888,7 +922,7 @@ async function _executeSearchInternal(
   if (useMaxRecall && heapMB > thresholds.HEAP_PRESSURE_MB) {
     console.warn(`[Search] Memory pressure detected (${heapMB}MB heap). Downgrading max-recall → standard search.`);
     useMaxRecall = false;
-    maxChars = Math.min(maxChars, config.SEARCH.max_chars_default);
+    resolvedMaxChars = Math.min(resolvedMaxChars, settings.MAX_CHARS_DEFAULT);
   }
 
   // Check if system is busy with ingestion
@@ -921,7 +955,7 @@ async function _executeSearchInternal(
   // Combine Engram Lookup + FTS + Molecule Search
   const engramIds = await lookupByEngram(cleanQuery);
   const engramResults = await hydrateEngrams(engramIds);
-  const primaryAnchors = await findAnchors(cleanQuery, Array.from(realBuckets), explicitTags, maxChars, provenance, filters);
+  const primaryAnchors = await findAnchors(cleanQuery, Array.from(realBuckets), explicitTags, resolvedMaxChars, provenance, filters);
 
   // Tag-Aware Fallback (if low precision/recall on initial anchors)
   if (primaryAnchors.length < 5) {
@@ -1078,7 +1112,7 @@ async function _executeSearchInternal(
     scopeTags: explicitTags,
     anchors: uniqueAnchors,
     walkerResults: walkerResults,
-    charBudget: maxChars,
+    charBudget: resolvedMaxChars,
   });
 
   const serializedContext = assembleAndSerialize({
@@ -1088,7 +1122,7 @@ async function _executeSearchInternal(
     scopeTags: explicitTags,
     anchors: uniqueAnchors,
     walkerResults: walkerResults,
-    charBudget: maxChars,
+    charBudget: resolvedMaxChars,
   });
 
   console.log(`[Search] Search completed in ${Date.now() - startTime}ms`);
@@ -1109,7 +1143,7 @@ async function _executeSearchInternal(
   // gives a rough upper bound on useful snippets.
   const maxResultsForBudget = Math.min(
     combinedResults.length,
-    Math.max(200, Math.ceil(maxChars / 200)),
+    Math.max(200, Math.ceil(resolvedMaxChars / 200)),
   );
   const cappedResults = combinedResults
     .sort((a: any, b: any) => (b.score || 0) - (a.score || 0))
@@ -1117,12 +1151,12 @@ async function _executeSearchInternal(
 
   // Apply context provenance formatting with coalescing (Standard 108)
   // Enable coalescing for high-budget queries to improve coherence
-  const enableCoalescing = maxChars > 16000; // Only coalesce for budgets > 16k chars
-  const proximityThreshold = maxChars > 100000 ? 800 : 500; // Larger threshold for max-recall
+  const enableCoalescing = resolvedMaxChars > 16000; // Only coalesce for budgets > 16k chars
+  const proximityThreshold = resolvedMaxChars > 100000 ? 800 : 500; // Larger threshold for max-recall
 
   console.log(`[Search] Coalescing: ${enableCoalescing ? 'enabled' : 'disabled'} (threshold: ${proximityThreshold}px)`);
 
-  const formatted = await formatResults(cappedResults, maxChars, {
+  const formatted = await formatResults(cappedResults, resolvedMaxChars, {
     enableCoalescing,
     proximityThreshold,
   });
@@ -1142,11 +1176,14 @@ export async function executeMoleculeSearch(
   query: string,
   bucket?: string,
   buckets?: string[],
-  maxChars: number = config.SEARCH.max_chars_default,
+  maxChars?: number,
   provenance: 'internal' | 'external' | 'quarantine' | 'all' = 'all',
   explicitTags: string[] = [],
   userContext?: UserContext,
 ): Promise<{ context: string; results: SearchResult[]; toAgentString: () => string; metadata?: any }> {
+  const settings = await getSearchSettings();
+  const resolvedMaxChars = maxChars ?? settings.MAX_CHARS_DEFAULT;
+
   // Memory-aware throttling
   const throttleResult = await throttleSearchForMemory();
   if (!throttleResult.proceed) {
@@ -1169,7 +1206,7 @@ export async function executeMoleculeSearch(
       const result = await executeSearch(
         molecule,
         buckets,
-        maxChars,
+        resolvedMaxChars,
         provenance,
         explicitTags,
         undefined,
@@ -1195,7 +1232,7 @@ export async function executeMoleculeSearch(
 
   console.log(`[MoleculeSearch] Combined results from ${molecules.length} molecules: ${allResults.length} total results`);
 
-  return await formatResults(allResults, maxChars); // Use original maxChars to maintain token budget
+  return await formatResults(allResults, resolvedMaxChars); // Use original maxChars to maintain token budget
 }
 
 /**
@@ -1277,12 +1314,15 @@ async function hydrateFromMirror(results: SearchResult[]) {
 export async function iterativeSearch(
   query: string,
   buckets: string[] = [],
-  maxChars: number = config.SEARCH.max_chars_default,
+  maxChars?: number,
   tags: string[] = [],
   provenance: 'internal' | 'external' | 'quarantine' | 'all' = 'all',
   useMaxRecall: boolean = false,
   userContext?: UserContext,
 ): Promise<{ context: string; results: SearchResult[]; attempt: number; metadata?: any; toAgentString: () => string }> {
+  const settings = await getSearchSettings();
+  const resolvedMaxChars = maxChars ?? settings.MAX_CHARS_DEFAULT;
+
   // Memory-aware throttling
   const throttleResult = await throttleSearchForMemory();
   if (!throttleResult.proceed) {
@@ -1291,7 +1331,7 @@ export async function iterativeSearch(
 
   // Check cache first (using LRU cache - Standard 016)
   cleanExpiredCache();
-  const cacheKey = getCacheKey(query, buckets, maxChars, tags, provenance, useMaxRecall);
+  const cacheKey = getCacheKey(query, buckets, resolvedMaxChars, tags, provenance, useMaxRecall);
   
   // Try to get from LRU cache
   const cached = lruSearchCache.get(cacheKey);
@@ -1312,7 +1352,7 @@ export async function iterativeSearch(
 
   // Strategy 1: Standard Expanded Search (All Nouns, Verbs, Dates + Expansion)
   console.log('[IterativeSearch] Strategy 1: Standard Execution');
-  let results = await executeSearch(query, buckets, maxChars, provenance, tags, undefined, useMaxRecall, userContext);
+  let results = await executeSearch(query, buckets, resolvedMaxChars, provenance, tags, undefined, useMaxRecall, userContext);
   if (results.results.length > 0) {
     lruSearchCache.set(cacheKey, { results: { ...results, attempt: 1 }, timestamp: Date.now() }, 2048);
     return { ...results, attempt: 1 };
@@ -1332,7 +1372,7 @@ export async function iterativeSearch(
     // Re-inject scope tags
     const strictQuery = Array.from(uniqueTokens).join(' ') + ' ' + tagsString;
     console.log(`[IterativeSearch] Fallback Query 1: "${strictQuery.trim()}"`);
-    results = await executeSearch(strictQuery, buckets, maxChars, provenance, tags, undefined, false, userContext);
+    results = await executeSearch(strictQuery, buckets, resolvedMaxChars, provenance, tags, undefined, false, userContext);
     if (results.results.length > 0) {
       lruSearchCache.set(cacheKey, { results: { ...results, attempt: 2 }, timestamp: Date.now() }, 2048);
       return { ...results, attempt: 2 };
@@ -1349,7 +1389,7 @@ export async function iterativeSearch(
 
   if (entityQuery.trim().length > 0 && entityQuery.trim() !== (Array.from(uniqueTokens).join(' ') + ' ' + tagsString).trim()) {
     console.log(`[IterativeSearch] Fallback Query 2: "${entityQuery.trim()}"`);
-    results = await executeSearch(entityQuery, buckets, maxChars, provenance, tags, undefined, false, userContext);
+    results = await executeSearch(entityQuery, buckets, resolvedMaxChars, provenance, tags, undefined, false, userContext);
     if (results.results.length > 0) {
       lruSearchCache.set(cacheKey, { results: { ...results, attempt: 3 }, timestamp: Date.now() }, 2048);
       return { ...results, attempt: 3 };

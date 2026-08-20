@@ -192,7 +192,7 @@ export function parseNaturalLanguage(query: string): string {
             const text = t.out().toLowerCase();
 
             // Whitelist specific domain words that might get misclassified or filtered
-            // Uses Config-based whitelist or falls back to defaults
+            // Uses Config-based whitelist or falls back to defaults (v5.2.0+: also supports DB via search.whitelist)
             const whitelist = config.SEARCH?.whitelist || ['burnout', 'career', 'decision', 'pattern', 'impact'];
             if (whitelist.some((w: string) => text.includes(w))) return true;
 

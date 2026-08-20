@@ -10,17 +10,11 @@ import {
 } from '../../utils/tag-modulation.js';
 import { parseCodeStructure, extToLanguage, CODE_EXTENSIONS } from './code-ast-parser.js';
 import type { CodeBlock } from './code-ast-parser.js';
+import { shouldUseAstParser, parseWithRegex as fastRegexParse } from './fast-regex-parser.js';
+import { wasmModuleLoader } from '../../utils/wasm-module-loader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Native modules from @rbalchii packages (with fallbacks)
-let nativeFingerprint: ((text: string) => string) | null = null;
-let nativeCleanse: ((text: string) => string) | null = null;
-
-// Native modules removed - using WASM implementations only
-// const fp = await import('@rbalchii/native-fingerprint');
-// const ka = await import('@rbalchii/native-keyassassin');
 
 export class AtomizerService {
 
@@ -230,6 +224,52 @@ export class AtomizerService {
     }
 
     /**
+     * Detect system-generated outputs that are not useful for the knowledge base.
+     * These include search results, log files, and other transient data.
+     */
+    private isSystemOutput(content: string): boolean {
+        // Check if content looks like a search result or system output
+        const lowerContent = content.toLowerCase();
+        
+        // Search result patterns (from Qwen Code search)
+        const searchPatterns = [
+            /search results/i,
+            /results for/i,
+            /found \d+ files? matching/i,
+            /no results found/i,
+            /query:.*$/m,  // Query line at top of output
+            /--- Results ---/i,
+        ];
+        
+        // Log file patterns (session logs, error logs)
+        const logPatterns = [
+            /^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z?\]/m,  // ISO timestamps at start of lines
+            /^ERROR:.*$/m,
+            /^WARN:.*$/m,
+            /^INFO:.*$/m,
+        ];
+        
+        // Check search patterns first (more specific)
+        for (const pattern of searchPatterns) {
+            if (pattern.test(content)) return true;
+        }
+        
+        // Check log patterns - only flag if more than 30% of lines are logs
+        const lines = content.split('\n');
+        let logLineCount = 0;
+        for (const pattern of logPatterns) {
+            for (const line of lines) {
+                if (pattern.test(line)) {
+                    logLineCount++;
+                }
+            }
+        }
+        
+        // If more than 30% of lines are log entries, skip it
+        return lines.length > 10 && (logLineCount / lines.length) > 0.3;
+    }
+
+    /**
      * Check if content is a chat JSONL file (Qwen Code session history)
      * These files contain structured conversation data that needs special parsing
      */
@@ -356,9 +396,11 @@ export class AtomizerService {
             return null; // Skip ingestion entirely
         }
 
-        // Note: System output (Anchor search results) is NOT skipped - it's cleaned during sanitization
-        // The sanitization step removes score markers, system IDs, YAML formatting, etc.
-        // Deduplication handles any remaining duplicates
+        // NEW: Detect and skip system-generated outputs that are not useful for knowledge base
+        if (!isChatJsonlFile && this.isSystemOutput(processedContent)) {
+            console.log(`[Atomizer] ⚠️ SKIP: ${filename} - System output detected (search results, logs, etc.)`);
+            return null; // Skip ingestion entirely — these are transient and not knowledge content
+        }
 
         console.log(`[Atomizer] ⏱️ START: ${filename} (${contentSizeMB}MB)`);
 
@@ -399,11 +441,12 @@ export class AtomizerService {
             // 4. Construct Compound ID
             const fullCompoundId = `mem_${compoundId}`;
 
-            // --- CODE AST EXTRACTION (Semantic Atomization) ---
+            // --- STRUCTURAL EXTRACTION (AST for code, Regex for text/markup/data) ---
             const ext = path.extname(sourcePath).slice(1);
             let astStructure: { blocks: Array<{ type: string; name: string | null; classContext: string | null; startLine: number; endLine: number }>; imports: string[] } | null = null;
 
             if (CODE_EXTENSIONS.includes(ext as any)) {
+                // CODE FILES: Use full WASM AST parsing for semantic understanding
                 console.log(`[Atomizer] 🔬 AST parsing code file: ${filename}`);
                 try {
                     astStructure = await this._parseCodeAsync(processedContent, ext);
@@ -417,6 +460,27 @@ export class AtomizerService {
                 } catch (err: any) {
                     console.warn(`[Atomizer] ⚠️ AST parse error on ${filename}: ${err.message}`);
                 }
+                // PAUSE after WASM AST parsing to allow event loop and GC to free memory
+                // This prevents heap exhaustion when processing many code files in sequence
+                await new Promise(resolve => setImmediate(resolve));
+            } else if (shouldUseAstParser(ext)) {
+                // Edge case: should not reach here, but safety fallback
+                console.log(`[Atomizer] 🔬 AST parsing code file (fallback): ${filename}`);
+            } else {
+                // NON-CODE FILES: Use fast regex parser instead of WASM overhead
+                const regexStart = Date.now();
+                try {
+                    astStructure = fastRegexParse(processedContent, ext) as any;
+                    if (astStructure && astStructure.blocks.length > 0) {
+                        console.log(
+                            `[Atomizer] 🔍 Fast-regex parsing: ${filename} → ${astStructure.blocks.length} structural atoms (${((Date.now() - regexStart))}ms)`,
+                        );
+                    } else {
+                        console.log(`[Atomizer] ⏱️ No structure detected in ${filename}, using text splitting`);
+                    }
+                } catch (err: any) {
+                    console.warn(`[Atomizer] ⚠️ Regex parse error on ${filename}: ${err.message}`);
+                }
             }
 
             // 5. Molecular Fission (Semantic Splitting)
@@ -428,7 +492,7 @@ export class AtomizerService {
             const moleculeParts = this.splitIntoMolecules(cleanContent, type);
             console.log(`[Atomizer] ⏱️ Split into ${moleculeParts.length} molecules: ${((Date.now() - splitStart) / 1000).toFixed(2)}s`);
 
-            // 5. Molecular Enrichment (Granular Tagging & Typing)
+            // 5. Molecular Enrichment (Granular Tagging & Typing) with memory cap
             const enrichStart = Date.now();
             const molecules: Molecule[] = [];
             const allAtomsMap = new Map<string, Atom>();
@@ -437,7 +501,12 @@ export class AtomizerService {
             systemAtoms.forEach(a => allAtomsMap.set(a.id, a));
 
             // Define maximum content length for individual molecules
-            const MAX_MOLECULE_CONTENT_LENGTH = 500 * 1024; // 500KB limit
+            const MAX_MOLECULE_CONTENT_LENGTH = 500 * 1024; // 500KB limit per molecule
+            
+            // Global enrichment memory cap: max 1000 molecules or ~500MB in memory at once
+            // When exceeded, flush to database and continue processing remaining molecules
+            const MAX_ENRICHMENT_MOLECULES = 1000;
+            const MAX_ENRICHMENT_MEMORY_BYTES = 500 * 1024 * 1024; // 500MB
 
             // Timestamp Context: Start with file timestamp (modification time)
             // As we scan molecules, if we find a date in the content (e.g. log timestamp),
@@ -546,6 +615,20 @@ export class AtomizerService {
                     },
                     codeStructure: moleculeCodeStructure,
                 });
+
+                // MEMORY CAP CHECK: If we've accumulated too many molecules or memory is getting high,
+                // flush to database and clear the array to prevent heap exhaustion.
+                if (molecules.length >= MAX_ENRICHMENT_MOLECULES) {
+                    const estimatedMemory = this._estimateMoleculeMemory(molecules);
+                    console.log(`[Atomizer] ⚠️ Memory cap hit: ${molecules.length} molecules, ~${(estimatedMemory / 1024 / 1024).toFixed(1)}MB — flushing to database`);
+                    // Flush current batch to database (atoms + compounds)
+                    await this._flushEnrichmentBatch(compoundId, allAtomsMap, molecules);
+                    // Clear molecules array but keep atoms map for deduplication
+                    molecules.length = 0;
+                } else if (molecules.length > MAX_ENRICHMENT_MOLECULES * 0.8) {
+                    const estimatedMemory = this._estimateMoleculeMemory(molecules);
+                    console.log(`[Atomizer] ⚠️ Memory warning: ${molecules.length} molecules, ~${(estimatedMemory / 1024 / 1024).toFixed(1)}MB — approaching cap`);
+                }
             }
             console.log(`[Atomizer] ⏱️ Enrichment complete: ${((Date.now() - enrichStart) / 1000).toFixed(2)}s`);
 
@@ -1249,37 +1332,23 @@ export class AtomizerService {
      * Scans for multiple timestamp formats and returns the earliest found
      */
     private extractEarliestTimestamp(chunk: string, fallbackTimestamp?: number): number {
-        const timestamps: number[] = [];
+        // Single-pass regex that matches all timestamp formats at once.
+        // Order matters: ISO timestamps first (longest match), then YYYY-MM-DD, then MM/DD/YYYY.
+        const combinedRegex = /\b(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z?)\b|\b(20[2-9]\d-\d{2}-\d{2})\b|\b(\d{1,2}\/\d{1,2}\/\d{4})\b/g;
+        let earliest: number | null = null;
 
-        // ISO timestamps: 2026-01-25T03:43:54.405Z or 2026-01-25 03:43:54
-        const isoRegex = /\b(\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z?)\b/g;
-        let isoMatch;
-        while ((isoMatch = isoRegex.exec(chunk)) !== null) {
-            const ts = Date.parse(isoMatch[1]);
-            if (!isNaN(ts)) timestamps.push(ts);
+        let match;
+        while ((match = combinedRegex.exec(chunk)) !== null) {
+            const tsStr = match[1] || match[2] || match[3];
+            if (tsStr) {
+                const ts = Date.parse(tsStr);
+                if (!isNaN(ts) && (earliest === null || ts < earliest)) {
+                    earliest = ts;
+                }
+            }
         }
 
-        // YYYY-MM-DD
-        const dateRegex = /\b(20[2-9]\d-\d{2}-\d{2})\b/g;
-        let dateMatch;
-        while ((dateMatch = dateRegex.exec(chunk)) !== null) {
-            const ts = Date.parse(dateMatch[1]);
-            if (!isNaN(ts)) timestamps.push(ts);
-        }
-
-        // MM/DD/YYYY or DD/MM/YYYY
-        const usDateRegex = /\b(\d{1,2}\/\d{1,2}\/\d{4})\b/g;
-        let usMatch;
-        while ((usMatch = usDateRegex.exec(chunk)) !== null) {
-            const ts = Date.parse(usMatch[1]);
-            if (!isNaN(ts)) timestamps.push(ts);
-        }
-
-        // Return earliest timestamp found, or fallback
-        if (timestamps.length > 0) {
-            return Math.min(...timestamps);
-        }
-        return fallbackTimestamp || Date.now();
+        return earliest ?? (fallbackTimestamp ?? Date.now());
     }
 
     private extractNumericData(text: string): { value: number, unit?: string } | null {
@@ -1308,22 +1377,23 @@ export class AtomizerService {
     }
 
     private generateSimHash(text: string): string {
-        // Use @rbalchii/native-fingerprint if available
-        if (nativeFingerprint) {
-            try {
-                return nativeFingerprint(text);
-            } catch { /* fall through to JS fallback */ }
+        // Use @rbalchii/anchor-fingerprint-wasm (64-bit SimHash) via the shared loader.
+        // The loader transparently falls back to a deterministic hash if WASM is unavailable,
+        // so this never throws and always returns a stable 16-char hex fingerprint.
+        try {
+            const fp = wasmModuleLoader.fingerprint(text);
+            return fp.toString(16).padStart(16, '0').substring(0, 16);
+        } catch {
+            // Last-resort deterministic fallback (should not normally be reached — the loader guards it).
+            let hash = 0;
+            const len = text.length;
+            if (len === 0) return '0';
+            for (let i = 0; i < len; i++) {
+                hash = ((hash << 5) - hash) + text.charCodeAt(i);
+                hash |= 0; // Convert to 32bit integer
+            }
+            return Math.abs(hash).toString(16);
         }
-
-        // JS Fallback: Simple Jenkins Hash
-        let hash = 0;
-        if (text.length === 0) return '0';
-        for (let i = 0; i < text.length; i++) {
-            const char = text.charCodeAt(i);
-            hash = ((hash << 5) - hash) + char;
-            hash &= hash; // Convert to 32bit integer
-        }
-        return Math.abs(hash).toString(16);
     }
 
     // ── Code AST helpers ────────────────────────────────────────────────
@@ -1381,5 +1451,48 @@ export class AtomizerService {
         }
 
         return { atoms, codeStructure };
+    }
+
+    /**
+     * Estimate memory usage of a batch of molecules (rough approximation)
+     */
+    private _estimateMoleculeMemory(molecules: Molecule[]): number {
+        let totalBytes = 0;
+        for (const mol of molecules) {
+            // Content string is the biggest contributor
+            totalBytes += mol.content.length * 2; // UTF-16 chars are ~2 bytes each in JS
+            // Atoms array references (8 bytes per reference)
+            totalBytes += mol.atoms.length * 8;
+            // Tags, entities, codeStructure overhead (~50 bytes per molecule)
+            totalBytes += 50 + (mol.tags?.length || 0) * 20;
+        }
+        return totalBytes;
+    }
+
+    /**
+     * Prepare a batch of molecules and atoms for database storage.
+     * Returns the data that should be stored, or null if nothing to store.
+     */
+    private _flushEnrichmentBatch(
+        compoundId: string,
+        allAtomsMap: Map<string, Atom>,
+        molecules: Molecule[],
+    ): { atoms: Atom[]; compounds: Compound[] } | null {
+        if (molecules.length === 0) return null;
+
+        // Convert molecule IDs to atom references for the compound
+        const compoundMolecules = molecules.map(m => m.id);
+        const allAtoms = Array.from(allAtomsMap.values());
+
+        // Create a compound record with these molecules and atoms
+        const compound: Compound = {
+            id: compoundId,
+            molecules: compoundMolecules,
+            atoms: allAtoms.map(a => a.id),
+            timestamp: Date.now(),
+            provenance: 'internal',
+        };
+
+        return { atoms: allAtoms, compounds: [compound] };
     }
 }

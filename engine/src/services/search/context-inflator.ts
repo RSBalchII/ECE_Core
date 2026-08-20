@@ -6,6 +6,7 @@ import { getMirrorPath, MIRRORED_BRAIN_PATH } from '../mirror/mirror.js';
 import { PATHS } from '../../config/paths.js';
 import { processWithAdaptiveConcurrency, getOptimalBatchSize } from '../../utils/adaptive-concurrency.js';
 import { batchFetchCompounds } from '../../utils/db-batch.js';
+import { pooledOpenFile } from '../../utils/file-handle-pool.js';
 
 interface ContextWindow {
     compoundId: string;
@@ -81,7 +82,7 @@ export class ContextInflator {
 
         // Process in batches to limit concurrency (file handles/DB connections)
         // Use adaptive batch size based on available memory (Standard 132)
-        const BATCH_SIZE = getOptimalBatchSize();
+        const BATCH_SIZE = await getOptimalBatchSize();
 
         for (let i = 0; i < results.length; i += BATCH_SIZE) {
             const batch = results.slice(i, i + BATCH_SIZE);
@@ -292,7 +293,7 @@ export class ContextInflator {
             if (chunkLength <= 0) return null;
 
             const buffer = Buffer.alloc(chunkLength);
-            fd = await fs.promises.open(absolutePath, 'r');
+            fd = await pooledOpenFile(absolutePath, 'r');
 
             // fs.promises.read returns { bytesRead, buffer }
             await fd.read(buffer, 0, chunkLength, rawStart);
@@ -701,7 +702,7 @@ export class ContextInflator {
         let fd: fs.promises.FileHandle | null = null;
 
         try {
-            fd = await fs.promises.open(absolutePath, 'r');
+            fd = await pooledOpenFile(absolutePath, 'r');
 
             for (const window of mergedWindows) {
                 const chunkLength = window.end - window.start;

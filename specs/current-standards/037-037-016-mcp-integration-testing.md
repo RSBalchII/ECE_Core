@@ -27,7 +27,7 @@ MCP integration tests MUST cover:
 
 describe('MCP Integration', () => {
   it('should connect to engine on correct port', async () => {
-    // Test that MCP uses engine port from user_settings.json
+    // Test that MCP uses engine port from database (app_settings table) — v5.2.0+
   });
 
   it('should handle engine not running gracefully', async () => {

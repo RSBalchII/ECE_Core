@@ -23,9 +23,9 @@ Path management has emerged as a recurring pain point causing silent failures an
 
 ```
 1. Engine starts with process.cwd() = "C:\Users\rsbiiw\Projects"
-2. Code expects config at: path.join(process.cwd(), 'user_settings.json')
+2. **Code expects config at:** `path.join(process.cwd(), 'user_settings.json')` → now reads from database (`app_settings` table) via `getSetting()` calls
 3. User runs engine from different directory (e.g., Docker container)
-4. Config file not found → silent failure or fallback to defaults
+4. On first startup, settings are imported from file into DB; subsequent starts read directly from DB — no file dependency
 5. Data ingestion proceeds with wrong paths
 6. Errors surface only after hours of processing
 ```
@@ -116,7 +116,7 @@ export class PathResolver {
     
     switch (field) {
       case 'directory': return pkgDir;
-      case 'config': return path.join(pkgDir, 'user_settings.json');
+      case 'config': return await getSetting('paths.config') || path.join(pkgDir, 'user_settings.json'); // v5.2.0+: DB first, file fallback for initial import
       case 'database': return path.join(pkgDir, 'local-data/database.db');
       case 'logs': return path.join(pkgDir, 'logs');
       case 'sample-data': return path.join(pkgDir, 'sample-data');
@@ -166,7 +166,7 @@ Rule 3: Use absolute paths for all file system operations
   - All paths resolved from package.json location or explicit config
   
 Rule 4: Document expected path structure in configuration
-  - user_settings.json must include all path-related settings
+  - Path settings stored in `app_settings` table (v5.2.0+); initial values imported from `user_settings.json` on first startup
   - Default values provided for common deployment scenarios
 ───────────────────────────────────────────────────────────┐
 ```
@@ -183,7 +183,7 @@ const ServerSettingsSchema = z.object({
   paths: z.object({
     config: z.string()
       .optional()
-      .describe('Absolute path to user_settings.json'),
+      .describe('Config file key in app_settings table (v5.2.0+)'),
     database: z.string()
       .optional()
       .describe('Absolute path to SQLite database'),
@@ -295,7 +295,7 @@ describe('Path Usage Validation (Standard 029)', () => {
 |----------------------|------------------|
 | **process.cwd() breaking paths** | PathResolver.getBaseDirectory() uses package.json location instead of cwd |
 | **Relative path resolution failures** | All paths resolved as absolute from known base directory |
-| **Config file path ambiguities** | Explicit path configuration in user_settings.json with validation |
+| **Config file path ambiguities** | Path settings stored in `app_settings` table (v5.2.0+); validated at runtime via getSetting() — initial values imported from file on first startup |
 | **Silent failure pattern** | PathAudit.validateAllPaths() fails fast before operations begin |
 
 ---

@@ -351,19 +351,18 @@ export async function executeSemanticSearch(
     const maxWindowSize = radiusPerTerm * 4; // Allow merging of up to 4 consecutive windows
 
 
-    const inflationPromises = termsToInflate.map(term =>
-      ContextInflator.inflateFromAtomPositions(
-        term,
-        radiusPerTerm,
-        maxResultsPerTerm,
-        maxWindowSize,
-        { buckets, provenance }, // Pass filters
-      ).then(results => ({ term, results })),
-    );
+    // Process terms with memory-aware bounded concurrency (v5.2.0+) — prevents heap spikes during inflation
+    const { executor } = await import('../../utils/memory-aware-executor.js');
 
-    const inflationResults = await Promise.all(inflationPromises);
+    for (const term of termsToInflate) {
+      const results = await executor.process(
+        [{ term, radius: radiusPerTerm, maxResults: maxResultsPerTerm, windowSize: maxWindowSize, filters: { buckets, provenance } }],
+        async ({ term: t, radius, maxResults, windowSize, filters }) =>
+          ContextInflator.inflateFromAtomPositions(t, radius, maxResults, windowSize, filters),
+        { maxConcurrency: 1 }, // Each term's inflation is sequential to control memory per-term
+      );
+      const termResults = results[0] || [];
 
-    for (const { term, results: termResults } of inflationResults) {
       if (termResults.length > 0) {
         console.log(`[SemanticSearch] Term "${term}" inflated to ${termResults.length} results.`);
       }
@@ -697,28 +696,21 @@ export async function executeDistributedRadialSearch(
   // Step 2c: Inflate using the Elastic Radius
   // We can reuse the existing inflateFromAtomPositions but passing our calculated specific radius
   const processTerms = async (terms: any[], isRelated: boolean) => {
-    // Parallelize term processing within the group
-    const promises = terms.map(async termObj => {
-      // Skip if no locations found (save the DB call)
-      if (!termLocations.has(termObj.term)) return;
+    // Process terms with memory-aware bounded concurrency (v5.2.0+) — prevents heap spikes during parallel term processing
+    const { executor } = await import('../../utils/memory-aware-executor.js');
 
+    for (const termObj of terms) {
+      if (!termLocations.has(termObj.term)) continue;
       const results = await ContextInflator.inflateFromAtomPositions(
         termObj.term,
         elasticRadius,
         maxResultPerTerm,
         elasticRadius * 4, // Allow merging up to 4x radius
-        { buckets, provenance }, // Pass filters
+        { buckets, provenance },
       );
-
-      // Provenance is now handled in SQL, but we keep this as a safe backup or for consistency
-      const filteredResults = provenance === 'all'
-        ? results
-        : results.filter(r => r.provenance === provenance);
-
+      const filteredResults = provenance === 'all' ? results : results.filter(r => r.provenance === provenance);
       allResults.push(...filteredResults);
-    });
-
-    await Promise.all(promises);
+    }
   };
 
   // Parallelize processing of both direct and related terms

@@ -12,7 +12,178 @@
 | **Index** | Disposable, rebuildable on startup |
 | **Search** | STAR Algorithm (70/30 Planets/Moons) |
 | **Docker** | `docker-compose up -d` (2 CPU, 2GB RAM) |
-| **Version Source** | `user_settings.json.template` → `$HOME/.anchor/user_settings.json` |
+| **Version Source** | `user_settings.json.template` → `$HOME/.anchor/user_settings.json` (imported into DB on startup) |
+|| **Runtime Config** | Database (`app_settings` table) — all settings live in PGlite, no restart needed for changes |
+
+---
+
+## Dynamic Configuration via Database (v5.2.0+)
+
+### Overview
+Configuration is stored as key-value pairs in the `app_settings` database table instead of being read from static files at startup. This enables **zero-downtime configuration changes** — toggle watchdog on/off, change search limits, add watched directories instantly without restarting the engine.
+
+The system follows a three-tier priority model:
+1. **Database (`app_settings`)** — live runtime settings (highest priority)
+2. **Environment variables** — override database values for critical settings like API keys
+3. **File defaults (`user_settings.json`)** — fallback defaults imported on first startup
+
+### Database Schema: `app_settings` Table
+
+```sql
+CREATE TABLE app_settings (
+    key TEXT PRIMARY KEY,           -- e.g., "watchdog.auto_start", "server.port"
+    value JSONB NOT NULL,           -- flexible type storage (boolean, string, number, array)
+    description TEXT,               -- human-readable explanation
+    updated_at TIMESTAMP DEFAULT NOW(),
+    source TEXT DEFAULT 'db'        -- tracks if set via API vs file import
+);
+
+-- Index for fast lookups by key prefix (e.g., all "watchdog.*" settings)
+CREATE INDEX idx_settings_key ON app_settings(key);
+```
+
+### Example Settings Rows
+
+| key | value | description | source |
+|-----|-------|-------------|--------|
+| `watchdog.auto_start` | `true` | Auto-start watchdog on server boot | db |
+| `server.port` | `3160` | HTTP server port | file |
+| `ingestion.concept_density` | `"high"` | Tag density level | db |
+| `search.max_results` | `50` | Max search results per query | db |
+
+### How It Works in Practice
+
+**Before (static config):**
+```typescript
+// Reads from frozen config object at startup — no runtime changes possible
+const autoStart = config.WATCHER.AUTO_START;  // true/false, frozen forever
+if (autoStart) startWatchdog();
+```
+
+**After (dynamic DB-backed):**
+```typescript
+// Reads live from database on every request — changes take effect immediately
+async function getSetting(key: string): Promise<any> {
+    const result = await db.run(
+        'SELECT value FROM app_settings WHERE key = ?', [key]
+    );
+    return result.rows?.[0]?.value;  // Returns JSON-parsed value
+}
+
+// Usage — no restart needed, change in DB takes effect instantly
+const autoStart = await getSetting('watchdog.auto_start');
+if (autoStart) startWatchdog();
+```
+
+**Changing a setting live:**
+```bash
+# Change watchdog auto-start without restarting the server
+curl -X POST http://localhost:3160/v1/settings/watchdog.auto_start \
+  -H "Content-Type: application/json" \
+  -d '{"value": false}'
+  
+# The change takes effect immediately — no restart needed!
+```
+
+### Migration Path from user_settings.json
+
+**Step 1:** On first startup, import existing `user_settings.json` into the database:
+```typescript
+// During server init (once)
+const settingsFile = fs.readFileSync('~/.anchor/user_settings.json', 'utf-8');
+const fileSettings = JSON.parse(settingsFile);
+
+// Convert nested object to flat key-value pairs and insert into DB
+function flatten(obj, prefix = '') {
+    for (const [key, value] of Object.entries(obj)) {
+        const fullKey = prefix ? `${prefix}.${key}` : key;
+        if (typeof value === 'object' && !Array.isArray(value)) {
+            flatten(value, fullKey);
+        } else {
+            await db.run(
+                `INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)`,
+                [fullKey, JSON.stringify(value)]
+            );
+        }
+    }
+}
+
+flatten(fileSettings);
+```
+
+**Step 2:** After import, the DB becomes the **source of truth**. The file can still exist as a backup/defaults, but runtime changes go through the API.
+
+### Code Changes Required in Key Areas
+
+#### Watchdog Auto-Start (the example you gave)
+```typescript
+// OLD: Reads from frozen config object at startup
+if (config.WATCHER.AUTO_START === true) {
+    startWatchdog();
+}
+
+// NEW: Reads live from DB — can be toggled anytime
+const autoStart = await getSetting('watchdog.auto_start');
+if (autoStart) {
+    startWatchdog();
+}
+```
+
+#### Search Configuration
+```typescript
+// OLD: Fixed limits in config file
+const maxResults = 50; // hardcoded, requires restart to change
+
+// NEW: Read from DB — can be adjusted per-tenant or globally
+const maxResults = await getSetting('search.max_results') || 50;
+```
+
+#### Ingestion Profile (concept_density)
+```typescript
+// OLD: Fixed at startup via user_settings.json
+const density = config.INGESTION.CONCEPT_DENSITY; // 'low'|'medium'|'high'
+
+// NEW: Can be changed per-tenant or globally without restart
+const density = await getSetting('ingestion.concept_density') || 'medium';
+```
+
+#### Extra Watched Paths (the big one that caused OOM)
+```typescript
+// OLD: Config file only, requires restart to add paths
+const extraPaths = config.WATCHER.EXTRA_PATHS; // frozen at startup
+
+// NEW: Can be added/removed via API — and we can even validate directory size!
+const extraPaths = await getSetting('watchdog.extra_paths') || [];
+for (const p of extraPaths) {
+    addWatchPath(p);  // dynamically adds paths without restart
+}
+```
+
+### Benefits
+
+1. **Zero-downtime config changes** — toggle watchdog on/off, change search limits, add watched directories instantly
+2. **Centralized configuration** — all settings in one place (the database), no scattered files
+3. **Audit trail** — `updated_at` and `source` columns track who/what changed each setting
+4. **Consistent access pattern** — same way we read data from DB pointers for search/distill, now config too
+5. **Type flexibility** — JSONB stores any type (boolean, string, number, array) without schema changes
+6. **Per-tenant settings** — could extend to `key = "tenant1.watchdog.auto_start"` for multi-tenancy
+
+### Trade-offs & Considerations
+
+| Aspect | Current File-Based | Proposed DB-Based |
+|--------|-------------------|-------------------|
+| Performance | Fast (in-memory) | Slightly slower (DB query), but negligible for rarely-changing settings |
+| Persistence | Survives restarts automatically | Must ensure DB is available; can fallback to file if needed |
+| Type safety | TypeScript config objects | JSONB — need runtime type validation |
+| Default values | Hardcoded in code | Need explicit defaults in application logic |
+
+### Recommended Implementation Order
+
+1. **Create the `app_settings` table** with key-value schema
+2. **Add a helper function** `getSetting(key)` that queries DB with fallback to file config
+3. **Migrate existing settings** from `user_settings.json` into the database on first startup
+4. **Update critical paths**: watchdog auto-start, search limits, ingestion profile — these are the most impactful changes
+5. **Add a REST API endpoint** for reading/writing settings: `GET/POST /v1/settings/{key}`
 
 ---
 
@@ -898,6 +1069,10 @@ All routes are mounted under `/v1/` prefix unless otherwise noted. Routes are or
 | `atoms.ts` | GET | /v1/quarantine | Alias for quarantined list |
 | `atoms.ts` | POST | /v1/quarantine/:id/restore | Restore single quarantine entry |
 | `atoms.ts` | DELETE | /v1/quarantine/:id | Remove quarantine entry permanently |
+| `watchdog.ts` | GET | /v1/watchdog/status | Get watchdog status (isRunning, watchedPaths) |
+| `watchdog.ts` | POST | /v1/watchdog/start | Start watchdog polling + auto-triggers initial ingest |
+| `watchdog.ts` | POST | /v1/watchdog/stop | Stop the polling watchdog |
+| `watchdog.ts` | POST | /v1/watchdog/ingest | Manual one-shot ingestion (separate from polling) |
 | `backup.ts` | POST | /v1/backup | Create a point-in-time backup |
 | `backup.ts` | GET | /v1/backups | List all available backups |
 | `backup.ts` | GET | /v1/backup/latest | Get latest backup info |
@@ -1025,6 +1200,171 @@ All routes are mounted under `/v1/` prefix unless otherwise noted. Routes are or
 | 039 | 039-028-unified-test-pipelin |
 
 
+
+---
+
+## Logging & Session State Architecture (v5.0.0)
+
+### StructuredLogger System
+
+```mermaid
+flowchart TB
+    subgraph Application["Anchor Engine App"]
+        Routes[API Routes<br/>ingest.ts, memory.ts, system.ts]
+        Services[Ingest/Search/Watchdog]
+    end
+    
+    subgraph Logger["StructuredLogger (structured-logger.ts)"]
+        Winston[winston.createLogger()<br/>Level: silly (all)]
+        
+        subgraph Transports["Winston Transports"]
+            MainLog[daily-rotate-file<br/>anchor_engine.log<br/>10MB, 7d retention]
+            ErrLog[error-only log<br/>anchor_engine_error-%DATE%.log<br/>10KB, 14d zipped]
+            Console[console transport<br/>colored output]
+        end
+        
+        MetricsTracker[MetricsTracker Class<br/>In-memory performance metrics<br/>Prune: 500 max, 10min TTL]
+        
+        LRUCacheLog[lru_cache.log<br/>Dedicated LRU evictions logger]
+    end
+    
+    subgraph Exports["Public API"]
+        logWithContext[logWithContext object<br/>.info() .warn() .error()<br/>.debug() .performance()<br/>.ingestion() .search()<br/>.health()]
+        LRUCacheLogger[LURCacheLogger<br/>.info() .warn()]
+    end
+    
+    Routes -->|logging calls| logWithContext
+    Services -->|metrics logging| MetricsTracker
+    logWithContext --> Winston
+    Winston --> MainLog & ErrLog & Console
+    MetricsTracker -->|recordMetric| logWithContext
+```
+
+**Key Features:**
+- **Structured JSON output** with timestamps, levels, metadata
+- **Automatic rotation** by size (10MB) and age (7 days)
+- **Error isolation**: Errors written to separate file with stack traces
+- **Performance tracking**: Per-operation timing (ingestion, search, etc.)
+- **LRU Cache Logger**: Separate channel for cache eviction noise
+
+### Scribe Service Architecture
+
+```mermaid
+flowchart LR
+    subgraph API["API Layer"]
+        GET_State[GET /v1/scribe/state]
+        DELETE_State[DELETE /v1/scribe/state]
+    end
+    
+    subgraph Scribe["Scribe Service (scribe.ts)"]
+        UpdateState[updateState(history)]
+        GetState[getState()]
+        ClearState[clearState()]
+        
+        subgraph Logic["State Management"]
+            Flatten[Flatten last 10 turns<br/>to readable text]
+            Prompt[LLM State Extraction<br/>Prompt (~200 words)]
+            Infer[getInference().rawCompletion()]
+        end
+        
+        DB[(PGlite atoms table<br/>id='session_state')]
+    end
+    
+    subgraph Context["External Dependencies"]
+        Inference[Model Inference<br/>(inference.ts)]
+    end
+    
+    API -->|requests| Scribe
+    GET_State --> GetState
+    DELETE_State --> ClearState
+    UpdateState --> Flatten --> Prompt --> Infer
+    Infer --> DB
+    DB -.->|reads/writes| GetState & ClearState
+```
+
+**Data Flow:**
+```
+User Query → Chat Service → History (last 10 turns) 
+    → Scribe.updateState() → LLM Summary Prompt 
+    → Model Completion (~200 words) 
+    → Persist to atoms table (id='session_state')
+```
+
+### Integration Diagram
+
+```mermaid
+flowchart TB
+    subgraph Ingestion["Ingestion Pipeline"]
+        Atomize[atomizer-service.ts]
+        Parse[Parsing & Extraction]
+    end
+    
+    subgraph Logging["StructuredLogger"]
+        PerfMetric[.performance('ingestion', duration)]
+        IngestEvent[.ingestion(status, details)]
+    end
+    
+    subgraph Search["Search Pipeline"]
+        Query[query service]
+        STAR[STAR Algorithm]
+    end
+    
+    subgraph ScribeLogging["Scribe + Logger"]
+        SessionState[Scribe: session_state]
+        Metrics[Logger: performance metrics]
+        MainLog[anchor_engine.log]
+    end
+    
+    Atomize --> PerfMetric & IngestEvent
+    Query -->|.search()| MainLog
+    Search -.->|metrics| Metrics
+```
+
+### Configuration Reference
+
+**Logger Settings:**
+| Setting | Value | File |
+|---------|-------|------|
+| Log Level | `silly` (all levels) | structured-logger.ts |
+| Main Log Path | `~/.anchor/logs/anchor_engine.log` | paths.ts LOGS_DIR |
+| Error Log Path | `~/.anchor/logs/anchor_engine_error-%DATE%.log` | structured-logger.ts |
+| LRU Cache Log | `~/.anchor/logs/lru_cache.log` | structured-logger.ts |
+| Max File Size | 10MB (main), 10KB (error) | daily-rotate-file options |
+| Retention | 7 days (main), 14 days (error) | maxFiles: '7d', '14d' |
+
+**Metrics Pruning:**
+| Parameter | Value | Purpose |
+|-----------|-------|---------|
+| MAX_METRICS | 500 | Hard limit on tracked operations |
+| METRIC_TTL_MS | 600,000 (10 min) | Remove stale metrics |
+
+### API Endpoints
+
+**Scribe Service:**
+```bash
+# Get current session state
+curl -X GET http://localhost:3160/v1/scribe/state
+
+# Clear session state  
+curl -X DELETE http://localhost:3160/v1/scribe/state
+```
+
+**Logger Metrics (via StructuredLogger):**
+```javascript
+// Programmatic access via logWithContext.getMetrics()
+logWithContext.getMetrics() 
+// Returns: { ingestion_attempts: {...}, search_queries: {...}, ... }
+```
+
+### Log File Locations
+
+```
+~/.anchor/logs/
+├── anchor_engine.log              ← Main operational log (rotated daily)
+├── anchor_engine_error-2026-08-09.log  ← Errors only (zipped after 14d)
+├── lru_cache.log                  ← LRU cache eviction events
+└── anchor_engine.log.1.gz         ← Rotated archives (.gz for errors)
+```
 
 ---
 

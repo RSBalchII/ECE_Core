@@ -16,6 +16,10 @@
  *   --export, -e      Export to inbox/distilled/ folder
  *   --strict          Strict normalization (default)
  *   --lenient         Lenient normalization
+ *   --mode=full-corpus   Seedless full-corpus mode (dedup every atom, stream JSONL)
+ *   --page-size=N       full-corpus: atoms per DB page (default 500)
+ *   --inflate-radius=N  full-corpus: bytes each side of pointer (default 300, max 1000)
+ *   --max-record-bytes=N full-corpus: cap on inflated bytes per record (default 8192)
  */
 
 import { db } from '../core/db.js';
@@ -75,6 +79,17 @@ Examples:
   const outputIndex = args.indexOf('--output') !== -1 ? args.indexOf('--output') : args.indexOf('-o');
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
+  // Full-corpus / tuning flags (Standard 133 seedless mode)
+  const mode = args.find(a => a.startsWith('--mode'))?.split('=')[1];
+  const pageSize = args.find(a => a.startsWith('--page-size'))?.split('=')[1];
+  const inflateRadius = args.find(a => a.startsWith('--inflate-radius'))?.split('=')[1];
+  const maxRecordBytes = args.find(a => a.startsWith('--max-record-bytes'))?.split('=')[1];
+  const consumedFlagValues = new Set<string>();
+  for (const f of ['--mode', '--page-size', '--inflate-radius', '--max-record-bytes']) {
+    const idx = args.indexOf(f);
+    if (idx >= 0 && idx + 1 < args.length) consumedFlagValues.add(args[idx + 1]);
+  }
+
   let outputFormat: RadialDistillRequest['output_format'] = 'decision-records'; // Default to decision-records in v2
   if (explicitFormat && explicitFormat.includes('yaml')) {
     outputFormat = 'yaml';
@@ -86,8 +101,8 @@ Examples:
   const defaultOutput = `./reports/distill-report-${timestamp}.${ext}`;
   const outputPath = outputIndex >= 0 ? args[outputIndex + 1] : defaultOutput;
 
-  // Remaining arg is the seed query
-  const seedQuery = args.filter(a => !a.startsWith('-') && args.indexOf(a) !== seedIdsIndex + 1 && args.indexOf(a) !== outputIndex + 1 && args.indexOf(a) !== radiusIndex + 1)[0];
+  // Remaining arg is the seed query (excluding consumed flag values)
+  const seedQuery = args.filter(a => !a.startsWith('-') && args.indexOf(a) !== seedIdsIndex + 1 && args.indexOf(a) !== outputIndex + 1 && args.indexOf(a) !== radiusIndex + 1 && !consumedFlagValues.has(a))[0];
 
   console.log('='.repeat(60));
   console.log('  Anchor Engine - Graph Distiller');
@@ -112,6 +127,11 @@ Examples:
       output_format: asYaml ? 'yaml' : (asJson ? 'json' : 'decision-records'),
       output_path: outputPath,
       export_to_inbox: exportToInbox,
+      // Full-corpus / seedless tuning (Standard 133)
+      mode: (mode as RadialDistillRequest['mode']) || undefined,
+      page_size: pageSize ? parseInt(pageSize, 10) : undefined,
+      inflate_radius: inflateRadius ? parseInt(inflateRadius, 10) : undefined,
+      max_record_bytes: maxRecordBytes ? parseInt(maxRecordBytes, 10) : undefined,
     };
 
     console.log('Radial Distilling (Standard 133)...');

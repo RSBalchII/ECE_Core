@@ -113,12 +113,17 @@ export function setupDistillRoutes(app: Application) {
         output_format = 'decision-records',
         output_path,
         export_to_inbox = false,
+        mode,
+        page_size,
+        inflate_radius,
+        max_record_bytes,
       } = req.body as any;
 
       StructuredLogger.info('DISTILL_TRIGGER', {
         seed_query: seed_query || seed_ids || 'all',
         radius,
         output_format,
+        mode: mode || (seed_query || seed_ids ? undefined : 'full-corpus'),
       });
 
       const radialRequest = {
@@ -128,6 +133,10 @@ export function setupDistillRoutes(app: Application) {
         output_format,
         output_path,
         export_to_inbox,
+        mode,
+        page_size,
+        inflate_radius,
+        max_record_bytes,
       };
 
       const result = await radialDistill(radialRequest);

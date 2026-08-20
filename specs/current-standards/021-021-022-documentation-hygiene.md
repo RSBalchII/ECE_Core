@@ -205,12 +205,12 @@ specs/archive-standards/
 
 ## 📝 Appendix: Pain Point Log
 
-### Configuration Drift (2026-03-25)
+### Configuration Drift (2026-03-25 → v5.2.0+ resolved)
 - **Commits:** 0e86af7, d6ec794, f960f8b, +6 more
 - **Time Spent:** 4 hours
 - **Root Cause:** API key, version, paths scattered across config files
-- **Solution:** Single Source of Truth - user_settings.json (0e86af7)
-- **Prevention:** Standard 015 updated, paths.ts reads from user_settings.json
+- **Solution (v5.2.0+):** Settings migrated from `user_settings.json` to database (`app_settings` table). File is now only used for initial import on first startup; all subsequent reads come from DB via `getSetting()`. No restart needed for changes.
+- **Prevention:** Standard 015 updated, paths.ts reads from DB, runtime config API endpoints added
 - **Cross-Reference:** Standards 015, 018, 022
 
 ### GitHub PAT Authentication (2026-03-26)
@@ -226,7 +226,7 @@ specs/archive-standards/
 - **Time Spent:** 1.5 hours
 - **Root Cause:** pathManager.getNotebookDir() used `../..` instead of `..`
 - **Solution:** Fixed path-manager.ts, added PATHS.DISTILLS_DIR
-- **Prevention:** Paths now configurable in user_settings.json
+- **Prevention:** Paths now configurable via `app_settings` table (v5.2.0+); initial values imported from file on first startup
 - **Cross-Reference:** Standard 015, 022
 
 ### Distill File Read Error (2026-03-26)

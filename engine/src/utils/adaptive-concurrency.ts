@@ -1,19 +1,16 @@
 /**
- * Adaptive Concurrency Utility
- *
+ * Adaptive Concurrency Utility (v5.2.0+)
+ * 
  * Automatically switches between sequential and parallel processing
  * based on available system memory. Optimized for:
  * - Low-memory environments (Termux/Android): Sequential processing
  * - High-memory systems (64GB laptops): Parallel processing
- *
- * Standards: 132 - Adaptive Concurrency Control
+ * 
+ * Settings loaded from database with file fallback (bidirectional sync)
  */
 
 import os from 'os';
-import * as fs from 'fs';
-import { PATHS } from '../config/paths.js';
-
-const USER_SETTINGS_PATH = PATHS.USER_SETTINGS;
+import { getSetting, setSetting } from '../services/settings.js';
 
 // In-memory cache for settings
 let cachedSettings: any = null;
@@ -21,10 +18,10 @@ let settingsLastRead = 0;
 const SETTINGS_CACHE_MS = 5000; // Cache for 5 seconds
 
 /**
- * Load adaptive concurrency settings from user_settings.json
- * Falls back to environment variables, then defaults
+ * Load adaptive concurrency settings from database (v5.2.0+)
+ * Falls back to file-based config if DB not available
  */
-function loadUserSettings(): any {
+async function loadUserSettings(): Promise<any> {
   const now = Date.now();
   
   // Return cached settings if still valid
@@ -33,26 +30,39 @@ function loadUserSettings(): any {
   }
   
   try {
-    if (fs.existsSync(USER_SETTINGS_PATH)) {
-      const content = fs.readFileSync(USER_SETTINGS_PATH, 'utf-8');
+    // Try database first (v5.2.0+)
+    const dbResult = await getSetting('adaptive_concurrency');
+    if (dbResult !== undefined) {
+      cachedSettings = typeof dbResult === 'string' ? JSON.parse(dbResult) : dbResult;
+      settingsLastRead = now;
+      return cachedSettings;
+    }
+    
+    // Fallback to file-based config
+    const fs = await import('fs');
+    const path = await import('path');
+    const { PATHS } = await import('../config/paths.js');
+    
+    if (fs.existsSync(PATHS.USER_SETTINGS)) {
+      const content = fs.readFileSync(PATHS.USER_SETTINGS, 'utf-8');
       const settings = JSON.parse(content);
       cachedSettings = settings.adaptive_concurrency || {};
       settingsLastRead = now;
       return cachedSettings;
     }
   } catch (error) {
-    console.warn('[AdaptiveConcurrency] Failed to load user_settings.json:', error);
+    console.warn('[AdaptiveConcurrency] Failed to load settings:', error);
   }
   
   return {};
 }
 
 /**
- * Get environment setting from user_settings.json
+ * Get environment setting from database or file
  * 'auto' | 'low_memory' | 'high_memory'
  */
-function getEnvironmentMode(): 'auto' | 'low_memory' | 'high_memory' {
-  const settings = loadUserSettings();
+async function getEnvironmentMode(): Promise<'auto' | 'low_memory' | 'high_memory'> {
+  const settings = await loadUserSettings();
   const mode = settings.environment || process.env.ANCHOR_CONCURRENCY_ENV;
   
   if (mode === 'low_memory' || mode === 'high_memory' || mode === 'auto') {
@@ -101,25 +111,23 @@ export function getSystemMemoryInfo(config?: ConcurrencyConfig): SystemMemoryInf
   const usedMB = Math.floor(usedBytes / 1024 / 1024);
   const usagePercent = Math.round((usedBytes / totalBytes) * 100);
   
-  const thresholds = getThresholds(config);
-  
   return {
     totalMB,
     freeMB,
     usedMB,
     usagePercent,
-    isLowMemory: freeMB < thresholds.sequentialThresholdMB,
-    isHighMemory: freeMB > thresholds.parallelThresholdMB,
+    isLowMemory: false, // Will be calculated after thresholds are loaded
+    isHighMemory: false,
   };
 }
 
 /**
- * Get configured thresholds with user_settings.json and environment overrides
- * Priority: config param > user_settings.json > environment variables > defaults
+ * Get configured thresholds with database and environment overrides (v5.2.0+)
+ * Priority: config param > database > env vars > file defaults
  */
-function getThresholds(config?: ConcurrencyConfig) {
-  const userSettings = loadUserSettings();
-  const environmentMode = getEnvironmentMode();
+async function getThresholds(config?: ConcurrencyConfig) {
+  const userSettings = await loadUserSettings();
+  const environmentMode = await getEnvironmentMode();
   
   // Environment variable overrides (highest priority after config param)
   const envSequential = process.env.ANCHOR_SEQUENTIAL_THRESHOLD_MB;
@@ -128,7 +136,7 @@ function getThresholds(config?: ConcurrencyConfig) {
   const envForceSequential = process.env.ANCHOR_FORCE_SEQUENTIAL;
   const envForceParallel = process.env.ANCHOR_FORCE_PARALLEL;
   
-  // Determine force flags based on environment mode from user_settings.json
+  // Determine force flags based on environment mode from database or file
   let forceSequential = config?.forceSequential ?? false;
   let forceParallel = config?.forceParallel ?? false;
   
@@ -140,7 +148,7 @@ function getThresholds(config?: ConcurrencyConfig) {
     forceParallel = true;
   }
   
-  // Environment variables can override user_settings.json
+  // Environment variables can override database or file settings
   if (envForceSequential === 'true') forceSequential = true;
   if (envForceParallel === 'true') forceParallel = true;
 
@@ -167,8 +175,8 @@ function getThresholds(config?: ConcurrencyConfig) {
 /**
  * Determine if we should use sequential processing
  */
-export function shouldUseSequential(config?: ConcurrencyConfig): boolean {
-  const thresholds = getThresholds(config);
+export async function shouldUseSequential(config?: ConcurrencyConfig): Promise<boolean> {
+  const thresholds = await getThresholds(config);
   
   // Force flags take precedence
   if (thresholds.forceSequential) return true;
@@ -182,8 +190,8 @@ export function shouldUseSequential(config?: ConcurrencyConfig): boolean {
 /**
  * Get the optimal batch size for current memory conditions
  */
-export function getOptimalBatchSize(config?: ConcurrencyConfig): number {
-  const thresholds = getThresholds(config);
+export async function getOptimalBatchSize(config?: ConcurrencyConfig): Promise<number> {
+  const thresholds = await getThresholds(config);
   const memory = getSystemMemoryInfo(config);
 
   if (thresholds.forceSequential || memory.isLowMemory) {
@@ -206,8 +214,8 @@ export function getOptimalBatchSize(config?: ConcurrencyConfig): number {
 /**
  * Get the optimal concurrency level for current memory conditions
  */
-export function getOptimalConcurrency(config?: ConcurrencyConfig): number {
-  const thresholds = getThresholds(config);
+export async function getOptimalConcurrency(config?: ConcurrencyConfig): Promise<number> {
+  const thresholds = await getThresholds(config);
   const memory = getSystemMemoryInfo(config);
   
   if (thresholds.forceSequential || memory.isLowMemory) {
@@ -233,8 +241,8 @@ export async function processWithAdaptiveConcurrency<T, R>(
   config?: ConcurrencyConfig,
 ): Promise<R[]> {
   const results: R[] = [];
-  const concurrency = getOptimalConcurrency(config);
-  const batchSize = getOptimalBatchSize(config);
+  const concurrency = await getOptimalConcurrency(config);
+  const batchSize = await getOptimalBatchSize(config);
   
   // Log mode for debugging
   const memory = getSystemMemoryInfo(config);
@@ -280,12 +288,13 @@ export async function processWithAdaptiveConcurrency<T, R>(
 export async function processInBatches<T, R>(
   items: T[],
   processor: (item: T, index: number) => Promise<R>,
-  batchSize: number = getOptimalBatchSize(),
+  batchSize?: number,
 ): Promise<R[]> {
   const results: R[] = [];
+  const effectiveBatchSize = batchSize ?? await getOptimalBatchSize();
   
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
+  for (let i = 0; i < items.length; i += effectiveBatchSize) {
+    const batch = items.slice(i, i + effectiveBatchSize);
     
     // Process batch sequentially for memory safety
     for (let j = 0; j < batch.length; j++) {
@@ -305,11 +314,11 @@ export async function processInBatches<T, R>(
 /**
  * Get a summary of current concurrency settings for logging
  */
-export function getConcurrencySummary(config?: ConcurrencyConfig): string {
+export async function getConcurrencySummary(config?: ConcurrencyConfig): Promise<string> {
   const memory = getSystemMemoryInfo(config);
-  const concurrency = getOptimalConcurrency(config);
-  const batchSize = getOptimalBatchSize(config);
-  const thresholds = getThresholds(config);
+  const concurrency = await getOptimalConcurrency(config);
+  const batchSize = await getOptimalBatchSize(config);
+  const thresholds = await getThresholds(config);
   const mode = concurrency === 1 ? 'SEQUENTIAL' : 'PARALLEL';
   const envMode = thresholds.environmentMode;
 
@@ -321,8 +330,8 @@ export function getConcurrencySummary(config?: ConcurrencyConfig): string {
  * Get current environment mode setting
  * Useful for UI display
  */
-export function getCurrentEnvironmentMode(): 'auto' | 'low_memory' | 'high_memory' {
-  return getEnvironmentMode();
+export async function getCurrentEnvironmentMode(): Promise<'auto' | 'low_memory' | 'high_memory'> {
+  return await getEnvironmentMode();
 }
 
 // Export default configuration for easy importing

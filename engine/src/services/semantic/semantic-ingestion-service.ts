@@ -11,6 +11,7 @@ import { db } from '../../core/db.js';
 import * as crypto from 'crypto';
 import { NlpService } from '../../services/nlp/nlp-service.js';
 import { Timer } from '../../utils/timer.js';
+import { executor } from '../../utils/memory-aware-executor.js';
 
 export class SemanticIngestionService {
   private moleculeProcessor: SemanticMoleculeProcessor;
@@ -73,14 +74,16 @@ export class SemanticIngestionService {
       }));
 
       console.log(`[IngestionService] Processing ${chunksWithMetadata.length} chunks through molecule processor...`);
-      // Process chunks in parallel to reduce serial processing time
-      const semanticMolecules = await Promise.all(
-        chunksWithMetadata.map(chunk => this.moleculeProcessor.processTextChunk(
+      // Process chunks with memory-aware bounded concurrency (v5.2.0+) — prevents heap spikes
+      const semanticMolecules = await executor.process(
+        chunksWithMetadata,
+        async chunk => this.moleculeProcessor.processTextChunk(
           chunk.content,
           chunk.source,
           chunk.timestamp,
           chunk.provenance,
-        )),
+        ),
+        { maxConcurrency: 3 }, // NLP is CPU-bound; bounded parallelism prevents OOM
       );
       console.log(`[IngestionService] Processed ${semanticMolecules.length} semantic molecules with a total of ${semanticMolecules.reduce((sum, mol) => sum + mol.containedEntities.length, 0)} atomic entities`);
       timer.logLap(`Processed ${semanticMolecules.length} semantic molecules`);

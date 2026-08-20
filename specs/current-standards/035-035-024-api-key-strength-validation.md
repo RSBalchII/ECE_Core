@@ -7,13 +7,15 @@
 
 ---
 
-## Problem Statement
+## Problem Statement (v5.2.0+)
 
 The previous API key validation only required a minimum of 16 characters with no entropy or complexity requirements. This allowed weak keys like:
 
 - `aaaaaaaaaaaaaaaa` (16 identical characters)
 - `1234567890123456` (sequential digits)
 - `passwordpassword` (common word repetition)
+
+**Key Change:** API key is now stored in the database (`app_settings` table) and validated at runtime, not just on startup.
 
 Such keys are vulnerable to:
 - **Brute force attacks** - Low entropy keys can be guessed quickly
@@ -134,16 +136,14 @@ If your current API key doesn't meet the new requirements:
    # Using password manager (1Password, Bitwarden, etc.)
    ```
 
-2. **Update user_settings.json:**
-   ```json
-   {
-     "server": {
-       "api_key": "YourNewSecureKey123..."
-     }
-   }
+2. **Set via API (v5.2.0+):**
+   ```bash
+   curl -X POST http://localhost:3000/v1/settings \
+     -H "Content-Type: application/json" \
+     -d '{"key":"server.api_key","value":"YourNewSecureKey123..."}'
    ```
 
-3. **Restart the engine**
+3. **Engine validates key at runtime** — no restart needed; file (`user_settings.json`) is also updated for persistence across restarts
 
 ### For New Installations
 
@@ -183,16 +183,20 @@ This is considered **cryptographically strong** and resistant to:
 ### Manual Testing
 
 ```bash
-# Test with weak key - should fail to start
-echo '{"server":{"api_key":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}' > user_settings.json
-npm start
-# Expected: Error message about weak key
+# Test with weak key - should fail validation via API
+curl -X POST http://localhost:3000/v1/settings \
+  -H "Content-Type: application/json" \
+  -d '{"key":"server.api_key","value":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
+# Expected: Error message about weak key (minimum 32 chars, mixed case + digits)
 
-# Test with strong key - should start successfully
-echo '{"server":{"api_key":"aB3dEfGhIjKlMnOpQrStUvWxYz123456"}}' > user_settings.json
-npm start
-# Expected: Engine starts normally
+# Test with strong key - should succeed via API
+curl -X POST http://localhost:3000/v1/settings \
+  -H "Content-Type: application/json" \
+  -d '{"key":"server.api_key","value":"aB3dEfGhIjKlMnOpQrStUvWxYz123456"}'
+# Expected: API returns success, engine validates key at runtime
 ```
+
+**Note:** In v5.2.0+, the API key is stored in the `app_settings` table and validated at runtime via `/v1/settings`. The old method of writing directly to `user_settings.json` is deprecated — use the API instead for all configuration changes.
 
 ### Unit Test Coverage
 

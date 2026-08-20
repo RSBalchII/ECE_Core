@@ -326,13 +326,48 @@ function getPooledSource(source: string): string {
 
 ---
 
-## 6. Configuration
+## 6. Configuration (v5.2.0+)
 
-### 6.1. User Settings
+### 6.1. Database Settings (`app_settings` table)
 
-Add to `user_settings.json`:
+All mobile search configuration is now stored in the database and queried at request time:
+
+```sql
+-- Example settings rows
+| key | value | description | source |
+|-----|-------|-------------|--------|
+| `search.mode` | `"auto"` | Auto-detect mobile/desktop mode | db |
+| `search.mobile.max_radius` | `2000` | Max radius on mobile (vs 32KB desktop) | db |
+| `search.mobile.max_results_per_term` | `5` | Results per term on mobile | db |
+| `search.mobile.sequential_inflation` | `true` | Sequential processing for memory safety | db |
+```
+
+**Query at runtime:**
+```typescript
+const mode = await getSetting('search.mode') || 'auto';
+const maxRadius = await getSetting('search.mobile.max_radius') || 2000;
+const sequential = await getSetting('search.mobile.sequential_inflation');
+```
+
+### 6.2. Environment Variables (Override DB)
+
+```bash
+# Force mobile mode
+ANCHOR_MOBILE_MODE=1
+
+# Custom memory threshold (bytes)
+ANCHOR_MOBILE_MEMORY_THRESHOLD=500000000
+
+# Disable GC hints (if causing performance issues)
+ANCHOR_DISABLE_GC_HINTS=1
+```
+
+### 6.3. Initial Import from user_settings.json (v5.2.0+)
+
+On first startup, settings are imported from the file into the database:
 
 ```json
+// user_settings.json (only used for initial import)
 {
   "search": {
     "mode": "auto",
@@ -354,17 +389,13 @@ Add to `user_settings.json`:
 }
 ```
 
-### 6.2. Environment Variables
+After import, the database becomes source of truth. Runtime changes go through API:
 
 ```bash
-# Force mobile mode
-ANCHOR_MOBILE_MODE=1
-
-# Custom memory threshold (bytes)
-ANCHOR_MOBILE_MEMORY_THRESHOLD=500000000
-
-# Disable GC hints (if causing performance issues)
-ANCHOR_DISABLE_GC_HINTS=1
+# Change mobile radius without restart
+curl -X POST http://localhost:3160/v1/settings/search.mobile.max_radius \
+  -H "Content-Type: application/json" \
+  -d '{"value": 3000}'
 ```
 
 ---

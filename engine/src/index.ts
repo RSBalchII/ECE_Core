@@ -248,6 +248,16 @@ async function startServer() {
     console.log('Initializing Anchor Context Engine...');
 
     // Start the server immediately so health checks pass
+    // V5.1 API Error Contract: Global error handler (returns JSON, not HTML)
+    app.use((err: any, req: express.Request, res: express.Response, next: (err?: any) => void) => {
+      const statusCode = err.statusCode || err.status || 500;
+      res.status(statusCode).json({
+        error: err.name || 'InternalError',
+        message: err.message || 'An unexpected error occurred',
+        ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
+      });
+    });
+
     app.listen(PORT, config.HOST, () => {
       console.log(`Anchor Context Engine running on ${config.HOST}:${PORT}`);
       console.log(`Health check available at http://${config.HOST}:${PORT}/health`);
@@ -281,6 +291,12 @@ async function startServer() {
 
     // Set up monitoring routes
     app.use('/monitoring', monitoringRouter);
+
+    // V5.1 API Error Contract: Catch-all for unmatched /v1 routes returns JSON (not HTML)
+    // Must be placed AFTER all /v1 route handlers are registered
+    app.use('/v1', (_req: express.Request, res: express.Response) => {
+      res.status(404).json({ error: 'Not Found', message: `Cannot ${_req.method} ${_req.path}` });
+    });
 
     console.log('Full routes set up, server is ready for all requests');
     console.timeEnd('⏱️ Startup Time');

@@ -720,5 +720,15 @@ export const config = loadConfig();
 
 export default config;
 
+// Export DEFAULT_SETTINGS for use in API routes (v5.2.0+)
+export const DEFAULT_SETTINGS = {
+  server: { host: "0.0.0.0", port: 3160, api_key: "" },
+  database: { wipe_on_startup: true },
+  tagging: { modulation_level: 50, atom_as_tag: false, strict_atom_selection: true },
+  search: { strategy: "hybrid", max_chars_default: 524288, max_chars_limit: 2000000 },
+  context: { relevance_weight: 0.7, recency_weight: 0.3 },
+  physics: { damping_factor: 0.85, time_decay_lambda: 0.00001, temperature: 0.2 },
+};
+
 // Export PATHS for modules that need it
 export { PATHS } from './paths.js';

@@ -3,7 +3,7 @@
  *
  * Three-phase pipeline for semantic corpus compression:
  * 1. COLLECT: Extract semantic blocks (headings, sections)
- * 2. DEDUPLICATE: Block-level deduplication with SimHash (using @rbalchii/native-fingerprint)
+ * 2. DEDUPLICATE: Block-level deduplication with SimHash (using @rbalchii/anchor-fingerprint-wasm)
  * 3. REASSEMBLE: Build Decision Record JSON output
  *
  * Prevents self-contamination by filtering distilled_* files
@@ -168,9 +168,12 @@ export interface RadialDistillRequest {
   output_path?: string;
   export_to_inbox?: boolean;
   auto_save?: boolean;
-  mode?: 'standard' | 'tag-based';  // New: distillation mode
+  mode?: 'standard' | 'tag-based' | 'full-corpus';  // New: distillation mode
   dry_run?: boolean;                 // New: preview without writing
   similarity_threshold?: number;     // New: aggregation aggressiveness (0.0-1.0, default 0.85)
+  page_size?: number;                // full-corpus: atoms per DB page (default 500)
+  inflate_radius?: number;           // full-corpus: bytes each side of pointer to inflate (default 300, max 1000)
+  max_record_bytes?: number;         // full-corpus: hard cap on inflated content per record (default 8192)
 }
 
 export interface RadialDistillResult {
@@ -814,19 +817,26 @@ function extractDigitalObjectMetadata(
   content: string,
   mtime: number,
   ingestedAt: string,
-): DigitalObjectMetadata {
-  const pathExt = path.extname(compound.path).toLowerCase();
+): DigitalObjectMetadata | null {
+  // Rows may be molecule rows (source_path / compound_id) or legacy atom
+  // rows (path / id). The compounds table was removed (Standard 051), so
+  // molecule rows are the common case — resolve both field spellings.
+  const resolvedPath: string | undefined = compound.path || compound.source_path;
+  if (!resolvedPath) return null;
+  const resolvedId: string | undefined = compound.id || compound.compound_id;
+
+  const pathExt = path.extname(resolvedPath).toLowerCase();
   const sourceType = pathExt.slice(1) || 'unknown';
   
   // Base metadata (always present)
   const metadata: DigitalObjectMetadata = {
-    id: crypto.createHash('sha256').update(compound.path).digest('hex').substring(0, 16),
-    source_path: compound.path,
+    id: crypto.createHash('sha256').update(resolvedPath).digest('hex').substring(0, 16),
+    source_path: resolvedPath,
     source_type: sourceType,
     modified_at: new Date(mtime).toISOString(),
     ingested_at: ingestedAt,
     bucket: compound.provenance || 'unknown',
-    compound_id: compound.id,
+    compound_id: resolvedId || '',
     size_bytes: Buffer.byteLength(content, 'utf-8'),
     line_count: content.split('\n').length,
     char_count: content.length,
@@ -860,8 +870,10 @@ function extractChatSessionMetadata(
     return null;
   }
   
-  // Extract session_id from filename (UUID pattern)
-  const filename = path.basename(compound.path, '.jsonl');
+  // Extract session_id from filename (UUID pattern).
+  // Use the resolved source_path (baseMetadata) — molecule rows carry source_path,
+  // not compound.path (compounds table removed, Standard 051).
+  const filename = path.basename(baseMetadata.source_path, '.jsonl');
   const sessionUuidMatch = filename.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
   if (!sessionUuidMatch) {
     return null;
@@ -1252,7 +1264,9 @@ async function tagBasedDistill(request: RadialDistillRequest): Promise<{
         mtime,
         ingestedAt
       );
-      digitalObjects.push(baseMetadata);
+      if (baseMetadata) {
+        digitalObjects.push(baseMetadata);
+      }
     }
   }
 
@@ -1514,6 +1528,270 @@ async function finalizeDistillation(
 }
 
 /**
+ * Read a bounded byte range from a mirrored file (pointer-based inflation).
+ * Content lives at its pointer location on disk — never in the DB. Returns
+ * { content:'', inflated:false } when the mirror file is missing or unreadable.
+ */
+function readRangeFromMirror(
+  sourcePath: string,
+  provenance: string | undefined,
+  startByte: number,
+  endByte: number,
+  radius: number,
+  maxBytes: number,
+): { content: string; inflated: boolean } {
+  try {
+    const mirrorPath = getMirrorPath(sourcePath, provenance || 'internal');
+    if (!fs.existsSync(mirrorPath)) return { content: '', inflated: false };
+    const fileSize = fs.statSync(mirrorPath).size;
+    const start = Math.max(0, (startByte ?? 0) - radius);
+    const rawEnd = Math.min(fileSize, (endByte ?? startByte ?? 0) + radius);
+    if (rawEnd <= start) return { content: '', inflated: false };
+    const readLength = Math.min(rawEnd - start, maxBytes);
+    const buffer = Buffer.alloc(readLength);
+    const fd = fs.openSync(mirrorPath, 'r');
+    try {
+      fs.readSync(fd, buffer, 0, readLength, start);
+    } finally {
+      fs.closeSync(fd);
+    }
+    return { content: buffer.toString('utf-8'), inflated: true };
+  } catch (e) {
+    console.warn(`[FullCorpusDistill] Range read failed for ${sourcePath}:`, e);
+    return { content: '', inflated: false };
+  }
+}
+
+/**
+ * Full-corpus distillation — seedless mode.
+ *
+ * Expands and dedups EVERY unique atom in the corpus and streams them to a
+ * JSONL file under PATHS.DISTILLS_DIR. Pointer-driven by design (Standard 051):
+ *   Pass 1: keyset-paginate atoms (pointers only — content is never read from
+ *           the DB), dedup by molecular_signature → simhash → id, merging
+ *           duplicate pointers into occurrences[].
+ *   Pass 2: for each unique atom, inflate a bounded byte range around its
+ *           primary pointer from the mirrored file on disk and stream one
+ *           JSONL line per record. Memory stays flat regardless of corpus size;
+ *           the HTTP response carries only counts + output.path (never records).
+ */
+export async function radialDistillFullCorpus(request: RadialDistillRequest): Promise<RadialDistillResult> {
+  const startTime = Date.now();
+  const pageSize = Math.max(50, request.page_size ?? 500);
+  const radius = Math.min(Math.max(0, request.inflate_radius ?? 300), 1000);
+  const maxRecordBytes = Math.max(256, request.max_record_bytes ?? 8192);
+
+  StructuredLogger.info('FULL_CORPUS_DISTILL_START', { page_size: pageSize, inflate_radius: radius, max_record_bytes: maxRecordBytes });
+
+  type Occurrence = { source_path: string; start_byte: number; end_byte: number };
+  interface FullCorpusRecord {
+    id: string;
+    type: string;
+    content: string;
+    source_path: string;
+    start_byte: number;
+    end_byte: number;
+    compound_id?: string;
+    provenance?: string;
+    timestamp?: number;
+    molecular_signature?: string;
+    occurrences: Occurrence[];
+    content_inflated: boolean;
+  }
+
+  const unique = new Map<string, FullCorpusRecord>();
+  const uniqueOrder: string[] = [];
+  const filesSeen = new Set<string>();
+  let totalAtoms = 0;
+
+  // ---- Pass 1: enumerate (pointers only) + dedup -------------------------
+  try {
+    let lastId = '';
+    for (;;) {
+      const res = await db.run(
+        `SELECT id, compound_id, source_path, start_byte, end_byte, timestamp, type, molecular_signature, simhash, provenance
+         FROM atoms WHERE id > $1 ORDER BY id LIMIT $2`,
+        [lastId, pageSize],
+      );
+      const rows: any[] = res.rows || [];
+      if (rows.length === 0) break;
+
+      for (const row of rows) {
+        totalAtoms++;
+        lastId = row.id as string;
+        const sourcePath = (row.source_path as string) || '';
+        if (!sourcePath) continue; // pointerless atom — nothing to distill
+        filesSeen.add(sourcePath);
+
+        const sb = (row.start_byte as number) ?? 0;
+        const eb = (row.end_byte as number) ?? 0;
+        const key: string = (row.molecular_signature as string) || (row.simhash as string) || `id:${row.id}`;
+        let rec = unique.get(key);
+        if (!rec) {
+          rec = {
+            id: row.id as string,
+            type: (row.type as string) || 'content',
+            content: '', // inflated in pass 2 from the pointer location on disk
+            source_path: sourcePath,
+            start_byte: sb,
+            end_byte: eb,
+            compound_id: row.compound_id as string | undefined,
+            provenance: row.provenance as string | undefined,
+            timestamp: row.timestamp as number | undefined,
+            molecular_signature: (row.molecular_signature as string) || undefined,
+            occurrences: [],
+            content_inflated: false,
+          };
+          unique.set(key, rec);
+          uniqueOrder.push(key);
+        }
+        // Collect EVERY pointer (including the group's first row) so Pass 2 can
+        // inflate from the widest real range. The first row is often a
+        // compound-level atom at (0,0); the true atom byte ranges live here.
+        const occ: Occurrence = { source_path: sourcePath, start_byte: sb, end_byte: eb };
+        if (!rec.occurrences.some(o => o.source_path === occ.source_path && o.start_byte === occ.start_byte)) {
+          rec.occurrences.push(occ);
+        }
+      }
+
+      // Yield to the event loop between pages (keeps the API responsive).
+      await new Promise(r => setImmediate(r));
+    }
+  } catch (error: any) {
+    StructuredLogger.error('FULL_CORPUS_DISTILL_PASS1_ERROR', error);
+    throw error;
+  }
+
+  // ---- Pass 2: inflate from pointer locations on disk + stream JSONL -----
+  const distillsDir = PATHS.DISTILLS_DIR;
+  if (!fs.existsSync(distillsDir)) fs.mkdirSync(distillsDir, { recursive: true });
+  const outputPath = path.join(
+    distillsDir,
+    `distilled_fullcorpus_${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`,
+  );
+
+  let sizeBytes = 0;
+  let inflatedCount = 0;
+  let streamError: any = null;
+
+  await new Promise<void>((resolve) => {
+    const out = fs.createWriteStream(outputPath);
+    let i = 0;
+
+    const writeNext = () => {
+      if (streamError) return resolve();
+      while (i < uniqueOrder.length) {
+        const rec = unique.get(uniqueOrder[i])!;
+        i++;
+        // Inflate a bounded range from disk. Prefer the WIDEST real pointer in
+        // occurrences[] — the record's own start_byte/end_byte is often a
+        // compound-level (0,0) marker, so it would inflate the wrong region on
+        // large files. Fall back to the record pointer when no real range exists.
+        let inflStart = rec.start_byte;
+        let inflEnd = rec.end_byte;
+        if (rec.occurrences.length > 0) {
+          let best = rec.occurrences[0];
+          let bestSpan = Math.max(0, best.end_byte - best.start_byte);
+          for (const o of rec.occurrences) {
+            const span = Math.max(0, o.end_byte - o.start_byte);
+            if (span > bestSpan) { bestSpan = span; best = o; }
+          }
+          if (bestSpan > 0) { inflStart = best.start_byte; inflEnd = best.end_byte; }
+        }
+        const { content, inflated } = readRangeFromMirror(
+          rec.source_path, rec.provenance, inflStart, inflEnd, radius, maxRecordBytes,
+        );
+        rec.content = content;
+        rec.content_inflated = inflated && content.length > 0;
+        if (rec.content_inflated) inflatedCount++;
+
+        const line = JSON.stringify(rec) + '\n';
+        sizeBytes += Buffer.byteLength(line, 'utf-8');
+        const ok = out.write(line);
+        if (!ok) {
+          // Backpressure: wait for drain before continuing.
+          out.once('drain', writeNext);
+          return;
+        }
+      }
+      out.end(() => resolve());
+    };
+
+    out.on('error', (err) => { streamError = err; try { out.destroy(); } catch {} resolve(); });
+    writeNext();
+  });
+
+  if (streamError) {
+    StructuredLogger.error('FULL_CORPUS_DISTILL_STREAM_ERROR', streamError);
+    throw streamError;
+  }
+
+  const duration = Date.now() - startTime;
+  const uniqueCount = uniqueOrder.length;
+
+  // Standard 016: record the distill checkpoint (pointer to the file).
+  try {
+    await recordDistill({
+      timestamp: new Date().toISOString(),
+      filename: path.basename(outputPath),
+      file_path: outputPath,
+      line_count: totalAtoms,
+      lines_unique: uniqueCount,
+      compression_ratio: totalAtoms > 0 ? parseFloat((totalAtoms / Math.max(1, uniqueCount)).toFixed(3)) : null,
+      source_sessions: [],
+      source_files: Array.from(filesSeen),
+      parameters: {
+        mode: 'full-corpus',
+        page_size: pageSize,
+        inflate_radius: radius,
+        max_record_bytes: maxRecordBytes,
+        total_atoms: totalAtoms,
+        unique_atoms: uniqueCount,
+        files: filesSeen.size,
+        inflated: inflatedCount,
+      },
+    });
+  } catch (dbError: any) {
+    console.warn('[FullCorpusDistill] Could not record distill in database:', dbError.message);
+  }
+
+  StructuredLogger.info('FULL_CORPUS_DISTILL_COMPLETE', {
+    total_atoms: totalAtoms,
+    unique_atoms: uniqueCount,
+    files: filesSeen.size,
+    inflated: inflatedCount,
+    size_bytes: sizeBytes,
+    duration_ms: duration,
+    output_path: outputPath,
+  });
+
+  return {
+    stats: {
+      compounds_processed: filesSeen.size,
+      blocks_total: totalAtoms,
+      blocks_unique: uniqueCount,
+      decision_records: uniqueCount,
+      compression_ratio: `${(totalAtoms / Math.max(1, uniqueCount)).toFixed(1)}:1`,
+      duration_ms: duration,
+      memory_peak_mb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+    },
+    output: {
+      format: 'full-corpus-jsonl',
+      path: outputPath,
+      size_bytes: sizeBytes,
+      records_created: uniqueCount,
+    },
+    provenance: {
+      source_compounds: Array.from(filesSeen),
+      distilled_at: new Date().toISOString(),
+      parameters: request,
+    },
+    // NOTE: the record array is intentionally NOT returned — it lives in the
+    // streamed JSONL file. The HTTP response carries counts + output.path only.
+  };
+}
+
+/**
  * Main distillation function
  */
 export async function radialDistill(request: RadialDistillRequest): Promise<RadialDistillResult> {
@@ -1527,6 +1805,14 @@ export async function radialDistill(request: RadialDistillRequest): Promise<Radi
   });
 
   try {
+    // Seedless full-corpus mode (user preference): no query, no compound_ids,
+    // no buckets, no tags → expand + dedup EVERY unique atom and stream to file.
+    const seed = request.seed;
+    const isSeedless = !seed || (!seed.query && !(seed.compound_ids?.length) && !(seed.buckets?.length) && !(seed.tags?.length));
+    if (request.mode === 'full-corpus' || (isSeedless && request.mode !== 'standard')) {
+      return radialDistillFullCorpus(request);
+    }
+
     // Route to tag-based mode if requested
     if (request.mode === 'tag-based' || (request.seed?.tags && request.seed.tags.length > 0)) {
       const tagResult = await tagBasedDistill(request);
@@ -1658,12 +1944,14 @@ export async function radialDistill(request: RadialDistillRequest): Promise<Radi
 
       // Extract digital object metadata (NEW)
       const baseMetadata = extractDigitalObjectMetadata(molecule, content, mtime, ingestedAt);
-      digitalObjects.push(baseMetadata);
+      if (baseMetadata) {
+        digitalObjects.push(baseMetadata);
 
-      // Extract chat session metadata if applicable (NEW)
-      const chatMetadata = extractChatSessionMetadata(baseMetadata, content, molecule);
-      if (chatMetadata) {
-        chatSessions.push(chatMetadata);
+        // Extract chat session metadata if applicable (NEW)
+        const chatMetadata = extractChatSessionMetadata(baseMetadata, content, molecule);
+        if (chatMetadata) {
+          chatSessions.push(chatMetadata);
+        }
       }
     }
 

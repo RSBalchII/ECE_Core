@@ -83,6 +83,20 @@ export async function recordDistill(
 }
 
 /**
+ * Parse a JSONB/TEXT column value that PGlite may return either as an already-
+ * parsed object (JSONB) or as a raw string (TEXT). Never throws.
+ */
+function parseJsonField(value: any): Record<string, any> {
+  if (!value) return {};
+  if (typeof value === 'object') return value; // JSONB — PGlite already parsed it
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Get a distill by ID
  */
 export async function getDistill(id: string): Promise<DistillMetadata | null> {
@@ -107,7 +121,7 @@ export async function getDistill(id: string): Promise<DistillMetadata | null> {
       compression_ratio: row.compression_ratio,
       source_sessions: row.source_sessions || [],
       source_files: row.source_files || [],
-      parameters: row.parameters ? JSON.parse(row.parameters) : {},
+      parameters: parseJsonField(row.parameters),
       created_at: row.created_at?.toISOString(),
     };
   } catch (error: any) {
@@ -136,7 +150,7 @@ export async function getDistillsBySession(sessionId: string): Promise<DistillMe
       compression_ratio: row.compression_ratio,
       source_sessions: row.source_sessions || [],
       source_files: row.source_files || [],
-      parameters: row.parameters ? JSON.parse(row.parameters) : {},
+      parameters: parseJsonField(row.parameters),
       created_at: row.created_at?.toISOString(),
     }));
   } catch (error: any) {
@@ -165,7 +179,7 @@ export async function getAllDistills(limit: number = 50): Promise<DistillMetadat
       compression_ratio: row.compression_ratio,
       source_sessions: row.source_sessions || [],
       source_files: row.source_files || [],
-      parameters: row.parameters ? JSON.parse(row.parameters) : {},
+      parameters: parseJsonField(row.parameters),
       created_at: row.created_at?.toISOString(),
     }));
   } catch (error: any) {
