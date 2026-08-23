@@ -21,7 +21,7 @@ const config = defineConfig({
       '**/dist/**',
       '**/.git/**',
       '**/coverage/**',
-      '.anchor/local-data/inbox/**',
+      '.anchor/inbox/**',
     ],
     unstubAllExports: true,
     coverage: {

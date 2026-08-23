@@ -99,8 +99,24 @@ Every service must print a startup banner showing:
 }
 ```
 
+### OPS-005: Crash Observability (added 2026-08-21)
+
+**Motivation:** Two silent engine deaths were observed on 2026-08-20/21 — a distillation-trigger crash that logged nothing after the trigger event, and config-file corruption discovered only by accident. A process that dies without a trace defeats every other visibility mechanism (health endpoints, progress tracking) because they die with it.
+
+**Requirements:**
+1. The entry point (`engine/src/index.ts`) MUST install global guards before any route is served:
+   ```typescript
+   process.on('uncaughtException', logAndExit);    // synchronous throws outside try/catch
+   process.on('unhandledRejection', logAndExit);   // rejected promises (the WASM/async pipeline class)
+   ```
+2. `logAndExit` must, in order: write the full stack trace to the rotating engine log AND stderr; flush buffered log writes; only then exit non-zero. Exit-without-trace is forbidden — it converts every crash into an unsolvable mystery (see docs/troubleshooting/issues-log.md ISSUE-17).
+3. WASM-originated aborts (`memory access out of bounds`) cannot be caught by JS handlers; guards must therefore also cover the *setup* window: any guard installation failure at boot is logged loudly before routes start.
+
+**Verification:** `kill -SIGKILL` a running engine during ingestion and confirm the next boot's log records the gap; trigger distillation on atoms with malformed fields and confirm a stack trace appears in the log before exit.
+
 ## Implementation Notes
 - Startup banner in `engine/src/utils/startup-banner.ts`
 - Health endpoint in `engine/src/routes/health.ts`
 - Ingestion status in `engine/src/routes/v1/ingest.ts`
 - Agent discovery in `engine/src/routes/v1/agent.ts`
+- Crash guards to be installed at the top of `engine/src/index.ts` (ISSUE-17 remediation)

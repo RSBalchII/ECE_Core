@@ -31,7 +31,9 @@ const ANCHOR_ROOT = path.resolve(
 
 // Fallback base directory under .anchor for data directories.
 // When user_settings.json provides absolute paths, they take precedence.
-const FALLBACK_DATA_DIR = path.join(ANCHOR_ROOT, 'local-data');
+// FIX (2026-08-21): the deprecated `local-data` layer was removed — data dirs live directly
+// under ~/.anchor/ (matching the real layout: inbox/, external-inbox/, context_data/, ...).
+const FALLBACK_DATA_DIR = ANCHOR_ROOT;
 
 // Load user_settings.json from .anchor/ (primary) or project root (fallback)
 try {
@@ -96,7 +98,7 @@ export const PATHS = {
   CONFIG_FILE: path.join(FALLBACK_DATA_DIR, 'sovereign.yaml'),
   USER_SETTINGS: path.join(ANCHOR_ROOT, 'user_settings.json'),
   DATABASE_FILE: path.join(CONTEXT_DIR, 'context.db'),
-  // Standard 110: Centralized user data paths under local-data/
+  // Standard 110: Centralized user data paths under ~/.anchor/ (the deprecated local-data layer was removed)
   INBOX_DIR: path.resolve(process.env.INBOX_DIR || userSettings.paths?.inbox || path.join(FALLBACK_DATA_DIR, 'inbox')),
   EXTERNAL_INBOX_DIR: path.resolve(process.env.EXTERNAL_INBOX_DIR || userSettings.paths?.external_inbox || path.join(FALLBACK_DATA_DIR, 'external-inbox')),
   DISTILLS_DIR: path.resolve(process.env.DISTILLS_DIR || userSettings.paths?.distills || path.join(FALLBACK_DATA_DIR, 'distills')),

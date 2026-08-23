@@ -112,14 +112,13 @@ return null as any;
 
 /**
  * Cross-platform path normalizer for Windows and Unix paths.
- * Converts local-data equivalent paths to normalized formats.
+ * FIX (2026-08-21): the deprecated `local-data` layer was removed — data dirs live directly
+ * under ~/.anchor/, so this no longer rewrites to /local-data/... paths.
  */
 export function normalizeToLocalData(path: string): string {
-const fs = require('fs');
-
-if (path.includes('.anchor')) return '/local-data/.anchor';
-if (path.includes('notebook')) return '/local-data/inbox';
-if (path.match(/^[A-Z]:\\.*$|^[~\/]/)) return '/local-data/' + path;
+// Normalize Windows drive-letter paths (C:\...) and home-relative (~) paths to Unix-style.
+if (path.match(/^[A-Z]:\\/)) return '/' + path.replace(/[\\\/]/g, '/').replace(/^\w:/, '');
+if (path.startsWith('~')) return path.slice(1);
 return path;
 }
 

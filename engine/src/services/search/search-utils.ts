@@ -18,6 +18,20 @@ import { getMirrorPath, MIRRORED_BRAIN_PATH } from '../mirror/mirror.js';
 import { PATHS } from '../../config/paths.js';
 
 /**
+ * Safe ISO-8601 timestamp formatting (ISSUE-18 / Standard 007 data-integrity).
+ * Atoms whose `timestamp` parsed to a non-date (atomizer date regexes can capture
+ * ID-like strings) previously crashed every formatter that called
+ * `new Date(x).toISOString()` with RangeError: Invalid time value. This helper
+ * validates the parsed date and falls back to now() so malformed rows degrade
+ * gracefully instead of 500-ing a whole search batch or killing distillation.
+ */
+export function safeTimestamp(value: unknown, fallback = new Date().toISOString()): string {
+  if (value === null || value === undefined) return fallback;
+  const d = new Date(value as any);
+  return isNaN(d.getTime()) ? fallback : d.toISOString();
+}
+
+/**
  * Remove inline hashtag tokens from content (Standard 123).
  * Tags are stored separately in result.tags; they add noise when embedded in text.
  */
@@ -488,7 +502,8 @@ export async function formatResults(
 
     // Step 4: Build XML-wrapped context with metadata headers
     const xmlContext = deduplicatedSnippets.map((s, idx) => {
-      const timestamp = new Date(s.timestamp).toISOString();
+      // ISSUE-18: guard against invalid atom timestamps (RangeError: Invalid time value)
+      const timestamp = safeTimestamp(s.timestamp);
       const persona = s.tags[0] || s.provenance || 'unknown';
       const atomCount = s.sourceAtoms.length;
       const charCount = s.content.length;

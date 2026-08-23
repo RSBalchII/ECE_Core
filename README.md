@@ -240,7 +240,7 @@ AGPL‑3.0
 @software{anchor_engine,
   title={STAR: Semantic Temporal Associative Retrieval},
   author={Balch II, R.S.},
-  version={5.0.0},
+  version={5.2.0},
   year={2026},
   url={https://github.com/RSBalchII/anchor-engine-node}
 }

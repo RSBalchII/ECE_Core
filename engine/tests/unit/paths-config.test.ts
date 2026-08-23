@@ -84,8 +84,8 @@ describe('PATHS Configuration', () => {
   });
 
   describe('INBOX_DIR', () => {
-    it('should be under .anchor/local-data/inbox or notebook/inbox', () => {
-      // Standard 110: Uses local-data structure under .anchor for consistent data organization
+    it('should be under .anchor/inbox or notebook/inbox', () => {
+      // Standard 110: data dirs live directly under ~/.anchor/ (local-data layer removed)
       const normalizedPath = PATHS.INBOX_DIR.replace(/\\/g, '/');
       
       // Check if inbox is either under .anchor/local-data/ or in /aen/notebook/ (backward compat)
@@ -107,12 +107,12 @@ describe('PATHS Configuration', () => {
       const inboxNormalized = PATHS.INBOX_DIR.replace(/\\/g, '/');
       const rootNormalized = PROJECT_ROOT.replace(/\\/g, '/');
       
-      // Check if inbox is under projects/aen/ or .anchor/local-data/inbox structure
+      // Check if inbox is under projects/aen/ or .anchor/inbox structure (local-data layer removed)
       let isInRoot = false;
       try {
         isInRoot = 
           (inboxNormalized.startsWith(rootNormalized + '/') && inboxNormalized.includes('/inbox')) ||
-          (inboxNormalized.includes('/.anchor/') && inboxNormalized.includes('/local-data') && inboxNormalized.includes('/inbox'));
+          (inboxNormalized.includes('/.anchor/') && inboxNormalized.includes('/inbox'));
       } catch (e) {}
       
       expect(isInRoot).toBe(true);
@@ -120,8 +120,8 @@ describe('PATHS Configuration', () => {
   });
 
   describe('EXTERNAL_INBOX_DIR', () => {
-    it('should be under .anchor/local-data/external-inbox or notebook/external-inbox', () => {
-      // Standard 110: Uses local-data structure under .anchor for consistent data organization
+    it('should be under .anchor/external-inbox or notebook/external-inbox', () => {
+      // Standard 110: data dirs live directly under ~/.anchor/ (local-data layer removed)
       const normalizedPath = PATHS.EXTERNAL_INBOX_DIR.replace(/\\/g, '/');
       
       // Check if external-inbox is either under .anchor/local-data/ or in /aen/notebook/ (backward compat)
@@ -142,12 +142,12 @@ describe('PATHS Configuration', () => {
     it('should be a subdirectory of PROJECT_ROOT or ANCHOR_ROOT', () => {
       const extInboxNormalized = PATHS.EXTERNAL_INBOX_DIR.replace(/\\/g, '/');
       
-      // Check if external-inbox is under projects/aen/ or .anchor/local-data/external-inbox structure
+      // Check if external-inbox is under projects/aen/ or .anchor/external-inbox structure (local-data layer removed)
       let isInRoot = false;
       try {
         isInRoot = 
           (extInboxNormalized.startsWith(PROJECT_ROOT + '/') && extInboxNormalized.includes('/external-inbox')) ||
-          (extInboxNormalized.includes('/.anchor/') && extInboxNormalized.includes('/local-data') && extInboxNormalized.includes('/external-inbox'));
+          (extInboxNormalized.includes('/.anchor/') && extInboxNormalized.includes('/external-inbox'));
       } catch (e) {}
       
       expect(isInRoot).toBe(true);
@@ -155,18 +155,18 @@ describe('PATHS Configuration', () => {
   });
 
   describe('MIRRORED_BRAIN_DIR', () => {
-    it('should be under .anchor/local-data/mirrored_brain or notebook/mirrored_brain', () => {
-      // Standard 110: Uses local-data structure under .anchor for consistent data organization
+    it('should be under .anchor/mirror_brain or notebook/mirrored_brain', () => {
+      // Standard 110: data dirs live directly under ~/.anchor/ (local-data layer removed)
       const normalizedPath = PATHS.MIRRORED_BRAIN_DIR.replace(/\\/g, '/');
-      
-      // Check if mirrored brain is either under .anchor/local-data/ or in /aen/notebook/ (backward compat)
+
+      // Check if mirrored brain is either under .anchor/mirror_brain/ or in /aen/notebook/ (backward compat)
       let isInCorrectLocation = false;
       try {
         isInCorrectLocation = 
-          (normalizedPath.includes('/.anchor/') && normalizedPath.includes('/mirrored_brain')) ||
+          (normalizedPath.includes('/.anchor/') && normalizedPath.includes('mirror_brain')) ||
           (normalizedPath.startsWith(PROJECT_ROOT + '/') && normalizedPath.includes('notebook') && normalizedPath.includes('mirrored_brain'));
       } catch (e) {}
-      
+
       expect(isInCorrectLocation).toBe(true);
     });
 
@@ -176,15 +176,15 @@ describe('PATHS Configuration', () => {
 
     it('should be a subdirectory of PROJECT_ROOT or ANCHOR_ROOT', () => {
       const brainNormalized = PATHS.MIRRORED_BRAIN_DIR.replace(/\\/g, '/');
-      
-      // Check if mirrored brain is under projects/aen/ or .anchor/local-data/mirrored_brain structure
+
+      // Check if mirrored brain is under projects/aen/ or .anchor/mirror_brain structure (local-data layer removed)
       let isInRoot = false;
       try {
         isInRoot = 
-          (brainNormalized.startsWith(PROJECT_ROOT + '/') && brainNormalized.includes('/mirrored_brain')) ||
-          (brainNormalized.includes('/.anchor/') && brainNormalized.includes('/local-data') && brainNormalized.includes('/mirrored_brain'));
+          (brainNormalized.startsWith(PROJECT_ROOT + '/') && brainNormalized.includes('mirror')) ||
+          (brainNormalized.includes('/.anchor/') && brainNormalized.includes('mirror'));
       } catch (e) {}
-      
+
       expect(isInRoot).toBe(true);
     });
   });
@@ -204,21 +204,21 @@ describe('PATHS Configuration', () => {
   });
 
   describe('Data Directory Structure', () => {
-    it('should have all data directories under .anchor/local-data/ or notebook/', () => {
+    it('should have all data directories under .anchor/ or notebook/', () => {
       const dataPaths = [PATHS.INBOX_DIR, PATHS.EXTERNAL_INBOX_DIR, PATHS.MIRRORED_BRAIN_DIR];
 
       dataPaths.forEach(p => {
-        // Standard 110: Uses local-data structure under .anchor for consistent data organization
+        // Standard 110: data dirs live directly under ~/.anchor/ (local-data layer removed)
         const normalizedPath = p.replace(/\\/g, '/');
-        
-        // Check if path is either under .anchor/ (with local-data subdirectory) or in /aen/notebook/
+
+        // Check if path is either under .anchor/ or in /aen/notebook/
         let hasCorrectStructure = false;
         try {
           hasCorrectStructure = 
-            (normalizedPath.includes('/.anchor/') && normalizedPath.includes('local-data')) ||
+            normalizedPath.includes('/.anchor/') ||
             (normalizedPath.startsWith(PROJECT_ROOT + '/') && normalizedPath.includes('notebook'));
         } catch (e) {}
-        
+
         expect(hasCorrectStructure).toBe(true);
       });
     });
@@ -226,15 +226,15 @@ describe('PATHS Configuration', () => {
     it('should maintain proper hierarchy', () => {
       [PATHS.INBOX_DIR, PATHS.EXTERNAL_INBOX_DIR, PATHS.MIRRORED_BRAIN_DIR].forEach(p => {
         const normalizedPath = p.replace(/\\/g, '/');
-        
-        // Check if paths are under projects/aen/ or .anchor/local-data structure
+
+        // Check if paths are under projects/aen/ or .anchor/ (local-data layer removed)
         let isUnderAnchor = false;
         try {
           isUnderAnchor = 
             (normalizedPath.startsWith(PROJECT_ROOT + '/') && normalizedPath.includes('/inbox')) ||
-            (normalizedPath.includes('/.anchor/') && normalizedPath.includes('/local-data'));
+            normalizedPath.includes('/.anchor/');
         } catch (e) {}
-        
+
         expect(isUnderAnchor).toBe(true);
       });
     });
@@ -258,7 +258,7 @@ describe('PATHS Configuration', () => {
   });
 
   describe('Provenance Detection Compatibility', () => {
-    it('inbox paths should be detectable as internal (under .anchor/local-data/inbox)', () => {
+    it('inbox paths should be detectable as internal (under .anchor/inbox)', () => {
       const testPath = path.join(PATHS.INBOX_DIR, 'test.md');
       const normalizedPath = testPath.replace(/\\/g, '/');
 

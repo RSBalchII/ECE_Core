@@ -46,6 +46,10 @@ The Anchor Engine uses a **source of truth** architecture:
 }
 ```
 
+**Boot-time heap overflow (observed constraint, 2026-08-21):** Stores beyond roughly 50k atoms (~1.4 GB on disk) cannot be loaded at boot — PGlite's WASM heap throws `memory access out of bounds` during the first read query (`SELECT path FROM sources`). This is a hard capacity limit, distinct from corruption: the store files are intact, but replaying them into WASM memory exceeds the heap budget. Incremental ingestion of new files stays well within budget (peak ~732 MB RSS observed); it is *boot-time loading of accumulated state* that overflows.
+
+**Operational consequence:** Any restart after heavy accumulation MUST use `wipe_on_startup=true` — clean-slate boot succeeds, then re-ingestion rebuilds the index from source paths (typically 1–5 hours for large corpora). Setting `false` on a grown store is guaranteed to crash at init. Streaming-boot / out-of-heap replay is future work; until it exists, wipe-and-rebuild is the only reliable restart path.
+
 **Implementation in `engine/src/core/db.ts`:**
 ```typescript
 // Wipe and recreate the database directory on every startup

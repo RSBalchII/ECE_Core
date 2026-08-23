@@ -5,6 +5,7 @@ import {
   mkdirSync,
   existsSync,
   readdirSync,
+  unlinkSync,
 } from "fs";
 import { randomBytes } from "crypto";
 import { fileURLToPath } from "url";
@@ -49,7 +50,7 @@ if (!existsSync(ANCHOR_ROOT)) {
       const filePath = join(ANCHOR_ROOT, file);
       if (existsSync(filePath)) {
         try {
-          fs.unlinkSync(filePath);
+          unlinkSync(filePath);
         } catch {}
       }
     });

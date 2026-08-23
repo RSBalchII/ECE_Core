@@ -6,98 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [1.0.0] - 2025-07-xx
-
-### Breaking Changes - Search API
-- Removed `exact:`, `fast:`, and `deep:` prefix support from search queries — these prefixes were aliases for specific backend behaviors that are no longer needed
-- The `/v1/memory/search-max-recall` endpoint remains available but is not required; max-recall behavior can be achieved on regular search by setting a high context budget (e.g., `max_chars: 262144`)
-- Max-recall is now integrated into regular search as a context budget toggle — set `max_chars` to a large value (≥256K) to get comprehensive retrieval across all phases
-
-### Fixes - Search API
-- Removed dead code: unused `deep` boolean parameter from search.ts, dead `searchType` property from density PREFIXES object in index.html, duplicate closing brace in PREFIXES object initialization
-
-## [5.1.0] - 2026-05-19 — Architecture Clarifications (Standards 027, 028, 029, 031, 051)
-
-### 📚 Architecture Standards & Documentation
-
-#### Standard 027: Distillation Output Storage
-**Clarification:** Distillation outputs are event chains/nodal maps for context seeding, NOT raw content to reintroduce into source corpus.
-
-- **Purpose:** Distilled YAML files serve as semantic summaries and provenance records that seed future distillation cycles
-- **Storage Location:** `notebook/distills/` (intentionally separate from pointer-only `mirrored_brain/`)
-- **Content Type:** Event chains with compound→atom relationships, tag hierarchies, temporal metadata
-- **NOT For:** Re-ingesting raw content back into the corpus (violates Standard 051)
-
-#### Standard 028: Self-Contamination Prevention
-**Current Mechanism:** Filename pattern matching to detect distillation outputs in ingestion paths.
-
-**Identified Edge Cases:**
-- Renamed files bypass protection (e.g., `distilled_notes.md` → `my_notes.md`)
-- Content-based detection not yet implemented
-- Provenance chain tracking incomplete
-
-**Proposed Enhancements:**
-- Content hash comparison against known distillation patterns
-- Metadata field validation (`_type: distillation_output`)
-- Full provenance chain verification from original source
-
-#### Standard 029: Tag-Based Distillation Mode
-**Distinct Concept-Centric Workflow vs File-Centric Standard Mode:**
-
-| Aspect | Standard Mode | Tag-Based Mode |
-|--------|---------------|----------------|
-| Input | Specific files/directories | Tag patterns |
-| Output | File-specific summaries | Cross-tag deduplicated concepts |
-| Use Case | Targeted content processing | Thematic exploration across corpus |
-
-**Cross-Tag Deduplication Strategy:**
-- Identifies semantically equivalent atoms sharing multiple tags
-- Consolidates redundant representations into single canonical form
-- Preserves original provenance in metadata
-
-#### Standard 031: Search Algorithms Comprehensive Reference
-**Consolidated P0 Reference Document (~700k tokens)** covering all 8 algorithms:
-
-| Algorithm | Purpose | Key Characteristics |
-|-----------|---------|---------------------|
-| **STAR** (Standard) | General purpose search | Term overlap + tag relevance + temporal decay |
-| **Exact** | Precise term matching | FTS5 full-text, no semantic expansion |
-| **Deep** | Maximum recall | Multi-query splitting, sequential processing |
-| **Illuminate** | Corpus narrative | BFS graph traversal from hub compounds |
-| **Explore** | Concept skeleton | Tag-hub map without content inflation |
-| **Tag-Based** | Thematic queries | Cross-tag deduplication strategy |
-| **Streaming** | Memory efficiency | SSE batch delivery, progressive results |
-| **Mobile** | Low-resource optimization | Aggressive caching, reduced token budgets |
-
-#### Standard 051: Pointer-Only Storage Implementation Verified
-**Critical Architecture Fix:** Database stores pointers only; content written to `mirrored_brain/@inbox/` filesystem.
-
-**Verification Results:**
-✅ Test document ingested successfully via `test-ingest2.json`
-✅ Content exists at `mirrored_brain/@inbox/api_upload` and `mirrored_brain/@inbox/test-upload`
-✅ Compound.path updated to point to mirror location post-ingestion
-⚠️ Distillation returns 0 blocks for simple text (expected - needs structured markdown)
-
-**Modified Files:**
-- `engine/src/routes/v1/ingest.ts` - Writes raw content to mirror after DB storage
-- Mirror path format: `@inbox/{timestamp}_{hash}.md`
-
-### 🔧 Technical Changes
-
-**Files Modified:**
-- `specs/current-standards/dependencies/018-ast-parser-wasm.md` (Standard 018)
-- `specs/current-standards/testing/019-test-environment-consistency.md` (Standard 019)
-- `specs/current-standards/search-retrieval/014-search-algorithm-testing.md` (Standard 030)
-
-**New Standards Created:**
-- Standard 027: Distillation Output Storage
-- Standard 028: Self-Contamination Prevention  
-- Standard 029: Tag-Based Distillation Mode
-- Standard 031: Search Algorithms Comprehensive Reference
-- Standard 051: Pointer-Only Database Storage
-
----
-
 ## [Unreleased] - In Progress
 
 ### 🔧 Circuit Breaker & Resilience
@@ -140,6 +48,14 @@ Created comprehensive P0 integration tests with circuit breaker protection:
 - Removed `engine/src/native/` directory containing deprecated C++ code
 - Replaced with Rust WASM modules (`@rbalchii/*-wasm`) for better cross-platform compatibility
 - Added `engine/src/native/node_modules/` and `engine/build/` to `.gitignore`
+
+### Planned
+
+- Enhanced code analysis with AST pointers
+- Relationship narrative discovery improvements
+- Mobile application support
+- Plugin marketplace
+- Diffusion-based reasoning models
 
 ---
 
@@ -345,6 +261,86 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 - `package.json`: 5.1.0
 - `engine/package.json`: 5.1.0
 - `user_settings.json.template`: VERSION = "5.1.0"
+
+### Architecture Clarifications (added 2026-05-19)
+
+#### 📚 Architecture Standards & Documentation
+
+##### Standard 027: Distillation Output Storage
+**Clarification:** Distillation outputs are event chains/nodal maps for context seeding, NOT raw content to reintroduce into source corpus.
+
+- **Purpose:** Distilled YAML files serve as semantic summaries and provenance records that seed future distillation cycles
+- **Storage Location:** `notebook/distills/` (intentionally separate from pointer-only `mirrored_brain/`)
+- **Content Type:** Event chains with compound→atom relationships, tag hierarchies, temporal metadata
+- **NOT For:** Re-ingesting raw content back into the corpus (violates Standard 051)
+
+##### Standard 028: Self-Contamination Prevention
+**Current Mechanism:** Filename pattern matching to detect distillation outputs in ingestion paths.
+
+**Identified Edge Cases:**
+- Renamed files bypass protection (e.g., `distilled_notes.md` → `my_notes.md`)
+- Content-based detection not yet implemented
+- Provenance chain tracking incomplete
+
+**Proposed Enhancements:**
+- Content hash comparison against known distillation patterns
+- Metadata field validation (`_type: distillation_output`)
+- Full provenance chain verification from original source
+
+##### Standard 029: Tag-Based Distillation Mode
+**Distinct Concept-Centric Workflow vs File-Centric Standard Mode:**
+
+| Aspect | Standard Mode | Tag-Based Mode |
+|--------|---------------|----------------|
+| Input | Specific files/directories | Tag patterns |
+| Output | File-specific summaries | Cross-tag deduplicated concepts |
+| Use Case | Targeted content processing | Thematic exploration across corpus |
+
+**Cross-Tag Deduplication Strategy:**
+- Identifies semantically equivalent atoms sharing multiple tags
+- Consolidates redundant representations into single canonical form
+- Preserves original provenance in metadata
+
+##### Standard 031: Search Algorithms Comprehensive Reference
+**Consolidated P0 Reference Document (~700k tokens)** covering all 8 algorithms:
+
+| Algorithm | Purpose | Key Characteristics |
+|-----------|---------|---------------------|
+| **STAR** (Standard) | General purpose search | Term overlap + tag relevance + temporal decay |
+| **Exact** | Precise term matching | FTS5 full-text, no semantic expansion |
+| **Deep** | Maximum recall | Multi-query splitting, sequential processing |
+| **Illuminate** | Corpus narrative | BFS graph traversal from hub compounds |
+| **Explore** | Concept skeleton | Tag-hub map without content inflation |
+| **Tag-Based** | Thematic queries | Cross-tag deduplication strategy |
+| **Streaming** | Memory efficiency | SSE batch delivery, progressive results |
+| **Mobile** | Low-resource optimization | Aggressive caching, reduced token budgets |
+
+##### Standard 051: Pointer-Only Storage Implementation Verified
+**Critical Architecture Fix:** Database stores pointers only; content written to `mirrored_brain/@inbox/` filesystem.
+
+**Verification Results:**
+✅ Test document ingested successfully via `test-ingest2.json`
+✅ Content exists at `mirrored_brain/@inbox/api_upload` and `mirrored_brain/@inbox/test-upload`
+✅ Compound.path updated to point to mirror location post-ingestion
+⚠️ Distillation returns 0 blocks for simple text (expected - needs structured markdown)
+
+**Modified Files:**
+- `engine/src/routes/v1/ingest.ts` - Writes raw content to mirror after DB storage
+- Mirror path format: `@inbox/{timestamp}_{hash}.md`
+
+#### 🔧 Technical Changes
+
+**Files Modified:**
+- `specs/current-standards/dependencies/018-ast-parser-wasm.md` (Standard 018)
+- `specs/current-standards/testing/019-test-environment-consistency.md` (Standard 019)
+- `specs/current-standards/search-retrieval/014-search-algorithm-testing.md` (Standard 030)
+
+**New Standards Created:**
+- Standard 027: Distillation Output Storage
+- Standard 028: Self-Contamination Prevention  
+- Standard 029: Tag-Based Distillation Mode
+- Standard 031: Search Algorithms Comprehensive Reference
+- Standard 051: Pointer-Only Database Storage
 
 ---
 
@@ -1977,17 +1973,15 @@ Gravity(atom, anchor) = (SharedTags) × e^(-λ × ΔTime) × (1 - SimHashDistanc
 
 ---
 
-## [Unreleased]
+## [1.0.0] - 2025-07-xx
 
-### Planned
+### Breaking Changes - Search API
+- Removed `exact:`, `fast:`, and `deep:` prefix support from search queries — these prefixes were aliases for specific backend behaviors that are no longer needed
+- The `/v1/memory/search-max-recall` endpoint remains available but is not required; max-recall behavior can be achieved on regular search by setting a high context budget (e.g., `max_chars: 262144`)
+- Max-recall is now integrated into regular search as a context budget toggle — set `max_chars` to a large value (≥256K) to get comprehensive retrieval across all phases
 
-- Enhanced code analysis with AST pointers
-- Relationship narrative discovery improvements
-- Mobile application support
-- Plugin marketplace
-- Diffusion-based reasoning models
-
----
+### Fixes - Search API
+- Removed dead code: unused `deep` boolean parameter from search.ts, dead `searchType` property from density PREFIXES object in index.html, duplicate closing brace in PREFIXES object initialization
 
 ## Legacy Versions
 

@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
-import { existsSync, rmSync, readdirSync, statSync } from 'fs';
+import { existsSync, rmSync, readdirSync, statSync, appendFileSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 
 // Fix module load error by using explicit relative path
@@ -13,6 +13,48 @@ import { PATHS, PROJECT_ROOT as EngineProjectRoot } from './config/paths.js'; //
 import { apiKeyAuth } from './middleware/auth.js';
 import { pathManager } from './utils/path-manager.js';
 import { StructuredLogger } from './utils/structured-logger.js';
+
+// ============================================================================
+// OPS-005: Crash Observability (Standard 022) — ISSUE-17
+// Install global guards before any route is served so a silent process death
+// always leaves a stack trace in the rotating engine log AND stderr. WASM-originated
+// aborts cannot be caught here, but every JS throw / unhandled rejection can.
+// ============================================================================
+function installCrashGuards(): void {
+  const crashLogPath = path.join(PATHS.LOGS_DIR, 'anchor_engine_crash.log');
+  const writeCrash = (kind: string, err: unknown) => {
+    const stack = err instanceof Error ? (err.stack || `${err.name}: ${err.message}`) : String(err);
+    const entry = `[${new Date().toISOString()}] [CRASH:${kind}] ${stack}\n`;
+    try {
+      if (!existsSync(PATHS.LOGS_DIR)) mkdirSync(PATHS.LOGS_DIR, { recursive: true });
+      appendFileSync(crashLogPath, entry);
+    } catch (logErr) {
+      // Never let logging the crash itself throw — fall through to stderr.
+      console.error(`[CRASH:${kind}] failed to write ${crashLogPath}:`, logErr);
+    }
+    console.error(entry);
+  };
+
+  const onUncaught = (err: unknown) => {
+    writeCrash('uncaughtException', err);
+    process.exit(1);
+  };
+  const onUnhandledRejection = (reason: unknown) => {
+    writeCrash('unhandledRejection', reason);
+    process.exit(1);
+  };
+
+  try {
+    process.on('uncaughtException', onUncaught);
+    process.on('unhandledRejection', onUnhandledRejection);
+    console.log('[OPS-005] Crash observability guards installed (uncaughtException + unhandledRejection)');
+  } catch (installErr) {
+    // Guard installation failure at boot must be logged loudly before routes start.
+    console.error('[OPS-005] FAILED to install crash guards:', installErr);
+  }
+}
+
+installCrashGuards();
 
 // Use a simpler approach for __dirname in ES modules
 const getDirname = () => {
@@ -152,7 +194,7 @@ function setUICacheHeaders(res: express.Response, filePath: string) {
 }
 
 // Serve UI with fallback chain:
-// 1. Centralized dist (~/.anchor/local-data/dist) if built externally
+// 1. Centralized dist (~/.anchor/dist) if built externally
 // 2. engine/public (single-file React app)
 // 3. integrations/web-dashboard/dist (development dashboard)
 const centralizedDist = PATHS.DIST_DIR;

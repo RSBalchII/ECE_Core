@@ -6,8 +6,8 @@ authors:
     given-names: "R.S."
     orcid: "https://orcid.org/0009-0001-0476-1689"
     affiliation: "Independent Researcher, New Mexico Tech Affiliated"
-version: 5.0.0
-date-released: 2026-03-18
+version: 5.2.0
+date-released: 2026-04-25
 license: AGPL-3.0
 repository-code: "https://github.com/RSBalchII/anchor-engine-node"
 keywords:
@@ -18,4 +18,4 @@ keywords:
   - "sparse retrieval"
   - "MCP"
   - "session index"
-abstract: "STAR (Semantic Temporal Associative Retrieval) is a local-first, graph-based information retrieval system designed to enable resource-constrained devices to navigate large-scale personal knowledge corpora. Unlike traditional dense vector retrieval systems that require loading complete indices into RAM, STAR implements a sparse bipartite graph approach that retrieves only relevant 'atoms' of information required for a given query. v5.0.0 adds unified standards architecture (26 active standards), improved memory management, and comprehensive security hardening."
+abstract: "STAR (Semantic Temporal Associative Retrieval) is a local-first, graph-based information retrieval system designed to enable resource-constrained devices to navigate large-scale personal knowledge corpora. Unlike traditional dense vector retrieval systems that require loading complete indices into RAM, STAR implements a sparse bipartite graph approach that retrieves only relevant 'atoms' of information required for a given query. The current release builds on a unified standards architecture (39 active standards) with improved memory management and comprehensive security hardening."

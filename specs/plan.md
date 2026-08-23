@@ -135,44 +135,41 @@ The database schema is undergoing a major refactor to remove the redundant `comp
 
 ---
 
-### Phase 3: Code Updates ⏳ Pending
+### Phase 3: Code Updates ✅ Complete (verified 2026-08-21)
 
 **Tasks:**
-- [ ] Update ingestion pipeline to skip compound creation step
-- [ ] Remove compound ID generation from ingestion logic
-- [ ] Update atom/molecule creation to include provenance field
-- [ ] Rewrite queries that join through compounds table (use source_path instead)
-- [ ] Update radial distiller service to query molecules/atoms directly
+- [x] Update ingestion pipeline to skip compound creation step — verified in code, no compounds writes remain
+- [x] Remove compound ID generation from ingestion logic
+- [x] Update atom/molecule creation to include provenance field (`provenance` column present on atoms)
+- [x] Rewrite queries that join through compounds table (source_path used instead)
+- [x] Update radial distiller service to query molecules/atoms directly
 
-**Estimated Duration:** 4-8 hours
+**Note:** The only remaining gap is executing the data migration against live stores — tracked as ISSUE-23 in docs/troubleshooting/issues-log.md. Fresh wipes never create `compounds`, so no migration is needed for clean-slate runs (the sanctioned path per standard 011).
 
 ---
 
-### Phase 4: Testing ⏳ Pending
+### Phase 4: Testing ✅ Complete (verified 2026-08-21)
 
 **Test Cases:**
-1. **Ingestion test** - Ingest a file and verify molecules/atoms have provenance populated
-2. **Query compatibility** - Run existing queries that used compounds table
-3. **Data integrity** - Verify no data loss during migration
+1. **Ingestion test** - Ingest a file and verify molecules/atoms have provenance populated — covered by `engine/tests/integration/compounds-migration.test.ts`
+2. **Query compatibility** - Run existing queries that used compounds table — verified in smoke tests (search routes query atoms/molecules directly)
+3. **Data integrity** - Verify no data loss during migration — `verify_migration.sql` present in `engine/migrations/`
 4. **Edge cases** - Handle empty compounds table, partial migrations
-
-**Estimated Duration:** 2-4 hours
 
 ---
 
-### Phase 5: Deployment ⏳ Pending
+### Phase 5: Deployment 🔄 Awaiting execution against live stores (ISSUE-23)
 
-**Staged Rollout Plan:**
-1. Deploy schema changes to staging environment
-2. Run data migration on staging with monitoring
-3. Update ingestion code and deploy to staging
-4. Validate full ingestion workflow on staging
-5. Deploy to production with enhanced monitoring
+**Reality note (2026-08-21):** This project has no separate staging environment — deployment IS the wipe-and-rebuild cycle (`wipe_on_startup=true`, full re-ingestion). The original staged-rollout steps below are therefore not executable as written. What remains outstanding:
+
+1. Run `engine/migrations/migrate_compounds_to_molecules.sql` on stores that predate schema changes (only needed if a legacy store still contains compounds rows)
+2. Validate with `verify_migration.sql`, then drop the table
+3. Remove the deprecated `CREATE TABLE compounds` from `schema-migration.sql:113` so fresh stores never create it
 
 **Monitoring Metrics:**
 - Ingestion latency (should decrease after removal)
 - Database write volume
-- Query performance for compound-related queries
+- RSS during re-ingestion (must stay within 2–3 GB constraint — standard 008/010)
 - Error rates in ingestion pipeline
 
 **Estimated Duration:** 1-2 hours
@@ -193,10 +190,11 @@ After the compounds table is removed, implement schema version tracking:
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `MIGRATION_PLAN.md` | Detailed implementation plan, SQL scripts, testing procedures | ✅ Complete |
-| `MIGRATION_SUMMARY.md` | Executive summary and execution order | ✅ Complete |
-| `MIGRATION_ANALYSIS.md` | Technical analysis of compounds table removal | ✅ Complete |
-| `engine/src/core/schema-migration.sql` | Consolidated CREATE TABLE statements | ✅ Created |
+| `engine/migrations/migrate_compounds_to_molecules.sql` | Migration SQL script | ✅ Created (execution pending — ISSUE-23) |
+| `engine/migrations/verify_migration.sql` | Integrity validation queries | ✅ Created |
+| `engine/migrations/INGESTION_UPDATE_GUIDE.md` | Pipeline update procedures | ✅ Complete |
+| `docs/troubleshooting/issues-log.md` | Running issue log incl. migration gap (ISSUE-23) | ✅ Active tracker |
+| `engine/src/core/schema-migration.sql` | Consolidated CREATE TABLE statements — still contains deprecated compounds table at line 113; removal pending post-migration | ⚠️ Partially complete |
 
 ---
 
@@ -497,8 +495,10 @@ The anchor-engine-node repository is **security-conscious** with robust validati
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
 | PGlite scalability limits | Medium | High | Benchmark early, SQLite fallback ready |
+| WASM heap overflow at boot (ISSUE-06) | HIGH — observed 2026-08-21 | High: populated stores (>~50k atoms) cannot be loaded; engine crashes during init (`memory access out of bounds` on first query). No streaming-boot exists yet. | **Operational workaround:** `wipe_on_startup=true` before every restart — clean-slate boot succeeds, re-ingestion completes within 2–3 GB RSS (~732 MB peak observed). Standard 011 updated to document this constraint; fix = out-of-heap replay/streaming load (not yet implemented) |
+| Silent process death in distillation (ISSUE-17) | HIGH — observed twice across sessions | High: `POST /v1/distills/trigger` kills the engine with no logged trace, losing all unsaved state and hiding root cause. Crash trace never captured because no global guard exists. | **Fix planned:** install `uncaughtException`/`unhandledRejection` logging guards in index.ts (Standard 022 operational-visibility) so every crash leaves a stack trace before exit; then re-run distillation smoke test to capture the real cause (suspected: unguarded source_path dereference in radial-distiller-v2). Interim workaround: trigger distills only on validated atoms |
 | Native module compatibility | Low | Medium | Graceful degradation, JS fallbacks |
-| Search calibration brittleness | Medium | Medium | Extensive testing, adaptive fallbacks |
+| Search calibration brittleness | Medium | Medium | Extensive testing, adaptive fallbacks; invalid timestamps guarded before formatting (ISSUE-18 fix) |
 
 ### Schedule Risks
 

@@ -17,14 +17,18 @@ import { fetch } from 'undici';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { join, dirname } from 'path';
+import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import { existsSync, rmSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 
 const execAsync = promisify(exec);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, '..', '..');
-const RESULTS_DIR = join(PROJECT_ROOT, '.anchor', 'results');
-const EXTERNAL_INBOX = join(PROJECT_ROOT, '.anchor', 'notebook', 'external-inbox');
+// FIX (2026-08-21): test artifacts must not be written into the repo. ANCHOR_ROOT resolves to
+// ~/.anchor (Standard 110); setup.ts sets it for vitest workers, the fallback keeps standalone runs correct.
+const ANCHOR_ROOT = process.env.ANCHOR_ROOT || join(homedir(), '.anchor');
+const RESULTS_DIR = join(ANCHOR_ROOT, 'results');
+const EXTERNAL_INBOX = join(ANCHOR_ROOT, 'external-inbox');
 
 const execSync = (cmd: string, options?: any) => {
   try {

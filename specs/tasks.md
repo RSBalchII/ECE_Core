@@ -1,6 +1,27 @@
 # Anchor Engine - Current Tasks
 
-**Last Updated:** 2026-05-18 | **Current Sprint:** v5.1.0 Prep + Test Suite Enhancement
+**Last Updated:** 2026-08-21 | **Current Sprint:** v5.2 Milestone Remediation + Smoke Validation
+
+---
+
+## 🚨 Active: v5.2 Milestone Remediation (Aug 2026)
+
+Severity-ordered remediation items from the smoke-test session. Full detail in [docs/troubleshooting/issues-log.md](../docs/troubleshooting/issues-log.md); standards mapping per item.
+
+### P0 — Correctness (blocks reliable operation)
+- [ ] **ISSUE-17** — Silent distill-trigger crash: add `uncaughtException`/`unhandledRejection` logging guards in `engine/src/index.ts`; guard source_path resolution in radial-distiller-v2; re-run distillation smoke test to capture root cause *(Standard 022 operational-visibility)*
+- [ ] **ISSUE-18** — Search 500 on invalid timestamps: valid-date check before `toISOString()` in result formatting *(Standards 007 data-integrity, 028 streaming-search)*
+
+### P1 — Robustness / hygiene
+- [ ] **ISSUE-06** — WASM boot overflow on populated stores: update Standard 011 to document wipe-on-startup requirement; file streaming-boot as future work *(Standard 011 ephemeral-database)*
+- [ ] **ISSUE-23** — Compounds table removal migration never executed: run `engine/migrations/` scripts against legacy stores, then drop deprecated CREATE TABLE from schema-migration.sql *(Standard 018 distillation-output-storage)*
+- [ ] **ISSUE-21** — Path traversal sanitization in radial-distiller + test-ui per CodeQL alerts #93–#101 *(Standard 036 path-traversal-prevention)*
+
+### P2 — Verification / cleanup
+- [ ] **ISSUE-22** — Confirm handlebars is unused (`pnpm why handlebars`); drop from lockfile if so *(Standard 013 dependency-validation)*
+- [ ] **ISSUE-19** — Trace `$null` filename generation in ManualIngest extra-path handling *(Standard 006 path-usage-validation)*
+- [ ] **ISSUE-20** — Implement enhanced watchdog status/validation endpoints when ingestion UX resumes *(Standard 022 operational-visibility)*
+- [x] **ISSUE-16** — setup-user-config.mjs missing `fs` import (fixed this session, pending commit)
 
 ---
 
@@ -136,32 +157,30 @@
 
 #### Migration Project Status
 
-**Current Phase:** Compounds Table Removal - **ALL PHASES COMPLETE INCLUDING DEPLOYMENT PLAN** ✅
+**Current Phase:** Compounds Table Removal — phases 1–4 complete; **deployment (phase 5) still pending** ⚠️ (see docs/troubleshooting/issues-log.md ISSUE-23)
 
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Phase 1: Schema Analysis | ✅ Complete | Data mapping completed, unique fields identified |
 | Phase 2: Schema Migration | ✅ Complete | Molecules/atoms tables have required columns (provenance, molecular_signature) |
-| Phase 3: Code Updates | ✅ Complete | Ingestion pipeline updated - compounds table writes removed |
-| Phase 4: Testing | ✅ Ready | Integration tests created (`compounds-migration.test.ts`) |
-| Phase 5: Deployment | ✅ Documentation Created | Full deployment plan in `specs/compounds-table-removal-deployment.md` |
+| Phase 3: Code Updates | ✅ Complete (verified 2026-08-21) | Ingestion pipeline writes no compounds rows — audited against engine/src/services/ingest |
+| Phase 4: Testing | ✅ Complete (verified 2026-08-21) | `engine/tests/integration/compounds-migration.test.ts` present; requires a live server on :3160 to pass — all suites currently fail with connection errors while the engine is down, so final green-run deferred until next smoke-test session (ISSUE-23 re-validation step) |
+| Phase 5: Deployment | ⚠️ Migration SQL exists, not yet executed against fresh stores | `engine/migrations/migrate_compounds_to_molecules.sql` ready; run on next wipe-and-rebuild cycle (see docs/troubleshooting/issues-log.md ISSUE-23) |
 
 **Migration Results:**
 - Molecules table has columns: `source_path`, `provenance`, `molecular_signature`
 - Atoms table has column: `provenance`
-- Compounds table removed from schema (or was never present in fresh DB)
-- Ingestion pipeline writes directly to molecules/atoms without compound intermediates
-- Code audit confirmed: no active references to creating compounds table
+- Compounds writes removed from ingestion pipeline; **the deprecated CREATE TABLE still exists at `engine/src/core/schema-migration.sql:113`** and will be dropped once the migration runs on a fresh store (ISSUE-23)
 
-See **[MIGRATION_PLAN.md](../MIGRATION_PLAN.md)** for detailed implementation plan.
+See **[engine/migrations/](../engine/migrations/) for the migration SQL scripts (`migrate_compounds_to_molecules.sql`, `verify_migration.sql`) and INGESTION_UPDATE_GUIDE.md.
 
 #### Links to Detailed Documentation
-- **[Migration Plan](../MIGRATION_PLAN.md)** - Full implementation steps, SQL scripts, testing procedures
-- **[Migration Summary](../MIGRATION_SUMMARY.md)** - Executive summary and execution order
-- **[Migration Analysis](../MIGRATION_ANALYSIS.md)** - Technical analysis of compounds table removal
+- **[Migration Scripts](../engine/migrations/migrate_compounds_to_molecules.sql)** - Full implementation steps, SQL scripts
+- **[Migration Verification](../engine/migrations/verify_migration.sql)** - Integrity validation queries
+- **[Ingestion Update Guide](../engine/migrations/INGESTION_UPDATE_GUIDE.md)** - Pipeline update procedures
 
 #### Next Steps for Schema Evolution
-1. Complete compounds table migration (current work)
+1. Execute the compounds migration on the next wipe-and-rebuild cycle (see docs/troubleshooting/issues-log.md ISSUE-23)
 2. Add schema version tracking table (`schema_versions`)
 3. Document any future schema changes in a changelog format
 4. Consider migrating to a proper migration framework (e.g., Flyway, Liquibase) for future updates

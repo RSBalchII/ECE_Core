@@ -9,10 +9,12 @@ import { db } from '../core/db.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { PATHS, PROJECT_ROOT } from '../config/paths.js';
 
-// Standard 110: Use .anchor/user_settings.json for centralized configuration
-const PROJECT_ROOT = process.env.PROJECT_ROOT || process.cwd();
-const ANCHOR_ROOT = path.join(PROJECT_ROOT, '.anchor');
+// Standard 110: Use ~/.anchor/user_settings.json for centralized configuration.
+// FIX (2026-08-21): previously derived ANCHOR_ROOT from process.cwd() ('engine'), which caused
+// user_settings.json writes to land in <workspace>/engine/.anchor instead of ~/.anchor.
+const ANCHOR_ROOT = PATHS.ANCHOR_ROOT;
 const SETTINGS_PATH = path.join(ANCHOR_ROOT, 'user_settings.json');
 
 export async function loadVersion(): Promise<string> {

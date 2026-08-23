@@ -24,6 +24,10 @@ Documentation in Anchor Engine must be **concise**, **accurate**, and **maintain
 | `LICENSE` | License file (AGPL-3.0) |
 | `.gitignore` | Git ignore patterns |
 | `package.json` | Package configuration |
+| `CITATION.cff` | Citation metadata (version, authors) |
+| `paper.bib` | Academic bibliography (BibTeX) |
+| `Dockerfile`, `docker-compose.yml` | Containerized deployment |
+| `user_settings.json.template` | Configuration template (runtime copy lives in `.anchor/`) |
 
 **PROHIBITED in Root:**
 - Phase completion reports
@@ -41,11 +45,13 @@ Documentation in Anchor Engine must be **concise**, **accurate**, and **maintain
 | `plan.md` | Development roadmap and phased implementation |
 | `tasks.md` | Current implementation tasks and priorities |
 | `doc_policy.md` | This documentation policy |
+| `shutdown-cleanup.md` | Shutdown and cleanup operational procedure |
+| `smoke-test-workflow.md` | Smoke test workflow (live-fire validation) |
 
 **Subdirectories:**
-- `current-standards/` - 26 active architecture standards (001-026)
-- `archive-legacy/` - Historical standards and legacy documentation (059-136+)
-- `decisions/` - Architecture decision records
+- `current-standards/` - 39 active architecture standards (001-039), indexed by `000-STANDARDS_INDEX.md`
+
+Historical standard entries are preserved as `[Standard NNN]` sections in `CHANGELOG.md`.
 
 **PROHIBITED in specs root:**
 - Duplicate documentation already in README
@@ -58,12 +64,12 @@ Documentation in Anchor Engine must be **concise**, **accurate**, and **maintain
 
 | Area | Files | Purpose |
 |------|-------|---------|
-| **Whitepaper** | `whitepaper.md`, `paper.md`, `arxiv/` | STAR algorithm research and academic papers |
-| **API Reference** | `API.md`, `api/endpoints.md` | Complete API documentation and endpoints |
-| **Deployment** | `DEPLOYMENT.md` | Deployment guides for all platforms |
-| **Standards** | `STANDARDS.md`, `standards/` | Active standards index and reference |
-| **Troubleshooting** | `TROUBLESHOOTING.md`, `troubleshooting/` | Issue resolution and best practices |
-| **Integration** | `integrations/`, `CONTRIBUTING.md` | External integrations and contribution guidelines |
+| **Whitepaper** | `whitepaper.md`, `paper.md`, `star-whitepaper.tex`, `BIBLIOGRAPHY.bib` | STAR algorithm research and academic papers |
+| **API Reference** | `mcp-setup.md`, root `README.md` (MCP Integration) | Tool surface, endpoints, and configuration |
+| **Deployment** | `CROSS_PLATFORM_SETUP.md`, `INSTALL.md`, root `Dockerfile` / `docker-compose.yml` | Installation and deployment across platforms |
+| **Standards** | `../specs/current-standards/000-STANDARDS_INDEX.md` | Active standards index (001–039) |
+| **Troubleshooting** | `troubleshooting/issues-log.md`, `testing/smoke-test-watchdog-fix.md` | Durable issue tracker and known-issue resolutions |
+| **Integration** | `integrations/`, `mcp-agent.md`, `mcp-setup.md` | External integrations and contribution guidelines |
 
 **PROHIBITED in docs root:**
 - Temporary files
@@ -167,9 +173,9 @@ This includes:
 |--------|-------|------------------|
 | **Architecture** | Architecture Team | `specs/spec.md`, `specs/current-standards/` |
 | **User Guides** | Documentation Team | `docs/` (whitepaper, guides, integration) |
-| **API Reference** | Development Team | `docs/API.md`, `api/endpoints.md` |
-| **Deployment** | DevOps Team | `docs/DEPLOYMENT.md` |
-| **Testing** | QA Team | `tests/README.md`, `docs/testing/` |
+| **API Reference** | Development Team | `docs/mcp-setup.md`, `README.md` (MCP Integration) |
+| **Deployment** | DevOps Team | `Dockerfile`, `docker-compose.yml`, `docs/CROSS_PLATFORM_SETUP.md` |
+| **Testing** | QA Team | `tests/`, `docs/testing/`, `docs/streamlined-testing.md` |
 
 ---
 
@@ -190,12 +196,12 @@ Move root-level documentation to appropriate `docs/` subdirectories:
 ### 6.2 Specs Consolidation
 
 **Current State:**
-- `specs/` contains only 3 core files: `spec.md`, `plan.md`, `tasks.md`
-- `specs/current-standards/` has 26 active standards
-- `specs/archive-legacy/` has 45 historical standards
+- `specs/` contains the core specification files plus operational procedures (`shutdown-cleanup.md`, `smoke-test-workflow.md`)
+- `specs/current-standards/` has 39 active standards (001-039), indexed by `000-STANDARDS_INDEX.md`
+- Historical standard entries are preserved as `[Standard NNN]` sections in `CHANGELOG.md`
 
 **Target State:**
-- No additional `.md` files in `specs/` root
+- No additional `.md` files in `specs/` root beyond the listed operational procedures
 - All standards properly organized in subdirectories
 - Clear separation between active and historical content
 
@@ -228,6 +234,6 @@ Move root-level documentation to appropriate `docs/` subdirectories:
 
 ---
 
-**Last Updated:** April 9, 2026
-**Version:** 2.0
+**Last Updated:** August 22, 2026
+**Version:** 2.1
 **Status:** ✅ Active

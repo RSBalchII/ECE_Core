@@ -2,6 +2,7 @@ import type { Application, Request, Response } from 'express';
 import { validate, schemas } from '../../middleware/validate.js';
 import { StructuredLogger } from '../../utils/structured-logger.js';
 import { smartChatSearch, executeMoleculeSearch } from '../../services/search/search.js';
+import { safeTimestamp } from '../../services/search/search-utils.js';
 import type { SearchRequest } from '../../types/api.js';
 import { executeStreamingSearch, formatSSE } from '../../services/search/streaming-search.js';
 
@@ -70,7 +71,7 @@ export function setupSearchRoutes(app: Application) {
           uuid: r.id,
           content: r.content,
           source: r.source,
-          timestamp: new Date(r.timestamp).toISOString(),
+          timestamp: safeTimestamp(r.timestamp),
           score: r.score,
           tags: r.tags || [],
           buckets: r.buckets || [],

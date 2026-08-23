@@ -2,7 +2,7 @@
  * Cross-Platform Path Normalization Utility
  * 
  * Handles Windows (C:\Users\rsbiiw\Projects) and Unix (/home/user/projects) paths
- * with proper validation for local-data hierarchy recognition.
+ * with proper validation for the .anchor hierarchy recognition.
  */
 
 import path from 'path';
@@ -65,7 +65,7 @@ export function validateAnchorHierarchy(filePath: string): {
   
   const isInInbox = normalized.includes('/inbox/') || normalized.match(/\/inbox[\/\\]/) !== null;
   const isInExternalInbox = normalized.includes('/external-inbox/') || normalized.match(/\/external-inbox[\/\\]/) !== null;
-  const isInMirroredBrain = normalized.includes('/mirrored_brain/') || normalized.match(/\/mirrored_brain[\/\\]/) !== null;
+  const isInMirroredBrain = normalized.includes('/mirror_brain/') || normalized.match(/\/mirror_brain[\\/]/) !== null;
   
   return {
     valid: true,
@@ -156,8 +156,8 @@ export function validatePathsConfig(
     errors.push(`EXTERNAL_INBOX_DIR (${externalInboxDir}) should be under .anchor/external-inbox`);
   }
   
-  if (!mirroredBrainNorm.includes('.anchor') || !mirroredBrainNorm.includes('mirrored_brain')) {
-    errors.push(`MIRRORED_BRAIN_DIR (${mirroredBrainDir}) should be under .anchor/mirrored_brain`);
+  if (!mirroredBrainNorm.includes('.anchor') || !mirroredBrainNorm.includes('mirror_brain')) {
+    errors.push(`MIRRORED_BRAIN_DIR (${mirroredBrainDir}) should be under .anchor/mirror_brain`);
   }
   
   // Check all paths are absolute

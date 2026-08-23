@@ -15,6 +15,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { join, dirname } from 'path';
+import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import { existsSync, rmSync, mkdirSync } from 'fs';
 
@@ -44,7 +45,10 @@ const NODE_EXE = resolveNodeExecutable();
 // ── Configuration ──────────────────────────────────────────────────────────
 
 const GITHUB_REPO = 'RSBalchII/anchor-engine-node';
-const CLONE_DIR = join(PROJECT_ROOT, '.anchor', 'notebook', 'external-inbox', 'anchor-engine-node');
+// FIX (2026-08-21): test artifacts must not be written into the repo. ANCHOR_ROOT resolves to
+// ~/.anchor (Standard 110); setup.ts sets it for vitest workers, the fallback keeps standalone runs correct.
+const ANCHOR_ROOT = process.env.ANCHOR_ROOT || join(homedir(), '.anchor');
+const CLONE_DIR = join(ANCHOR_ROOT, 'external-inbox', 'anchor-engine-node');
 const SERVER_PORT = 3160;
 const SERVER_URL = `http://localhost:${SERVER_PORT}`;
 

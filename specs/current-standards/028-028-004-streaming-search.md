@@ -100,6 +100,22 @@ app.post('/v1/memory/search/stream', async (req, res) => {
 });
 ```
 
+#### Result Field Formatting (added 2026-08-21)
+
+Observed failure: atomizer date-extraction regexes can capture non-date strings (e.g. ID-like tokens in session JSON), so `timestamp` may hold garbage. Any formatter that does `new Date(r.timestamp).toISOString()` unguarded throws `RangeError: Invalid time value`, which kills the whole SSE batch → HTTP 500 (ISSUE-18).
+
+**Mandatory guard on every date-derived field emitted in results:**
+```typescript
+function safeDate(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+// Usage: timestamp: safeDate(r.timestamp) ?? '(unknown date)'
+```
+
+**Rule:** result formatting must never throw on malformed atom fields — unparseable dates degrade to `null`/placeholder and the batch continues. The same guard applies to any route that formats stored timestamps (search, stats, distill output).
+
 ### 3.3 Frontend: Streaming Client
 
 **File:** `engine/public/index.html`

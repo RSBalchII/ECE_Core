@@ -57,7 +57,7 @@ pnpm test:security --target=https://api.anchor-context.engine.local
 - WASM: Modules load correctly with graceful fallbacks
 
 ## Documentation References
-- **[Migration Plan](../MIGRATION_PLAN.md)**
-- **[Test Consolidation](../specs/tasks.md)**
+- **[Migration Scripts](../engine/migrations/)** - SQL migration + verification scripts
+- **[Test Consolidation](tasks.md)**
 - **[Standards](current-standards/)**
 - **[API Route Map](API-ROUTE-MAP.md)**

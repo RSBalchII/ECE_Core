@@ -23,6 +23,10 @@ const resolvedPath = path.resolve(userPath);
 1. `POST /v1/system/paths` - Add watch path
 2. `POST /v1/system/explorer` - Open file explorer
 3. `POST /v1/test/run-file` - Run test file
+4. `radial-distiller-v2.ts` output writers (lines ~1240, 1263, 1289, 1315) — distill outputs are written to paths derived from stored atom `source_path` values; CodeQL alerts #98–#101 flag these as unsanitized (ISSUE-21). Distillation input paths originate inside the engine's own store, but they still flow through filesystem writes and MUST pass the same normalize-and-prefix-check.
+5. `test-ui` file access routes — CodeQL alerts #93–#96; user-supplied filenames reach `fs` operations without validation (ISSUE-21).
+
+**Rule added 2026-08-21:** every route AND internal service that converts a stored/user string into an `fs` operation is in scope for this standard — not only HTTP endpoints. Stored atom fields (`source_path`, `provenance`) count as user-supplied input because they were populated by parsers from arbitrary corpus content (see Standard 028 self-contamination-prevention).
 
 ---
 

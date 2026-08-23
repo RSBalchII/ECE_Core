@@ -8,13 +8,17 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { fetch } from 'undici';
 import { join, dirname } from 'path';
+import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from 'fs';
 
 const __dirname = join(dirname(fileURLToPath(import.meta.url)));
 const PROJECT_ROOT = join(__dirname, '..', '..');
-const RESULTS_DIR = join(PROJECT_ROOT, '.anchor', 'results');
-const DISTILLS_DIR = join(PROJECT_ROOT, '.anchor', 'distills');
+// FIX (2026-08-21): test artifacts must not be written into the repo. ANCHOR_ROOT resolves to
+// ~/.anchor (Standard 110); setup.ts sets it for vitest workers, the fallback keeps standalone runs correct.
+const ANCHOR_ROOT = process.env.ANCHOR_ROOT || join(homedir(), '.anchor');
+const RESULTS_DIR = join(ANCHOR_ROOT, 'results');
+const DISTILLS_DIR = join(ANCHOR_ROOT, 'distills');
 
 // Test configuration
 const SERVER_PORT = 3160;

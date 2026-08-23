@@ -8,12 +8,12 @@
 
 import fs from 'fs';
 import path from 'path';
+import { PATHS } from '../../config/paths.js';
 
-// Log directory for distillation outputs – uses project root
-const PROJECT_ROOT = path.resolve(process.cwd(), '../..');
-const ANCHOR_ROOT = path.join(PROJECT_ROOT, '.anchor');
-
-// Log directory for distillation outputs – uses ANCHOR_ROOT/logs (~/.anchor/logs)
+// Log directory for distillation outputs – uses ~/.anchor/logs (Standard 110).
+// FIX (2026-08-21): was `path.join(PROJECT_ROOT, '.anchor')` with PROJECT_ROOT = cwd/../..,
+// which wrote logs into the repo's <workspace>/.anchor instead of $HOME.
+const ANCHOR_ROOT = PATHS.ANCHOR_ROOT;
 const LOGS_DIR = path.join(ANCHOR_ROOT, 'logs');
 
 /** Maximum number of lines we keep per unique output hash. */

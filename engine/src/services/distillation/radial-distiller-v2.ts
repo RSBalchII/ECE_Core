@@ -678,7 +678,10 @@ function deduplicateAcrossSources(
   
   // Transform groups into enriched records
   return Array.from(grouped.entries()).map(([key, group]) => {
-    const earliestMtime = Math.min(...group.map(r => new Date(r.timestamp).getTime()));
+    // ISSUE-18: filter invalid timestamps before min — a single bad row would make the
+    // whole Math.min NaN and crash `new Date(NaN).toISOString()` below. Fall back to now().
+    const validTimes = group.map(r => new Date(r.timestamp).getTime()).filter(t => !isNaN(t));
+    const earliestMtime = validTimes.length > 0 ? Math.min(...validTimes) : Date.now();
     const allProvenance = Array.from(new Set(group.flatMap(r => r.provenance)));
     
     return {

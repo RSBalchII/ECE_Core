@@ -1,6 +1,6 @@
 {
   "name": "@rbalchii/anchor-engine",
-  "version": "5.0.0",
+  "version": "5.2.0",
   "description": "Deterministic semantic memory for LLMs - local-first, graph traversal, <1GB RAM",
   "main": "engine/dist/index.js",
   "type": "module",

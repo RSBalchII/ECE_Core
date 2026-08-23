@@ -38,7 +38,7 @@ import { handlePrefixQuery } from './density-handler.js';
 import type {
   SearchResult } from './search-utils.js';
 import {
-  getHammingDistance, getItems, formatResults, filterDisplayTags,
+  getHammingDistance, getItems, formatResults, filterDisplayTags, safeTimestamp,
 } from './search-utils.js';
 
 import type { KnowledgeCluster, KnowledgeMolecule } from '../../types/api.js';
@@ -1612,8 +1612,9 @@ export function clusterMolecules(results: SearchResult[]): KnowledgeCluster[] {
 }
 
 function createCluster(mols: SearchResult[], source: string): KnowledgeCluster {
-  const startTs = new Date(mols[0].timestamp).toISOString();
-  const endTs = new Date(mols[mols.length - 1].timestamp).toISOString();
+  // ISSUE-18: guard against invalid atom timestamps (RangeError: Invalid time value)
+  const startTs = safeTimestamp(mols[0].timestamp);
+  const endTs = safeTimestamp(mols[mols.length - 1].timestamp);
 
   // Topic extraction based on tag frequency
   const tagCounts = new Map<string, number>();
@@ -1649,7 +1650,7 @@ function createCluster(mols: SearchResult[], source: string): KnowledgeCluster {
 
     return {
       id: m.id,
-      timestamp: new Date(m.timestamp).toISOString(),
+      timestamp: safeTimestamp(m.timestamp),
       speaker: m.provenance || 'unknown',
       tags: m.tags || [],
       entities: {
