@@ -13,13 +13,13 @@ Severity-ordered remediation items from the smoke-test session. Full detail in [
 - [x] **ISSUE-18** — Search 500 on invalid timestamps: valid-date check before `toISOString()` in result formatting *(Standards 007 data-integrity, 028 streaming-search)* ✅ DONE (commit e6c110df)
 
 ### P1 — Robustness / hygiene
-- [ ] **ISSUE-06** — WASM boot overflow on populated stores: update Standard 011 to document wipe-on-startup requirement; file streaming-boot as future work *(Standard 011 ephemeral-database)*
-- [ ] **ISSUE-23** — Compounds table removal migration never executed: run `engine/migrations/` scripts against legacy stores, then drop deprecated CREATE TABLE from schema-migration.sql *(Standard 018 distillation-output-storage)*
-- [ ] **ISSUE-21** — Path traversal sanitization in radial-distiller + test-ui per CodeQL alerts #93–#101 *(Standard 036 path-traversal-prevention)*
+- [x] **ISSUE-06** — WASM boot overflow on populated stores: update Standard 011 to document wipe-on-startup requirement; file streaming-boot as future work *(Standard 011 ephemeral-database)* ✅ DONE (commit e6c110df)
+- [x] **ISSUE-23** — Compounds table removal migration never executed: run `engine/migrations/` scripts against legacy stores, then drop deprecated CREATE TABLE from schema-migration.sql *(Standard 018 distillation-output-storage)* ✅ DONE (commit 9c164955)
+- [x] **ISSUE-21** — Path traversal sanitization in radial-distiller + test-ui per CodeQL alerts #93–#101 *(Standard 036 path-traversal-prevention)* ✅ DONE (commit 9c164955)
 
 ### P2 — Verification / cleanup
-- [ ] **ISSUE-22** — Confirm handlebars is unused (`pnpm why handlebars`); drop from lockfile if so *(Standard 013 dependency-validation)*
-- [ ] **ISSUE-19** — Trace `$null` filename generation in ManualIngest extra-path handling *(Standard 006 path-usage-validation)*
+- [x] **ISSUE-22** — Confirm handlebars is unused (`pnpm why handlebars`); drop from lockfile if so *(Standard 013 dependency-validation)* ✅ DONE — confirmed unused in source; present only as a transitive dev-tool dep (karma/jasmine ecosystem), not a direct concern
+- [x] **ISSUE-19** — Trace `$null` filename generation in ManualIngest extra-path handling *(Standard 006 path-usage-validation)* ✅ DONE (commit 9c164955)
 - [ ] **ISSUE-20** — Implement enhanced watchdog status/validation endpoints when ingestion UX resumes *(Standard 022 operational-visibility)*
 - [x] **ISSUE-16** — setup-user-config.mjs missing `fs` import (fixed this session, pending commit) ✅ DONE (commit e6c110df)
 
