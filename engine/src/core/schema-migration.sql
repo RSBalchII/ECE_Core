@@ -106,19 +106,11 @@ CREATE INDEX IF NOT EXISTS idx_molecules_timestamp ON molecules(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_molecules_signature ON molecules(molecular_signature);
 
 -- --------------------------------------------------------------------------
--- compounds: DEPRECATED - Being removed in this migration
+-- compounds: REMOVED (v5.2 milestone) — deprecated table dropped from schema
 -- --------------------------------------------------------------------------
--- This table is retained for backward compatibility during transition.
--- All data from this table should be migrated to atoms/molecules before dropping.
-CREATE TABLE IF NOT EXISTS compounds (
-  id TEXT PRIMARY KEY,                    -- UUID v4
-  path TEXT,                            -- File path reference
-  timestamp REAL,                       -- Ingestion timestamp
-  provenance TEXT,                     -- Source origin metadata
-  molecular_signature TEXT,            -- Compound-level signature
-  atoms TEXT[],                        -- Array of atom IDs (FK)
-  molecules TEXT[]                    -- Array of molecule IDs (FK)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- The compounds table was the pre-removal reference layer. All provenance and
+-- signature data now lives in atoms/molecules; the ingestion pipeline no longer
+-- writes compounds rows. Dropped here so fresh stores boot without it.
 
 -- --------------------------------------------------------------------------
 -- tags: Tag-atom relationships (The "Nervous System")
@@ -268,21 +260,10 @@ CREATE TABLE IF NOT EXISTS synonyms (
 CREATE SEQUENCE IF NOT EXISTS vector_id_seq START 1 INCREMENT BY 1;
 
 -- ------------------------------------------------------------------------------
--- MIGRATION NOTES
+-- MIGRATION NOTES — v5.2 milestone (compounds removal complete)
 -- ------------------------------------------------------------------------------
--- 
--- This schema represents the post-compounds-removal state.
--- The compounds table is retained for backward compatibility but should no
--- longer be written to during normal operations.
 --
--- All provenance and signature data that was previously in compounds has been
--- migrated to atoms and molecules tables.
---
--- To complete the removal of compounds:
--- 1. Run this migration script
--- 2. Update ingestion pipeline to skip compound creation
--- 3. Drop the compounds table after verifying no external dependencies
-
--- ------------------------------------------------------------------------------
--- END OF SCHEMA MIGRATION FILE
--- ------------------------------------------------------------------------------
+-- This schema represents the post-compounds-removal state. The deprecated
+-- compounds table has been dropped from this file; fresh stores boot without it,
+-- and the ingestion pipeline no longer writes compounds rows. All provenance and
+-- signature data now lives in atoms/molecules.

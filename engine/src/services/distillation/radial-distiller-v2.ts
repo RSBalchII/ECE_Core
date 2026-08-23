@@ -27,6 +27,16 @@ import { execSync } from 'child_process';
 const PGLITE_CHUNK_IDS = 100;
 const MOBILE_MEMORY_THRESHOLD = 500 * 1024 * 1024;
 
+/**
+ * Guard for paths that are interpolated into shell commands (e.g. the git call in
+ * extractTemporalMetadata). Only allow a conservative path charset so a hostile
+ * source_path cannot break out of the quotes and inject arbitrary shell code.
+ * Returns true when the path is safe to interpolate; false otherwise.
+ */
+function isShellSafePath(p: string): boolean {
+  return /^[A-Za-z0-9/._\-]+$/.test(p) && p.length > 0 && !p.includes('..');
+}
+
 // Filtering patterns to prevent self-contamination
 const DISTILLATION_OUTPUT_PATTERNS = [
   /distilled_.*\.(yaml|json|md)$/i,
@@ -500,6 +510,11 @@ function extractTemporalMetadata(content: string, sourcePath: string, mtime: num
 
   // 2. Git history (graceful degradation — skip if git unavailable)
   try {
+    // ISSUE-21: sourcePath is interpolated into a shell command below; validate it
+    // first so a hostile path cannot inject arbitrary code through the quotes.
+    if (!isShellSafePath(sourcePath)) {
+      return { primary: new Date(mtime).toISOString().split('T')[0], fallback_source: 'mtime' };
+    }
     const gitLog = execSync(`git log -1 --format="%ai" -- "${sourcePath}"`, {
       cwd: path.join(PATHS.INBOX_DIR, '..'),
       encoding: 'utf-8',

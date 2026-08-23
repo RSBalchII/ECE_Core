@@ -9,8 +9,8 @@
 Severity-ordered remediation items from the smoke-test session. Full detail in [docs/troubleshooting/issues-log.md](../docs/troubleshooting/issues-log.md); standards mapping per item.
 
 ### P0 — Correctness (blocks reliable operation)
-- [ ] **ISSUE-17** — Silent distill-trigger crash: add `uncaughtException`/`unhandledRejection` logging guards in `engine/src/index.ts`; guard source_path resolution in radial-distiller-v2; re-run distillation smoke test to capture root cause *(Standard 022 operational-visibility)*
-- [ ] **ISSUE-18** — Search 500 on invalid timestamps: valid-date check before `toISOString()` in result formatting *(Standards 007 data-integrity, 028 streaming-search)*
+- [x] **ISSUE-17** — Silent distill-trigger crash: add `uncaughtException`/`unhandledRejection` logging guards in `engine/src/index.ts`; guard source_path resolution in radial-distiller-v2; re-run distillation smoke test to capture root cause *(Standard 022 operational-visibility)* ✅ DONE (commit e6c110df)
+- [x] **ISSUE-18** — Search 500 on invalid timestamps: valid-date check before `toISOString()` in result formatting *(Standards 007 data-integrity, 028 streaming-search)* ✅ DONE (commit e6c110df)
 
 ### P1 — Robustness / hygiene
 - [ ] **ISSUE-06** — WASM boot overflow on populated stores: update Standard 011 to document wipe-on-startup requirement; file streaming-boot as future work *(Standard 011 ephemeral-database)*
@@ -21,7 +21,7 @@ Severity-ordered remediation items from the smoke-test session. Full detail in [
 - [ ] **ISSUE-22** — Confirm handlebars is unused (`pnpm why handlebars`); drop from lockfile if so *(Standard 013 dependency-validation)*
 - [ ] **ISSUE-19** — Trace `$null` filename generation in ManualIngest extra-path handling *(Standard 006 path-usage-validation)*
 - [ ] **ISSUE-20** — Implement enhanced watchdog status/validation endpoints when ingestion UX resumes *(Standard 022 operational-visibility)*
-- [x] **ISSUE-16** — setup-user-config.mjs missing `fs` import (fixed this session, pending commit)
+- [x] **ISSUE-16** — setup-user-config.mjs missing `fs` import (fixed this session, pending commit) ✅ DONE (commit e6c110df)
 
 ---
 

@@ -525,7 +525,10 @@ async function processFile(filePath: string, event: string): Promise<{ ingested:
         const { compound, molecules, atoms } = atomizeResult;
 
         // 5. INGEST (Atomic) with progress tracking
-        const filename = relativePath.split(/[/\\]/).pop() || relativePath;
+        // ISSUE-19: derive a real basename for progress messages — the previous
+        // `.split(...).pop()` could yield an empty string or the full relative path,
+        // which then rendered as "null"/a bare directory in status strings.
+        const filename = path.basename(relativePath) || relativePath;
         
         await atomicIngest.ingestResult(
             compound,
