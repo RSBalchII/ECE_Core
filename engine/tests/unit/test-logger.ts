@@ -8,16 +8,14 @@
  */
 
 import { mkdirSync, writeFileSync, appendFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import path, { join } from 'path';
+import { homedir } from 'os';
 import process from 'process';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Get the project root (parent of tests directory)
-const PROJECT_ROOT = join(__dirname, '..', '..');
-const ANCHOR_ROOT = join(PROJECT_ROOT, '.anchor');
+// Create test results directory structure.
+// FIX (2026-08-21): ANCHOR_ROOT must resolve to ~/.anchor (Standard 110). The previous fallback
+// (`join(ROOT, '.anchor')`) created a .anchor tree inside the repo when no env override was set.
+const ANCHOR_ROOT = process.env.ANCHOR_ROOT ? path.resolve(process.env.ANCHOR_ROOT) : path.join(homedir(), '.anchor');
 
 // Create test results directory structure
 const TEST_RESULTS_DIR = join(ANCHOR_ROOT, 'test-results');

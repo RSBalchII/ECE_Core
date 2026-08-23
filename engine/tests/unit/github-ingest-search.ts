@@ -20,6 +20,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 
 /**
  * Test Fixture: Sample GitHub-style repository data
@@ -456,8 +457,8 @@ async function runTests() {
     if (resultEvents.length > 0 && totalResults >= 0) {
       console.log('  ✅ PASSED: Search pipeline executed with results logging\n');
       
-      // Verify log files were created in .anchor/logs/
-      const logsDir = path.join(process.cwd(), '..', '.anchor', 'logs');
+      // Verify log files were created in ~/.anchor/logs/ (Standard 110; local-data layer removed)
+      const logsDir = path.join(process.env.HOME || os.homedir(), '.anchor', 'logs');
       if (fs.existsSync(logsDir)) {
         const logFiles = fs.readdirSync(logsDir).filter(f => f.endsWith('.json'));
         if (logFiles.length > 0) {

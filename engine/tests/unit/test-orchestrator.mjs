@@ -24,6 +24,7 @@
 import { spawn, execFile } from "child_process";
 import path from "path";
 import fs from "fs";
+import { homedir } from "os";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,12 +34,16 @@ const ROOT = path.resolve(__dirname, "..");
 // === Configuration ===
 const ENGINE_PORT = 3160;
 const ENGINE_URL = `http://localhost:${ENGINE_PORT}`;
-const ANCHOR_DIR = path.join(ROOT, ".anchor");
-const INBOX_DIR = path.join(ANCHOR_DIR, "local-data", "inbox");
-const EXT_INBOX_DIR = path.join(ANCHOR_DIR, "local-data", "external-inbox");
-const DISTILLS_DIR = path.join(ANCHOR_DIR, "local-data", "distills");
-const MIRROR_DIR = path.join(ANCHOR_DIR, "local-data", "mirrored_brain");
-const LOGS_DIR = path.join(ANCHOR_DIR, "local-data", "logs", "orchestrator");
+// FIX (2026-08-21): ANCHOR_DIR must resolve to ~/.anchor (Standard 110). The previous value
+// (`<engine>/.anchor`) made the orchestrator create a .anchor tree inside the repo, and it
+// passed that path to the spawned engine via env.ANCHOR_ROOT. Now uses homedir; the deprecated
+// `local-data` layer is removed (data dirs live directly under ~/.anchor/).
+const ANCHOR_DIR = process.env.ANCHOR_ROOT || path.join(homedir(), ".anchor");
+const INBOX_DIR = path.join(ANCHOR_DIR, "inbox");
+const EXT_INBOX_DIR = path.join(ANCHOR_DIR, "external-inbox");
+const DISTILLS_DIR = path.join(ANCHOR_DIR, "distills");
+const MIRROR_DIR = path.join(ANCHOR_DIR, "mirrored_brain");
+const LOGS_DIR = path.join(ANCHOR_DIR, "logs", "orchestrator");
 
 // Timing
 const HEALTH_CHECK_INTERVAL = 1000; // ms
@@ -272,7 +277,7 @@ async function startEngine() {
 
   engineProcess = spawn("node", [enginePath], {
     cwd: ROOT,
-    env: { ...process.env, ANCHOR_ROOT: path.join(ROOT, ".anchor") },
+    env: { ...process.env, ANCHOR_ROOT: ANCHOR_DIR },
     stdio: ["pipe", "pipe", "pipe"],
   });
 

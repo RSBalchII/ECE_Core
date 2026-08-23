@@ -10,9 +10,11 @@
 import { test, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { PATHS } from '../../src/config/paths.js';
 
 describe('Search Results Logging', () => {
-  const logsDir = path.join(process.cwd(), '..', '.anchor', 'logs');
+  // Verify against the real logger location (Standard 110: ~/.anchor/logs), not a repo-relative .anchor.
+  const logsDir = PATHS.LOGS_DIR;
 
   it('should create log directory if not exists', async () => {
     // Ensure directory exists

@@ -4,9 +4,16 @@
  * Provides global setup, mocks, and configuration for the Anchor Engine test suite.
  */
 
+import { join } from 'path';
+import { homedir } from 'os';
+
 // Global test environment variables
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
-process.env.ANCHOR_ROOT = process.env.ANCHOR_ROOT || '/.anchor';
+// FIX (2026-08-21): ANCHOR_ROOT must resolve to ~/.anchor (Standard 110). The previous default
+// ('/.anchor', relative) resolved against vitest's cwd and made test loggers create directories
+// inside the repo (<workspace>/.anchor, <engine>/.anchor/...). Now it defaults to an absolute
+// homedir-based path; callers that need a sandbox location should export ANCHOR_ROOT explicitly.
+if (!process.env.ANCHOR_ROOT) process.env.ANCHOR_ROOT = join(homedir(), '.anchor');
 process.env.TS_NODE_TRANSPILE_ONLY = 'true';
 
 // Set up global mocks for ESM module resolution using vitest's mock API
