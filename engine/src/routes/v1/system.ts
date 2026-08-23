@@ -678,6 +678,27 @@ export function setupSystemRoutes(app: Application) {
     }
   });
 
+  // GET /v1/watchdog/validate — per-path health report. Operators can see at a
+  // glance which watched directories exist, are accessible, and hold content,
+  // so a misconfigured path is obvious without digging through logs.
+  app.get('/v1/watchdog/validate', async (_req: Request, res: Response) => {
+    try {
+      const { validateWatchedPaths } = await import('../../services/ingest/watchdog.js');
+      const report = validateWatchedPaths();
+
+      // Surface a concise health summary alongside the detailed per-path data.
+      const unhealthy = (report.watchedPaths || []).filter((p: any) => !p.exists || !p.accessible);
+      res.status(200).json({
+        status: 'success',
+        ...report,
+        healthyCount: (report.watchedPaths || []).length - unhealthy.length,
+        unhealthyPaths: unhealthy.map((p: any) => p.path),
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post('/v1/watchdog/start', async (req: Request, res: Response) => {
     try {
       const { paths = [], recursive = true } = req.body;

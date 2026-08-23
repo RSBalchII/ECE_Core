@@ -316,12 +316,71 @@ export async function stopWatchdog(): Promise<void> {
 }
 
 /**
- * Get watchdog status
+ * Per-path validation report for a watched directory — used by the enhanced
+ * status/validation endpoints so operators can see at a glance which paths are
+ * healthy (exist, accessible, non-empty) vs misconfigured.
  */
-export function getWatcherStatus(): { isRunning: boolean; watchedPaths: string[] } {
+export interface WatchedPathReport {
+    path: string;
+    exists: boolean;
+    accessible: boolean;
+    fileCount: number;
+}
+
+/**
+ * Build a detailed report of every watched path — existence, accessibility, and
+ * how many files it currently holds. Used by /v1/watchdog/status and
+ * /v1/watchdog/validate so operators can spot misconfigured paths without logs.
+ */
+export function validateWatchedPaths(): {
+    active: boolean;
+    inboxDir: string;
+    externalInboxDir: string;
+    watchedPaths: WatchedPathReport[];
+} {
+    const allPaths = [PATHS.INBOX_DIR, PATHS.EXTERNAL_INBOX_DIR, ...(config.WATCHER_EXTRA_PATHS || [])];
+
+    const reports: WatchedPathReport[] = allPaths.map((p) => {
+        let exists = false;
+        let accessible = false;
+        try {
+            exists = fs.existsSync(p);
+            if (exists) {
+                const stat = fs.statSync(p);
+                if (stat.isDirectory()) {
+                    // accessSync throws on EACCES/ENOENT — the outer catch handles it.
+                    fs.accessSync(p, fs.constants.R_OK | fs.constants.X_OK);
+                    accessible = true;
+                }
+            }
+        } catch { /* path unusable — report as inaccessible */ }
+
+        let fileCount = 0;
+        if (exists) {
+            try {
+                fileCount = collectFiles(p).length;
+            } catch { /* count non-critical */ }
+        }
+
+        return { path: p, exists, accessible, fileCount };
+    });
+
     return {
+        active: watcher !== null,
+        inboxDir: PATHS.INBOX_DIR,
+        externalInboxDir: PATHS.EXTERNAL_INBOX_DIR,
+        watchedPaths: reports,
+    };
+}
+
+/**
+ * Get watchdog status — enriched with per-path validation so the /status and
+ * /validate endpoints can report which paths are healthy vs misconfigured.
+ */
+export function getWatcherStatus(): { isRunning: boolean; active: boolean; inboxDir: string; externalInboxDir: string; watchedPaths: WatchedPathReport[] } {
+    return {
+        ...validateWatchedPaths(),
         isRunning: watcher !== null,
-        watchedPaths: [PATHS.INBOX_DIR, PATHS.EXTERNAL_INBOX_DIR, ...(config.WATCHER_EXTRA_PATHS || [])],
     };
 }
 

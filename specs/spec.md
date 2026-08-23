@@ -1070,6 +1070,7 @@ All routes are mounted under `/v1/` prefix unless otherwise noted. Routes are or
 | `atoms.ts` | POST | /v1/quarantine/:id/restore | Restore single quarantine entry |
 | `atoms.ts` | DELETE | /v1/quarantine/:id | Remove quarantine entry permanently |
 | `watchdog.ts` | GET | /v1/watchdog/status | Get watchdog status (isRunning, watchedPaths) |
+| `watchdog.ts` | GET | /v1/watchdog/validate | Per-path health report — which paths exist, are accessible, and hold content |
 | `watchdog.ts` | POST | /v1/watchdog/start | Start watchdog polling + auto-triggers initial ingest |
 | `watchdog.ts` | POST | /v1/watchdog/stop | Stop the polling watchdog |
 | `watchdog.ts` | POST | /v1/watchdog/ingest | Manual one-shot ingestion (separate from polling) |
