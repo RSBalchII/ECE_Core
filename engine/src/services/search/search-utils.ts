@@ -487,13 +487,45 @@ export async function formatResults(
         acceptedWordSets.push(words);
       }
     }
-    // Restore chronological order for causal narrative
-    deduped.sort((a, b) => a.timestamp - b.timestamp);
-    const deduplicatedSnippets = deduped;
-    const dedupRemovedCount = enrichedSnippets.length - deduplicatedSnippets.length;
+    const dedupRemovedCount = enrichedSnippets.length - deduped.length;
     if (dedupRemovedCount > 0) {
-      console.log(`[Dedup] Removed ${dedupRemovedCount} semantically overlapping snippets (${enrichedSnippets.length} → ${deduplicatedSnippets.length})`);
+      console.log(`[Dedup] Removed ${dedupRemovedCount} semantically overlapping snippets (${enrichedSnippets.length} → ${deduped.length})`);
     }
+
+    // Step 3.7: Enforce char budget — greedily include highest-scoring snippets
+    // until total content chars reach maxChars. Truncates individual snippets
+    // that would exceed the remaining budget. This is the actual token budget cap.
+    let budgetCapped = deduped;
+    if (maxChars > 0) {
+      const byScoreDesc = [...deduped].sort((a, b) => parseFloat(b.weighted_score) - parseFloat(a.weighted_score));
+      let accumulated = 0;
+      const withinBudget: typeof byScoreDesc = [];
+      for (const s of byScoreDesc) {
+        const remaining = maxChars - accumulated;
+        if (remaining <= 0 && withinBudget.length > 0) break;
+        // Truncate snippet content to fit remaining budget
+        if (s.content.length > remaining) {
+          withinBudget.push({ ...s, content: s.content.substring(0, remaining) });
+          accumulated = maxChars;
+        } else {
+          withinBudget.push(s);
+          accumulated += s.content.length;
+        }
+      }
+      // Restore chronological order for causal narrative
+      withinBudget.sort((a, b) => a.timestamp - b.timestamp);
+      budgetCapped = withinBudget;
+      const budgetDroppedCount = deduped.length - budgetCapped.length;
+      if (budgetDroppedCount > 0 || accumulated < deduped.reduce((sum, s) => sum + s.content.length, 0)) {
+        console.log(`[Budget] Enforced ${maxChars} char budget: kept ${budgetCapped.length}/${deduped.length} snippets (${accumulated} chars), dropped ${budgetDroppedCount}`);
+      }
+    } else {
+      // No explicit budget — restore chronological order
+      deduped.sort((a, b) => a.timestamp - b.timestamp);
+      budgetCapped = deduped;
+    }
+
+    const deduplicatedSnippets = budgetCapped;
 
     // Force garbage collection after dedup to free memory from enrichedSnippets
     if (global.gc) {
