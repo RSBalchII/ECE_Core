@@ -60,7 +60,7 @@ export async function initSettings(): Promise<void> {
 async function importFromFile(): Promise<void> {
   try {
     const filePath = PATHS.USER_SETTINGS;
-    if (!await fs.access(filePath).catch(() => false)) {
+    if (!await fs.access(filePath).then(() => true).catch(() => false)) {
       console.log('[Settings] No user_settings.json found, skipping import.');
       return;
     }
@@ -108,7 +108,7 @@ export async function getSetting(key: string, defaultValue?: any): Promise<any> 
     // 3. Fallback to file-based config
     try {
       const filePath = PATHS.USER_SETTINGS;
-      if (await fs.access(filePath).catch(() => false)) {
+      if (await fs.access(filePath).then(() => true).catch(() => false)) {
         const content = await fs.readFile(filePath, 'utf-8');
         const settings = JSON.parse(content);
         const value = getNestedValue(settings, key);
@@ -270,7 +270,7 @@ async function processWriteQueue(filePath: string): Promise<void> {
     try {
       let settings: Record<string, any> = {};
       
-      if (await fs.access(filePath).catch(() => false)) {
+      if (await fs.access(filePath).then(() => true).catch(() => false)) {
         try {
           settings = JSON.parse(await fs.readFile(filePath, 'utf-8'));
         } catch {
@@ -345,7 +345,7 @@ export async function deleteSetting(key: string): Promise<void> {
     
     // Remove from file
     const filePath = PATHS.USER_SETTINGS;
-    if (await fs.access(filePath).catch(() => false)) {
+    if (await fs.access(filePath).then(() => true).catch(() => false)) {
       const content = await fs.readFile(filePath, 'utf-8');
       const settings = JSON.parse(content);
       deleteNestedValue(settings, key);
