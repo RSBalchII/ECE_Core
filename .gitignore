@@ -251,3 +251,4 @@ engine/node_modules/
 
 # Native module dependencies
 engine/src/native/node_modules/
+SMOKE_TEST_TODO.md
