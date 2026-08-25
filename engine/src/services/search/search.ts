@@ -1542,6 +1542,29 @@ export async function smartChatSearch(
     console.log(`[SmartSearch] Inflation complete: ${inflatedResults.length} atoms with avg ${avgChars} chars each`);
   }
 
+  // 4.7 Final budget enforcement on merged results (split_merge path)
+  // Each sub-search enforces its own budget via formatResults Step 3.7, but the merge
+  // can exceed maxChars overall (e.g., N=1 split → initial + sub-query = 2×maxChars).
+  mergedResults.sort((a, b) => (b.score || 0) - (a.score || 0));
+  let mergedAccumulated = 0;
+  const budgetCappedMerged: SearchResult[] = [];
+  for (const r of mergedResults) {
+    const remaining = maxChars - mergedAccumulated;
+    if (remaining <= 0 && budgetCappedMerged.length > 0) break;
+    if (r.content.length > remaining) {
+      budgetCappedMerged.push({ ...r, content: r.content.substring(0, Math.max(0, remaining)) });
+      mergedAccumulated = maxChars;
+    } else {
+      budgetCappedMerged.push(r);
+      mergedAccumulated += r.content.length;
+    }
+  }
+  if (budgetCappedMerged.length < mergedResults.length || mergedAccumulated < mergedResults.reduce((s, r) => s + r.content.length, 0)) {
+    console.log(`[Budget] split_merge final cap: kept ${budgetCappedMerged.length}/${mergedResults.length} results (${mergedAccumulated} chars)`);
+  }
+  mergedResults.length = 0;
+  mergedResults.push(...budgetCappedMerged);
+
   // 5. Re-Format using GCP (Standard 086)
   const finalUserContext: UserContext = {
     name: userContext?.name || 'User',
