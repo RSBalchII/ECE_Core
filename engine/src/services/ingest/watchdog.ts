@@ -123,8 +123,26 @@ export async function startWatchdog(customPaths?: string[]): Promise<void> {
         }
     }
 
+    // chokidar v3 tests `ignored` against *absolute* paths. The engine's own data
+    // directory (~/.anchor) contains a dot-segment, so the plain dotfile regex above
+    // would match every path under it and silently disable watching of inbox /
+    // external-inbox (and any extra path living inside a dot-directory). Test only
+    // the segments *below* each watch root instead.
+    const ignoredWatchRoots = [...pathsToUse]
+        .map(p => p.replace(/\\/g, '/') + '/')
+        .sort((a, b) => b.length - a.length);
+    function isIgnoredWatchPath(p: string): boolean {
+        const norm = p.replace(/\\/g, '/');
+        for (const root of ignoredWatchRoots) {
+            if (norm.startsWith(root)) {
+                return IGNORE_PATTERNS.test('/' + norm.slice(root.length));
+            }
+        }
+        return false; // Not under a known watch root — don't ignore.
+    }
+
     watcher = chokidar.watch(pathsToUse, {
-        ignored: IGNORE_PATTERNS,
+        ignored: isIgnoredWatchPath,
         persistent: true,
         ignoreInitial: pathsToUse.length > 0 && customPaths && customPaths.length > 0, // Skip initial scan for explicit paths — batch pipeline handles it
         awaitWriteFinish: {
