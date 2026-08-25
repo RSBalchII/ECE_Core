@@ -45,47 +45,25 @@ async function removeTag(tag: string): Promise<number> {
 
 /**
  * Cleanup atoms with blacklisted tags
- * Updates the tags TEXT[] array in the atoms table
+ * Updates the tags TEXT[] array in the atoms table.
+ *
+ * FIX (2026-08-25): previously this loaded EVERY atom row into JS memory and
+ * ran one UPDATE per affected atom, which exhausted PGlite WASM linear memory
+ * ("memory access out of bounds") on populated stores (~195k atoms). Now the
+ * removal happens entirely in SQL (array_remove) — no full-table scan.
  */
-async function cleanupAtomTags(): Promise<number> {
+async function cleanupAtomTags(blacklistedTags: string[]): Promise<number> {
   let totalCleaned = 0;
-  
+
   try {
-    // Get atoms that have tags (tags is TEXT[] not JSONB)
-    const result = await db.run(`
-      SELECT id, tags 
-      FROM atoms 
-      WHERE tags IS NOT NULL 
-      AND array_length(tags, 1) > 0
-    `);
-    
-    if (!result.rows || result.rows.length === 0) {
-      return 0;
+    for (const tag of blacklistedTags) {
+      const result = await db.run(
+        'UPDATE atoms SET tags = array_remove(tags, $1) WHERE $1 = ANY(tags)',
+        [tag],
+      );
+      totalCleaned += result.changes || 0;
     }
-    
-    console.log(`[TagCleanup] Checking ${result.rows.length} atoms for blacklisted tags...`);
-    
-    for (const row of result.rows) {
-      const atomId = row.id;
-      const currentTags = row.tags || [];
-      
-      // Filter out blacklisted tags
-      const filteredTags = filterTags(currentTags);
-      
-      // If tags were removed, update the atom
-      if (filteredTags.length < currentTags.length) {
-        await db.run(
-          'UPDATE atoms SET tags = $1 WHERE id = $2',
-          [filteredTags, atomId],
-        );
-        totalCleaned++;
-        
-        if (totalCleaned % 100 === 0) {
-          console.log(`[TagCleanup] Cleaned ${totalCleaned} atoms...`);
-        }
-      }
-    }
-    
+
     return totalCleaned;
   } catch (error) {
     console.error('[TagCleanup] Error cleaning atom tags:', error);
@@ -120,10 +98,13 @@ export async function cleanupBlacklistedTags(): Promise<void> {
       console.log('[TagCleanup] No blacklisted tags found in tags table');
     }
     
-    // Step 2: Cleanup tags in atoms table
-    const atomsCleaned = await cleanupAtomTags();
-    if (atomsCleaned > 0) {
-      console.log(`[TagCleanup] Updated ${atomsCleaned} atoms with filtered tags`);
+    // Step 2: Cleanup tags in atoms table — only when blacklisted tags exist,
+    // so a populated store doesn't pay for a full atom scan on every startup.
+    if (blacklistedTags.length > 0) {
+      const atomsCleaned = await cleanupAtomTags(blacklistedTags);
+      if (atomsCleaned > 0) {
+        console.log(`[TagCleanup] Updated ${atomsCleaned} atoms with filtered tags`);
+      }
     }
     
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
