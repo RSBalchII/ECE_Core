@@ -187,6 +187,150 @@ for (const p of extraPaths) {
 
 ---
 
+## Settings Reference (Consolidated from docs/-settings-configs.md)
+
+All settings are stored in the `app_settings` database table at runtime. The table below shows defaults, types, and descriptions for every configurable option. Runtime values override file defaults; environment variables override both.
+
+### Server
+
+| Setting | Default | Type | Description |
+|---------|---------|------|-------------|
+| `server.host` | `"0.0.0.0"` | string | Network interface to bind. Use `"127.0.0.1"` for local-only dev; `"0.0.0.0"` for production with firewall rules. |
+| `server.port` | `3160` | number | HTTP server port. Uncommon port reduces collision risk. |
+| `server.api_key` | `""` (empty) | string | Optional API key for authentication. Empty = no auth required. Enable for production with sensitive data. |
+
+### GitHub
+
+| Setting | Default | Type | Description |
+|---------|---------|------|-------------|
+| `github.token` | `"ghp_..."` (placeholder) | string | GitHub PAT for cloning private repos and higher rate limits. **NEVER commit to git.** Required scopes: `'repo'` or `'public_repo'`. |
+| `github.default_branch` | `"main"` | string | Default branch to checkout when cloning repos. |
+
+### Paths
+
+| Setting | Default | Type | Description |
+|---------|---------|------|-------------|
+| `paths.anchor_root` | `<ANCHOR_ROOT>` (placeholder) | string | Base directory for all Anchor Engine data. Recommended: `~/.anchor`. All other paths derive from this. |
+
+### Encryption
+
+| Setting | Default | Type | Description |
+|---------|---------|------|-------------|
+| `encryption.enabled` | `false` | boolean | Enable end-to-end encryption for sensitive content. Encrypts at rest and in transit. |
+| `encryption.auto_encrypt_on_ingest` | `true` | boolean | Automatically encrypt content during ingestion (security-first default). |
+| `encryption.detect_nsfw` | `false` | boolean | NSFW content detection. Disabled to avoid false positives and privacy concerns. |
+
+### Search
+
+| Setting | Default | Type | Description |
+|---------|---------|------|-------------|
+| `search.strategy` | `"hybrid"` | string (`'hybrid'\|'semantic'\|'exact'`) | `'hybrid'`: semantic + exact (default). `'semantic'`: vector-only. `'exact'`: FTS-only. |
+| `search.max_chars_default` | `5000` | number | Max characters per search query by default (~1.25k tokens). Mobile-friendly limit. |
+| `search.fts_window_size` | `1500` | number | Full-text search token overlap window size. Larger = more context but slower. |
+
+### Resource Management
+
+| Setting | Default | Type | Description |
+|---------|---------|------|-------------|
+| `resource_management.gc_cooldown_ms` | `30000` (30s) | number | Cooldown between forced GC cycles. Prevents excessive GC overhead. |
+| `resource_management.max_atoms_in_memory` | `2000` | number | Max atoms kept in memory before eviction. Higher = better search perf, more RAM. |
+| `resource_management.monitoring_interval_ms` | `30000` (30s) | number | Interval for resource monitoring checks. Balances responsiveness vs CPU overhead. |
+
+### Memory Management
+
+| Setting | Default | Env Var | Description |
+|---------|---------|---------|-------------|
+| `memory.heap_pressure_mb` | `500` | `ANCHOR_HEAP_PRESSURE_MB` | Heap level triggering "high pressure" state. |
+| `memory.throttle_start_mb` | `800` | `ANCHOR_THROTTLE_START_MB` | Heap level triggering throttling of non-critical ops. |
+| `memory.throttle_max_mb` | `1200` | `ANCHOR_THROTTLE_MAX_MB` | Max heap before aggressive throttling kicks in. |
+| `memory.emergency_stop_mb` | `1500` | `ANCHOR_EMERGENCY_STOP_MB` | Critical heap level — last line of defense before OOM. |
+| `memory.enable_streaming_results` | `true` | — | Enable streaming search results instead of loading all at once. |
+
+### Watcher (File Watching)
+
+| Setting | Default | Type | Description |
+|---------|---------|------|-------------|
+| `watcher.debounce_ms` | `2000` (unused/legacy) | number | Legacy value — actual debounce uses constant `INGESTION_DEBOUNCE_MS = 30000`. |
+| `watcher.stability_threshold_ms` | `2000` (2s) | number | Chokidar `awaitWriteFinish.stabilityThreshold`. Lower = faster but risk of incomplete files; higher = more reliable. |
+| `watcher.extra_paths` | `[]` | string[] | Additional directories to watch beyond default inbox/external-inbox. Managed via `/v1/watchdog/add-path` and `/v1/watchdog/remove-path`. |
+| `watcher.auto_start` | `false` | boolean | Auto-start watchdog on server boot. User wants OFF by default for safety. Enable via env `AUTO_START_WATCHDOG=true` or settings API. |
+
+### Context & Inference
+
+| Setting | Default | Type | Description |
+|---------|---------|------|-------------|
+| `context.relevance_weight` | `0.7` | number | Weight given to relevance signals in context scoring. |
+| `context.recency_weight` | `0.3` | number | Weight given to recency signals. Lower = older but relevant content still valued. |
+
+### Limits
+
+| Setting | Default | Type | Description |
+|---------|---------|------|-------------|
+| `limits.max_file_size_bytes` | `104857600` (~100MB) | number | Max file size accepted during ingestion. Prevents resource exhaustion from huge files. |
+| `limits.max_content_length_chars` | `5000` | number | Max content length for API requests. Prevents abuse and resource exhaustion. |
+
+### Database (PostgreSQL via PGlite)
+
+| Setting | Default | Type | Description |
+|---------|---------|------|-------------|
+| `database.wipe_on_startup` | `true` | boolean | Wipe and rebuild DB on startup. `false` retains existing DB but index may become stale if schema changed. |
+| `database.shared_buffers_mb` | `256` | number | PG shared buffer cache size. Higher = better query perf, more RAM. Fallback: 64MB. |
+| `database.effective_cache_size_mb` | `512` | number | PG effective cache size hint for query planner (~50% of available RAM recommended). Hint only — doesn't allocate memory. |
+| `database.work_mem_mb` | `32` (code) / `16` (template mismatch) | number | Work memory for sorts and hashes. Larger = faster complex queries but more RAM per op. Risk: OOM if too high. |
+| `database.maintenance_work_mem_mb` | `32` | number | Memory for maintenance ops (VACUUM, CREATE INDEX). Not in original template — added for completeness. |
+
+### Low Resource Mode
+
+| Setting | Default | Type | Description |
+|---------|---------|------|-------------|
+| `low_resource.enabled` | `false` | boolean | Enable optimized mode for limited-resource systems: lower recall thresholds (5-20 results), reduced concurrency (1 worker), smaller batch sizes. |
+
+### Ingestion
+
+| Setting | Default | Env Var | Type | Description |
+|---------|---------|---------|------|-------------|
+| `ingestion.concept_density` | `"medium"` | `ANCHOR_CONCEPT_DENSITY` | `'low'\|'medium'\|'high'` | Concept extraction density. High = more concepts (better recall, higher tokens). Low = fewer (faster ingestion). |
+| `ingestion.tag_threshold` | `0.7` | `ANCHOR_TAG_THRESHOLD` | number (0-1) | Min similarity score for a token to be a meaningful concept. Higher = fewer precise tags; lower = more noisy tags. |
+| `ingestion.dedup_strength` | `"medium"` | `ANCHOR_DEDUP_STRENGTH` | `'light'\|'medium'\|'aggressive'` | Duplicate detection aggressiveness during ingestion. Aggressive = cleaner index, slower ingestion. |
+| `ingestion.token_budget_default` | `2000` | `ANCHOR_TOKEN_BUDGET_DEFAULT` | number | Default token budget for content processing during ingestion. Higher = more content per request but higher cost/latency. |
+
+### MCP (Model Context Protocol)
+
+| Setting | Default | Type | Description |
+|---------|---------|------|-------------|
+| `mcp.enabled` | `true` | boolean | Enable MCP server for AI agent memory. Disable if not using advanced AI features. |
+| `mcp.require_api_key` | `false` | boolean | Require API key to access MCP endpoints. False = open access; enable for production security. |
+
+### Agent Memory
+
+| Setting | Default | Type | Description |
+|---------|---------|------|-------------|
+| `agent_memory.auto_distill` | `true` | boolean | Automatically distill agent conversations periodically. Maintains history without manual intervention. |
+| `agent_memory.checkpoint_interval_messages` | `50` | number | Messages between distillation checkpoints. Balances memory usage with conversation fidelity. |
+
+### Logging
+
+| Setting | Default | Type | Description |
+|---------|---------|------|-------------|
+| `logging.level` | `"info"` | string (`'debug'\|'info'\|'warn'\|'error'`) | Log level for output verbosity. |
+| `logging.structured` | `true` | boolean | Enable structured JSON logging format. Easier to parse and analyze programmatically. |
+
+### Security Recommendations
+
+1. **`github.token`** — Never commit to git; use env var or local settings file
+2. **`server.api_key`** — Enable for production with sensitive data
+3. **`mcp.require_api_key`** — Enable for MCP endpoints in production
+4. **`encryption.enabled`** — Consider enabling for sensitive content
+
+### Common Pitfalls
+
+- Don't set `database.wipe_on_startup=false` without understanding implications (index may become stale)
+- Don't enable `encryption.enabled` without proper password management
+- Don't commit `user_settings.json` to git — it's in `.gitignore`
+- Be cautious with `watcher.auto_start=true` — prevents automatic ingestion when server starts with bad paths
+
+---
+
 ## Recent Changes (v5.0.0 — May 2026)
 
 ### Streaming Architecture
