@@ -226,9 +226,6 @@ test-wasm/
 # Scripts and utilities
 scripts/
 
-# Documentation
-docs/
-
 # Source code
 src/
 
@@ -252,3 +249,4 @@ engine/node_modules/
 # Native module dependencies
 engine/src/native/node_modules/
 SMOKE_TEST_TODO.md
+RADIAL_DISTILL_TODO.md

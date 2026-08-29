@@ -31,7 +31,6 @@
 - **[specs/tasks.md](../specs/tasks.md)** - Current tasks
 - **[specs/doc_policy.md](../specs/doc_policy.md)** - Documentation policy
 - **[specs/shutdown-cleanup.md](../specs/shutdown-cleanup.md)** - Shutdown and cleanup procedure
-- **[specs/smoke-test-workflow.md](../specs/smoke-test-workflow.md)** - Smoke test workflow
 - **[specs/current-standards/000-STANDARDS_INDEX.md](../specs/current-standards/000-STANDARDS_INDEX.md)** - Active standards index (001–039)
 
 ### Development & Testing
@@ -151,7 +150,6 @@ anchor-engine-node/
 │   ├── tasks.md                   # Current tasks
 │   ├── doc_policy.md              # Documentation policy
 │   ├── shutdown-cleanup.md        # Shutdown & cleanup procedure
-│   ├── smoke-test-workflow.md     # Smoke test workflow
 │   └── current-standards/         # Active standards (001–039) + 000 index
 │
 ├── engine/                        # Engine source

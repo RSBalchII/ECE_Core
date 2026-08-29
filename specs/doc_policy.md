@@ -46,7 +46,6 @@ Documentation in Anchor Engine must be **concise**, **accurate**, and **maintain
 | `tasks.md` | Current implementation tasks and priorities |
 | `doc_policy.md` | This documentation policy |
 | `shutdown-cleanup.md` | Shutdown and cleanup operational procedure |
-| `smoke-test-workflow.md` | Smoke test workflow (live-fire validation) |
 
 **Subdirectories:**
 - `current-standards/` - 39 active architecture standards (001-039), indexed by `000-STANDARDS_INDEX.md`
@@ -196,7 +195,7 @@ Move root-level documentation to appropriate `docs/` subdirectories:
 ### 6.2 Specs Consolidation
 
 **Current State:**
-- `specs/` contains the core specification files plus operational procedures (`shutdown-cleanup.md`, `smoke-test-workflow.md`)
+- `specs/` contains the core specification files plus an operational procedure (`shutdown-cleanup.md`)
 - `specs/current-standards/` has 39 active standards (001-039), indexed by `000-STANDARDS_INDEX.md`
 - Historical standard entries are preserved as `[Standard NNN]` sections in `CHANGELOG.md`
 
