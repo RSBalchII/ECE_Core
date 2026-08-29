@@ -2035,16 +2035,21 @@
                                 <p className="mb-2 font-semibold">Watched Paths:</p>
                                 <ul className="space-y-1 font-mono text-xs">
                                     {watchdogStatus.watchedPaths && watchdogStatus.watchedPaths.length > 0 ? (
-                                        watchdogStatus.watchedPaths.map((path, i) => (
+                                        watchdogStatus.watchedPaths.map((p, i) => {
+                                            const entry = typeof p === 'string' ? { path: p } : (p || {});
+                                            return (
                                             <li key={i} className="flex items-center justify-between gap-2 bg-white/5 rounded px-2 py-1">
                                                 <div className="flex items-center gap-2 overflow-hidden">
                                                     <i data-lucide="folder" width="12" className="flex-shrink-0"></i>
-                                                    <span className="truncate">{path}</span>
+                                                    <span className="truncate">{entry.path}</span>
+                                                    {typeof p !== 'string' && entry.fileCount != null && (
+                                                        <span className="text-gray-500">({entry.fileCount} files{!entry.exists ? ', missing' : ''}{!entry.accessible ? ', inaccessible' : ''})</span>
+                                                    )}
                                                 </div>
                                                 <button
                                                     onClick={async () => {
                                                         try {
-                                                            await api.removePath(path);
+                                                            await api.removePath(entry.path);
                                                             setMessage('✅ Path removed');
                                                             setTimeout(() => setMessage(''), 3000);
                                                             // Reload watchdog status
@@ -2064,8 +2069,8 @@
                                                     <i data-lucide="x" width="14" className="text-red-400"></i>
                                                 </button>
                                             </li>
-                                        ))
-                                    ) : (
+                                        );
+                                    }) : (
                                         <li className="text-gray-500 italic">No paths currently being watched</li>
                                     )}
                                 </ul>
