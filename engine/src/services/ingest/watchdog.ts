@@ -178,17 +178,47 @@ export function getWatchedPaths(): string[] {
 /**
  * Collect valid file paths from a directory tree.
  * Applies all filters (directory check, ignore patterns, path rejection).
+ *
+ * Walks the tree manually instead of `fs.readdirSync(baseDir, { recursive: true })`
+ * so that rejected directories (`.git/`, `node_modules/`, build outputs, etc.) are
+ * skipped at the directory level — their contents never get read into memory.
+ * The old recursive-readdir approach loaded every entry (including 400K+ git
+ * objects) into an array before any filtering could run, which caused OOM and
+ * multi-second stalls on large repos like coding-notes.
  */
 function collectFiles(baseDir: string): string[] {
     const files: string[] = [];
+
+    // Directories to skip entirely — checked at the directory level so we never
+    // descend into them or read their contents.
+    function isRejectedDir(dirName: string, dirPath: string): boolean {
+        if (IGNORE_PATTERNS.test('/' + dirName)) return true;   // dotfiles/dotdirs (.git, .next)
+        if (shouldRejectPath(dirPath)) return true;             // node_modules/, dist/, __pycache__/, etc.
+        for (const ign of IGNORE_PATHS) {
+            if (dirName.toLowerCase() === ign) return true;     // distilled, distills, synonym-ring
+        }
+        return false;
+    }
+
     try {
-        const entries = fs.readdirSync(baseDir, { recursive: true }) as string[];
-        for (const entry of entries) {
-            const filePath = path.join(baseDir, entry);
-            if (fs.statSync(filePath).isDirectory()) continue;
-            if (IGNORE_PATTERNS.test(entry)) continue;
-            if (shouldRejectPath(filePath)) continue;
-            files.push(filePath);
+        const stack = [baseDir];
+        while (stack.length > 0) {
+            const current = stack.pop() as string;
+            let entries: fs.Dirent[];
+            try {
+                entries = fs.readdirSync(current, { withFileTypes: true }) as fs.Dirent[];
+            } catch { /* directory may not exist or be unreadable */ continue; }
+
+            for (const entry of entries) {
+                const childPath = path.join(current, entry.name);
+                if (entry.isDirectory()) {
+                    if (!isRejectedDir(entry.name, childPath)) stack.push(childPath);
+                } else if (entry.isFile() || entry.isSymbolicLink()) {
+                    if (IGNORE_PATTERNS.test('/' + entry.name)) continue;
+                    if (shouldRejectPath(childPath)) continue;
+                    files.push(childPath);
+                }
+            }
         }
     } catch { /* directory may not exist */ }
     return files;
