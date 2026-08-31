@@ -223,6 +223,7 @@ export class AutoSynonymGenerator {
 
       // Helper to extract terms from content
       const extractTerms = (content: string): string[] => {
+        if (!content || typeof content !== 'string') return [];
         return content.toLowerCase()
           .split(/[\s\W]+/)
           .filter(term => term.length > 3 && term.length < 30)
