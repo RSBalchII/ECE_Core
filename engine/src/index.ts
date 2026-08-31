@@ -311,6 +311,16 @@ async function startServer() {
     databaseReady = true;
     console.log('Database initialized successfully');
 
+    // Initialize settings (import from user_settings.json to DB)
+    console.log('[Startup] Initializing settings from user_settings.json...');
+    try {
+      const { initSettings } = await import('./services/settings.js');
+      await initSettings();
+      console.log('[Startup] Settings initialized successfully');
+    } catch (error: any) {
+      console.warn('[Startup] Settings initialization failed:', error.message);
+    }
+
     // Cleanup blacklisted tags from database
     console.log('[Startup] Cleaning up blacklisted tags...');
     const { cleanupBlacklistedTags } = await import('./utils/tag-cleanup.js');
