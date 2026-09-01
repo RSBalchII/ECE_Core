@@ -1580,6 +1580,52 @@ function readRangeFromMirror(
   }
 }
 
+/** A single pointer into a mirrored source file (Standard 051). */
+interface Occurrence {
+  source_path: string;
+  start_byte: number;
+  end_byte: number;
+}
+
+/**
+ * Find the widest real occurrence of a record — the one Pass 2 actually reads
+ * from. The record's own start_byte/end_byte is often a compound-level (0,0)
+ * marker, so the widest occurrence in occurrences[] points at the true atom
+ * range. Returns { occ: null, span: 0 } when there are no real byte ranges.
+ */
+function widestOccurrence(rec: FullCorpusRecord): { occ: Occurrence | null; span: number } {
+  if (!rec.occurrences || rec.occurrences.length === 0) return { occ: null, span: 0 };
+  let best = rec.occurrences[0];
+  let bestSpan = Math.max(0, best.end_byte - best.start_byte);
+  for (const o of rec.occurrences) {
+    const span = Math.max(0, o.end_byte - o.start_byte);
+    if (span > bestSpan) { bestSpan = span; best = o; }
+  }
+  return { occ: best, span: bestSpan };
+}
+
+/** The source file a record's content is read from (widest occurrence). */
+function readFileFor(rec: FullCorpusRecord): string {
+  const { occ } = widestOccurrence(rec);
+  return (occ && occ.source_path) || rec.source_path;
+}
+
+/** A single unique atom record streamed to the full-corpus distill JSONL. */
+interface FullCorpusRecord {
+  id: string;
+  type: string;
+  content: string;
+  source_path: string;
+  start_byte: number;
+  end_byte: number;
+  compound_id?: string;
+  provenance?: string;
+  timestamp?: number;
+  molecular_signature?: string;
+  occurrences: Occurrence[];
+  content_inflated: boolean;
+}
+
 /**
  * Full-corpus distillation — seedless mode.
  *
@@ -1600,22 +1646,6 @@ export async function radialDistillFullCorpus(request: RadialDistillRequest): Pr
   const maxRecordBytes = Math.max(256, request.max_record_bytes ?? 8192);
 
   StructuredLogger.info('FULL_CORPUS_DISTILL_START', { page_size: pageSize, inflate_radius: radius, max_record_bytes: maxRecordBytes });
-
-  type Occurrence = { source_path: string; start_byte: number; end_byte: number };
-  interface FullCorpusRecord {
-    id: string;
-    type: string;
-    content: string;
-    source_path: string;
-    start_byte: number;
-    end_byte: number;
-    compound_id?: string;
-    provenance?: string;
-    timestamp?: number;
-    molecular_signature?: string;
-    occurrences: Occurrence[];
-    content_inflated: boolean;
-  }
 
   const unique = new Map<string, FullCorpusRecord>();
   const uniqueOrder: string[] = [];
@@ -1692,30 +1722,37 @@ export async function radialDistillFullCorpus(request: RadialDistillRequest): Pr
   let inflatedCount = 0;
   let streamError: any = null;
 
+  // Group records by source file so records from the same file stream
+  // contiguously (Standard 051 locality). We only reorder string keys — build a
+  // sorted index array keyed by (readFileFor, start_byte) and stream in that
+  // order. Content windows are still read one bounded window at a time, so
+  // memory stays flat regardless of corpus size; this is purely a reordering of
+  // the existing uniqueOrder keys, not an accumulation of content.
+  const groupOrder = uniqueOrder.slice().sort((a, b) => {
+    const ra = readFileFor(unique.get(a)!);
+    const rb = readFileFor(unique.get(b)!);
+    if (ra !== rb) return ra < rb ? -1 : 1;
+    const sa = widestOccurrence(unique.get(a)!).span || unique.get(a)!.start_byte;
+    const sb = widestOccurrence(unique.get(b)!).span || unique.get(b)!.start_byte;
+    return sa - sb;
+  });
+
   await new Promise<void>((resolve) => {
     const out = fs.createWriteStream(outputPath);
     let i = 0;
 
     const writeNext = () => {
       if (streamError) return resolve();
-      while (i < uniqueOrder.length) {
-        const rec = unique.get(uniqueOrder[i])!;
+      while (i < groupOrder.length) {
+        const rec = unique.get(groupOrder[i])!;
         i++;
         // Inflate a bounded range from disk. Prefer the WIDEST real pointer in
         // occurrences[] — the record's own start_byte/end_byte is often a
         // compound-level (0,0) marker, so it would inflate the wrong region on
         // large files. Fall back to the record pointer when no real range exists.
-        let inflStart = rec.start_byte;
-        let inflEnd = rec.end_byte;
-        if (rec.occurrences.length > 0) {
-          let best = rec.occurrences[0];
-          let bestSpan = Math.max(0, best.end_byte - best.start_byte);
-          for (const o of rec.occurrences) {
-            const span = Math.max(0, o.end_byte - o.start_byte);
-            if (span > bestSpan) { bestSpan = span; best = o; }
-          }
-          if (bestSpan > 0) { inflStart = best.start_byte; inflEnd = best.end_byte; }
-        }
+        const { occ } = widestOccurrence(rec);
+        const inflStart = (occ && occ.start_byte > 0) ? occ.start_byte : rec.start_byte;
+        const inflEnd = (occ && occ.end_byte > 0) ? occ.end_byte : rec.end_byte;
         const { content, inflated } = readRangeFromMirror(
           rec.source_path, rec.provenance, inflStart, inflEnd, radius, maxRecordBytes,
         );
