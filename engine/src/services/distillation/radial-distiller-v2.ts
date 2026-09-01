@@ -182,7 +182,7 @@ export interface RadialDistillRequest {
   dry_run?: boolean;                 // New: preview without writing
   similarity_threshold?: number;     // New: aggregation aggressiveness (0.0-1.0, default 0.85)
   page_size?: number;                // full-corpus: atoms per DB page (default 500)
-  inflate_radius?: number;           // full-corpus: bytes each side of pointer to inflate (default 300, max 1000)
+  inflate_radius?: number;           // full-corpus: bytes each side of pointer to inflate (default 500, max 1000)
   max_record_bytes?: number;         // full-corpus: hard cap on inflated content per record (default 8192)
 }
 
@@ -1596,7 +1596,7 @@ function readRangeFromMirror(
 export async function radialDistillFullCorpus(request: RadialDistillRequest): Promise<RadialDistillResult> {
   const startTime = Date.now();
   const pageSize = Math.max(50, request.page_size ?? 500);
-  const radius = Math.min(Math.max(0, request.inflate_radius ?? 300), 1000);
+  const radius = Math.min(Math.max(0, request.inflate_radius ?? 500), 1000);
   const maxRecordBytes = Math.max(256, request.max_record_bytes ?? 8192);
 
   StructuredLogger.info('FULL_CORPUS_DISTILL_START', { page_size: pageSize, inflate_radius: radius, max_record_bytes: maxRecordBytes });
