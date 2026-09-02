@@ -46,6 +46,84 @@ function shouldRejectPath(filePath: string): boolean {
     return false;
 }
 
+// Bounded-concurrency ingestion pipeline.
+// The chokidar 'add' handler calls processFile() directly for every existing file on
+// startup (ignoreInitial:false), which previously fired ~380 concurrent db.transaction
+// calls and wedged PGlite's single connection (RSS ~1GB, 0% CPU delta = blocked awaits).
+// We route ALL ingestion through guardedProcessFile so it flows into a bounded,
+// timeout-protected queue instead of an unbounded firehose — the same serialization the
+// manual batch path already uses. A per-file timeout kicks hung files to problemFiles so
+// they never block main processing; drainProblemFiles retries them after startup drains.
+function createSemaphore(limit: number) {
+    let active = 0;
+    const waiters: Array<() => void> = [];
+    return {
+        acquire(): Promise<void> {
+            if (active < limit) {
+                active++;
+                return Promise.resolve();
+            }
+            return new Promise(resolve => waiters.push(resolve));
+        },
+        release(): void {
+            active--;
+            if (waiters.length > 0) {
+                active++;
+                waiters.shift()!();
+            }
+        },
+    };
+}
+
+const INGEST_CONCURRENCY_LIMIT = 2; // Cap concurrent processFile calls — bounds memory + prevents PGlite single-connection wedge
+const FILE_PROCESSING_TIMEOUT_MS = 60_000; // Per-file cap: a hung await is kicked to the retry queue instead of blocking main flow
+let problemFiles: string[] = []; // Files that timed out, retried in small serialized batches after main ingest drains
+const ingestSemaphore = createSemaphore(INGEST_CONCURRENCY_LIMIT);
+
+async function guardedProcessFile(
+    filePath: string,
+    event: string,
+    opts?: { requeueOnTimeout?: boolean }
+): Promise<{ ingested: boolean; reason?: string }> {
+    await ingestSemaphore.acquire();
+    try {
+        const work = processFile(filePath, event);
+        const timeout = new Promise<{ ingested: false; reason: 'timeout' }>((resolve) => {
+            setTimeout(() => resolve({ ingested: false, reason: 'timeout' }), FILE_PROCESSING_TIMEOUT_MS);
+        });
+        const result = await Promise.race([work, timeout]);
+        if (result.reason === 'timeout' && (opts?.requeueOnTimeout ?? true)) {
+            StructuredLogger.warn(`[Watchdog] File processing timed out after ${FILE_PROCESSING_TIMEOUT_MS}ms — queued for retry: ${filePath}`);
+            problemFiles.push(filePath);
+        }
+        return result;
+    } finally {
+        ingestSemaphore.release();
+    }
+}
+
+/**
+ * Retry files that timed out during main ingestion, in small serialized batches.
+ * Called after startup ingest drains so pathological/large files still land without
+ * blocking the initial sync. requeueOnTimeout:false prevents retry-timeouts from
+ * re-enqueuing themselves into an infinite loop.
+ */
+async function drainProblemFiles(maxRetries = 3): Promise<void> {
+    if (problemFiles.length === 0) return;
+    for (let attempt = 0; attempt < maxRetries && problemFiles.length > 0; attempt++) {
+        const pending = problemFiles.splice(0, problemFiles.length); // take this attempt's files out atomically
+        StructuredLogger.info(`[Watchdog] Draining ${pending.length} file(s) that timed out — retry ${attempt + 1}/${maxRetries}`);
+        for (const filePath of pending) {
+            const result = await guardedProcessFile(filePath, 'retry', { requeueOnTimeout: false });
+            if (!result.ingested) problemFiles.push(filePath); // re-enqueue for the next attempt
+        }
+        if (problemFiles.length > 0 && attempt < maxRetries - 1) {
+            await new Promise(r => setTimeout(r, 2000));
+        }
+    }
+    StructuredLogger.info(`[Watchdog] Problem-file drain complete — ${problemFiles.length} still pending (will retry on next ingest)`);
+}
+
 // Post-ingestion synonym generation
 let ingestionTimeout: NodeJS.Timeout | null = null;
 const INGESTION_DEBOUNCE_MS = 30000; // Wait 30 seconds after last ingestion

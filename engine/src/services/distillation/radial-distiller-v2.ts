@@ -1897,8 +1897,10 @@ export async function radialDistill(request: RadialDistillRequest): Promise<Radi
     const params: any[] = [];
 
     if (request.seed?.compound_ids && request.seed.compound_ids.length > 0) {
-      // Filter by specific compound IDs
-      moleculeQuery += ' WHERE id = ANY($1)';
+      // Filter by specific compound IDs. molecules.compound_id holds the mem_…
+      // id; molecules.id is a per-molecule PK (mol_…) and must NOT be used here.
+      // (The buckets branch below already joins on compound_id correctly.)
+      moleculeQuery += ' WHERE compound_id = ANY($1)';
       params.push(request.seed.compound_ids);
     } else if (request.seed?.buckets && request.seed.buckets.length > 0) {
       // Join with atoms to filter by tags (Phase 1D-1)
