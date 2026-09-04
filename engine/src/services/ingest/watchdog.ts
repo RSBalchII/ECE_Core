@@ -18,6 +18,7 @@ import { systemStatus } from '../system-status.js';
 import { StructuredLogger } from '../../utils/structured-logger.js';
 
 let watcher: chokidar.FSWatcher | null = null;
+let customWatchPaths: string[] = []; // Store custom paths for initial ingestion
 const IGNORE_PATTERNS = /(^|[\/\\])\../; // Ignore dotfiles
 const IGNORE_PATHS = [
     'distilled',           // Ignore distillation outputs (prevent self-contamination)
@@ -159,6 +160,9 @@ export async function startWatchdog(customPaths?: string[]): Promise<void> {
 
     // If custom paths provided, use them instead of inbox/external-inbox
     const pathsToUse = customPaths && customPaths.length > 0 ? customPaths : [];
+
+    // Store custom paths for initial ingestion
+    customWatchPaths = pathsToUse;
 
     // Verify inbox and external-inbox exist (Standard 051: Ephemeral Index)
     if (pathsToUse.length === 0) {
@@ -541,6 +545,15 @@ export async function triggerManualIngest(): Promise<{ status: string; message: 
             extraPathsFiles.push(...ef);
         }
 
+        // Collect files from custom watch paths (if any were set via watchdog/start)
+        let customPathsFiles: string[] = [];
+        for (const cp of customWatchPaths) {
+            if (!fs.existsSync(cp)) continue;
+            const cf = collectFiles(cp);
+            StructuredLogger.info(`[ManualIngest] Custom watch path ${cp}: ${cf.length} valid files after filtering`);
+            customPathsFiles.push(...cf);
+        }
+
         // Process inbox + external-inbox in batches
         const inboxAndExternal = [...inboxFiles];
         if (fs.existsSync(externalInbox)) {
@@ -559,6 +572,16 @@ export async function triggerManualIngest(): Promise<{ status: string; message: 
             StructuredLogger.info(`[ManualIngest] Processing ${extraPathsFiles.length} extra-path files via batch-concurrent pipeline`);
             
             const extraResult = await processFilesInBatches(extraPathsFiles, 'manual', (processed, ingested) => {
+                totalProcessed += processed;
+                totalIngested += ingested;
+            });
+        }
+
+        // Process custom watch paths in batches
+        if (customPathsFiles.length > 0) {
+            StructuredLogger.info(`[ManualIngest] Processing ${customPathsFiles.length} custom watch path files via batch-concurrent pipeline`);
+            
+            const customResult = await processFilesInBatches(customPathsFiles, 'manual', (processed, ingested) => {
                 totalProcessed += processed;
                 totalIngested += ingested;
             });
