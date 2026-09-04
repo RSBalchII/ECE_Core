@@ -17,9 +17,10 @@
  *   --strict          Strict normalization (default)
  *   --lenient         Lenient normalization
  *   --mode=full-corpus   Seedless full-corpus mode (dedup every atom, stream JSONL)
- *   --page-size=N       full-corpus: atoms per DB page (default 500)
- *   --inflate-radius=N  full-corpus: bytes each side of pointer (default 300, max 1000)
- *   --max-record-bytes=N full-corpus: cap on inflated bytes per record (default 8192)
+ *   --page-size=N              full-corpus: atoms per DB page (default 500)
+ *   --inflate-radius=N         full-corpus: bytes each side of pointer (default 300, max 1000)
+ *   --max-record-bytes=N       full-corpus: cap on inflated bytes per record (default 8192)
+ *   --simhash-threshold=N      full-corpus: Hamming bits to treat as duplicate (default 3)
  */
 
 import { db } from '../core/db.js';
@@ -84,8 +85,9 @@ Examples:
   const pageSize = args.find(a => a.startsWith('--page-size'))?.split('=')[1];
   const inflateRadius = args.find(a => a.startsWith('--inflate-radius'))?.split('=')[1];
   const maxRecordBytes = args.find(a => a.startsWith('--max-record-bytes'))?.split('=')[1];
+  const simhashThreshold = args.find(a => a.startsWith('--simhash-threshold'))?.split('=')[1];
   const consumedFlagValues = new Set<string>();
-  for (const f of ['--mode', '--page-size', '--inflate-radius', '--max-record-bytes']) {
+  for (const f of ['--mode', '--page-size', '--inflate-radius', '--max-record-bytes', '--simhash-threshold']) {
     const idx = args.indexOf(f);
     if (idx >= 0 && idx + 1 < args.length) consumedFlagValues.add(args[idx + 1]);
   }
@@ -132,6 +134,7 @@ Examples:
       page_size: pageSize ? parseInt(pageSize, 10) : undefined,
       inflate_radius: inflateRadius ? parseInt(inflateRadius, 10) : undefined,
       max_record_bytes: maxRecordBytes ? parseInt(maxRecordBytes, 10) : undefined,
+      simhash_hamming_threshold: simhashThreshold ? parseInt(simhashThreshold, 10) : undefined,
     };
 
     console.log('Radial Distilling (Standard 133)...');

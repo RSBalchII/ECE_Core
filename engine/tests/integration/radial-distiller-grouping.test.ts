@@ -30,6 +30,21 @@ vi.mock('../../src/services/mirror/mirror.js', () => ({
 // Import after mocks are set up
 const { radialDistillFullCorpus } = await import('../../src/services/distillation/radial-distiller-v2.ts');
 
+// Deterministic pseudo-random ASCII content. Files are large enough that the
+// test's inflate_radius (500) does NOT swallow each file into one identical
+// window: atoms differ by end_byte, so each reads a uniquely-sized, varied
+// window and therefore a unique SimHash — letting this test measure contiguous
+// per-file grouping INDEPENDENT of content-based dedup.
+const content = (len: number, seed: number): string => {
+  let s = seed >>> 0;
+  let out = '';
+  for (let i = 0; i < len; i++) {
+    s = (Math.imul(s, 1103515245) + 12345) >>> 0;
+    out += String.fromCharCode(33 + (s % 94));
+  }
+  return out;
+};
+
 describe('Radial Distiller v2 — Full-Corpus Grouping', () => {
   beforeEach(() => {
     h.mirrorDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mirror-'));
@@ -43,9 +58,9 @@ describe('Radial Distiller v2 — Full-Corpus Grouping', () => {
       h.mirrorData.set(name, content);
     };
 
-    writeMirror('fileA.ts', Buffer.from('A'.repeat(400)));
-    writeMirror('fileB.ts', Buffer.from('B'.repeat(100)));
-    writeMirror('fileC.ts', Buffer.from('C'.repeat(300)));
+    writeMirror('fileA.ts', Buffer.from(content(1000, 1)));
+    writeMirror('fileB.ts', Buffer.from(content(600, 2)));
+    writeMirror('fileC.ts', Buffer.from(content(1000, 3)));
   });
 
   afterEach(() => {
@@ -54,16 +69,18 @@ describe('Radial Distiller v2 — Full-Corpus Grouping', () => {
   });
 
   it('streams records grouped by source_path (contiguous per file)', async () => {
-    // Synthetic atoms from 3 sources, in atom-ID order (scattered).
-    // Byte ranges chosen so span increases with start_byte within each file,
-    // making the intra-file ordering deterministic under the sort key.
+    // Synthetic atoms from 3 sources, in atom-ID order (scattered). Each carries
+    // an explicit compound_id so records key cleanly to their own compound (6
+    // compounds -> 6 survivors); distinct per-file content keeps them out of the
+    // content-dedup path. Byte ranges chosen so span increases with start_byte
+    // within each file, making intra-file ordering deterministic under the sort key.
     const atoms = [
-      { id: 'atom1', type: 'content', source_path: 'fileA.ts', start_byte: 100, end_byte: 130 }, // span 30
-      { id: 'atom2', type: 'content', source_path: 'fileB.ts', start_byte: 50,  end_byte: 60  }, // span 10
-      { id: 'atom3', type: 'content', source_path: 'fileC.ts', start_byte: 200, end_byte: 280 }, // span 80
-      { id: 'atom4', type: 'content', source_path: 'fileA.ts', start_byte: 50,  end_byte: 60  }, // span 10
-      { id: 'atom5', type: 'content', source_path: 'fileB.ts', start_byte: 10,  end_byte: 20  }, // span 10
-      { id: 'atom6', type: 'content', source_path: 'fileA.ts', start_byte: 200, end_byte: 280 }, // span 80
+      { id: 'atom1', compound_id: 'c1', type: 'content', source_path: 'fileA.ts', start_byte: 100, end_byte: 130 }, // span 30
+      { id: 'atom2', compound_id: 'c2', type: 'content', source_path: 'fileB.ts', start_byte: 50,  end_byte: 60  }, // span 10
+      { id: 'atom3', compound_id: 'c3', type: 'content', source_path: 'fileC.ts', start_byte: 200, end_byte: 280 }, // span 80
+      { id: 'atom4', compound_id: 'c4', type: 'content', source_path: 'fileA.ts', start_byte: 50,  end_byte: 60  }, // span 10
+      { id: 'atom5', compound_id: 'c5', type: 'content', source_path: 'fileB.ts', start_byte: 10,  end_byte: 20  }, // span 10
+      { id: 'atom6', compound_id: 'c6', type: 'content', source_path: 'fileA.ts', start_byte: 200, end_byte: 280 }, // span 80
     ];
 
     // Pass 1: keyset-paginate atoms (pointers only) — respect WHERE id > $1
@@ -105,8 +122,9 @@ describe('Radial Distiller v2 — Full-Corpus Grouping', () => {
 
     // Intra-file ordering follows the sort key: span (end-start) ascending,
     // ties broken by insertion order. With our data that yields a deterministic
-    // atom-id sequence across the whole stream.
-    const expectedIds = ['atom4', 'atom1', 'atom6', 'atom2', 'atom5', 'atom3'];
+    // compound-id sequence across the whole stream (records are keyed by
+    // compound_id in Pass 1).
+    const expectedIds = ['c4', 'c1', 'c6', 'c2', 'c5', 'c3'];
     expect(records.map(r => r.id)).toEqual(expectedIds);
   });
 });

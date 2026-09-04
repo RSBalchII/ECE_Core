@@ -184,6 +184,7 @@ export interface RadialDistillRequest {
   page_size?: number;                // full-corpus: atoms per DB page (default 500)
   inflate_radius?: number;           // full-corpus: bytes each side of pointer to inflate (default 500, max 1000)
   max_record_bytes?: number;         // full-corpus: hard cap on inflated content per record (default 8192)
+  simhash_hamming_threshold?: number;   // full-corpus: Hamming bits (0-64) to treat as duplicate (default 3)
 }
 
 export interface RadialDistillResult {
@@ -1611,6 +1612,22 @@ function readFileFor(rec: FullCorpusRecord): string {
 }
 
 /** A single unique atom record streamed to the full-corpus distill JSONL. */
+/**
+ * Provenance pointer from a surviving compound to an older, semantically
+ * near-duplicate it superseded. Kept flat (option a): the survivor alludes
+ * directly to every absorbed older version, each carrying enough metadata
+ * (notably its own timestamp) for the reader to see when the superseded
+ * version lived.
+ */
+interface DedupReference {
+  id: string;                 // dropped compound/atom id
+  compound_id?: string;       // its owning compound
+  timestamp?: number;         // when the older version happened
+  source_path?: string;       // attribution
+  content_length?: number;    // size of what was absorbed
+  hamming_distance: number;   // SimHash nearness (0 = identical, <=threshold = duplicate)
+}
+
 interface FullCorpusRecord {
   id: string;
   type: string;
@@ -1624,6 +1641,8 @@ interface FullCorpusRecord {
   molecular_signature?: string;
   occurrences: Occurrence[];
   content_inflated: boolean;
+  dedup_of?: DedupReference[]; // present when this record absorbed older near-duplicates
+  dropped?: boolean;           // processing flag — true when superseded by a newer version
 }
 
 /**
@@ -1653,6 +1672,11 @@ export async function radialDistillFullCorpus(request: RadialDistillRequest): Pr
   let totalAtoms = 0;
 
   // ---- Pass 1: enumerate (pointers only) + dedup -------------------------
+  // Group by compound_id first, merge overlapping ranges. We also track the
+  // latest atom timestamp per compound so content-based dedup can keep the
+  // NEWEST version and drop older near-duplicates.
+  const compounds = new Map<string, { occurrences: Occurrence[]; sourcePaths: Set<string>; maxTs?: number }>();
+  
   try {
     let lastId = '';
     for (;;) {
@@ -1673,32 +1697,24 @@ export async function radialDistillFullCorpus(request: RadialDistillRequest): Pr
 
         const sb = (row.start_byte as number) ?? 0;
         const eb = (row.end_byte as number) ?? 0;
-        const key: string = (row.molecular_signature as string) || (row.simhash as string) || `id:${row.id}`;
-        let rec = unique.get(key);
-        if (!rec) {
-          rec = {
-            id: row.id as string,
-            type: (row.type as string) || 'content',
-            content: '', // inflated in pass 2 from the pointer location on disk
-            source_path: sourcePath,
-            start_byte: sb,
-            end_byte: eb,
-            compound_id: row.compound_id as string | undefined,
-            provenance: row.provenance as string | undefined,
-            timestamp: row.timestamp as number | undefined,
-            molecular_signature: (row.molecular_signature as string) || undefined,
-            occurrences: [],
-            content_inflated: false,
-          };
-          unique.set(key, rec);
-          uniqueOrder.push(key);
+        const compoundId = (row.compound_id as string) || `id:${row.id}`;
+        
+        // Group atoms by compound_id (not by simhash)
+        if (!compounds.has(compoundId)) {
+          compounds.set(compoundId, { occurrences: [], sourcePaths: new Set() });
         }
-        // Collect EVERY pointer (including the group's first row) so Pass 2 can
-        // inflate from the widest real range. The first row is often a
-        // compound-level atom at (0,0); the true atom byte ranges live here.
+        
+        const compound = compounds.get(compoundId)!;
         const occ: Occurrence = { source_path: sourcePath, start_byte: sb, end_byte: eb };
-        if (!rec.occurrences.some(o => o.source_path === occ.source_path && o.start_byte === occ.start_byte)) {
-          rec.occurrences.push(occ);
+        
+        // Add occurrence if not duplicate
+        if (!compound.occurrences.some(o => o.source_path === occ.source_path && o.start_byte === occ.start_byte)) {
+          compound.occurrences.push(occ);
+        }
+        compound.sourcePaths.add(sourcePath);
+        // Track the latest atom timestamp so dedup can keep the newest version.
+        if (typeof row.timestamp === 'number' && (!compound.maxTs || row.timestamp > compound.maxTs)) {
+          compound.maxTs = row.timestamp;
         }
       }
 
@@ -1710,7 +1726,208 @@ export async function radialDistillFullCorpus(request: RadialDistillRequest): Pr
     throw error;
   }
 
-  // ---- Pass 2: inflate from pointer locations on disk + stream JSONL -----
+  // NEW: Merge overlapping byte ranges per source file within each compound
+  const mergeRanges = (occurrences: Occurrence[]) => {
+    // Group by source file
+    const byFile = new Map<string, Array<{ start: number; end: number }>>();
+    for (const occ of occurrences) {
+      if (!byFile.has(occ.source_path)) byFile.set(occ.source_path, []);
+      byFile.get(occ.source_path)!.push({ start: occ.start_byte, end: occ.end_byte });
+    }
+    
+    // Merge overlapping ranges per file
+    const merged: Occurrence[] = [];
+    for (const [sourcePath, ranges] of byFile.entries()) {
+      // Sort by start byte
+      const sorted = ranges.sort((a, b) => a.start - b.start);
+      if (sorted.length === 0) continue;
+      
+      let current = sorted[0];
+      for (let i = 1; i < sorted.length; i++) {
+        const next = sorted[i];
+        // Merge if overlapping or adjacent (within 100 bytes)
+        if (next.start <= current.end + 100) {
+          current.end = Math.max(current.end, next.end);
+        } else {
+          merged.push({ source_path: sourcePath, start_byte: current.start, end_byte: current.end });
+          current = next;
+        }
+      }
+      // Push last range
+      if (current.start < current.end) {
+        merged.push({ source_path: sourcePath, start_byte: current.start, end_byte: current.end });
+      }
+    }
+    return merged;
+  };
+
+  // ---- Build candidate records from grouped compounds -------------------
+  // Each candidate is ONE compound with merged byte ranges + latest timestamp.
+  // It starts content-less. During dedup we inflate only the bounded window we
+  // need to hash (discarding it after), store the resulting SimHash, and
+  // deduplicate by hash similarity — keeping the newest version and recording
+  // older near-duplicates as flat `dedup_of` provenance. Content is re-inflated
+  // from disk at stream time so no full content is held in RAM across passes.
+  const candidates: FullCorpusRecord[] = [];
+  for (const [compoundId, data] of compounds.entries()) {
+    const mergedOccurrences = mergeRanges(data.occurrences);
+    if (mergedOccurrences.length === 0) continue; // nothing to distill
+
+    const widest = widestOccurrence({
+      id: compoundId, type: 'content', content: '', source_path: Array.from(data.sourcePaths)[0] || '',
+      start_byte: 0, end_byte: 0, compound_id: compoundId, occurrences: mergedOccurrences, content_inflated: false,
+    });
+
+    candidates.push({
+      id: compoundId,
+      type: 'content',
+      content: '', // re-inflated from the merged range on disk at stream time
+      source_path: Array.from(data.sourcePaths)[0] || '',
+      start_byte: widest.occ?.start_byte ?? 0,
+      end_byte: widest.occ?.end_byte ?? 0,
+      compound_id: compoundId,
+      provenance: undefined,
+      timestamp: data.maxTs,
+      molecular_signature: undefined, // content SimHash filled during dedup pass
+      occurrences: mergedOccurrences,
+      content_inflated: false,
+      dedup_of: [],       // older near-duplicates absorbed by this survivor
+      dropped: false,     // processing flag — set true when superseded by a newer version
+    });
+  }
+
+  const compoundsProcessed = candidates.length;
+  StructuredLogger.info('FULL_CORPUS_DISTILL_PASS1_SUMMARY', {
+    total_atoms: totalAtoms,
+    unique_compounds: compoundsProcessed,
+    dedup_ratio: `${(totalAtoms / Math.max(1, compoundsProcessed)).toFixed(2)}:1`,
+    files_seen: filesSeen.size,
+  });
+
+  // ---- Phase 1 — content SimHash deduplication (memory-light) ------------
+  // Keep the NEWEST version of each cluster of near-duplicate CONTENT; drop the
+  // older ones and record them as flat `dedup_of` provenance on the survivor.
+  // We hash each compound's real bytes once, keep ONLY hashes (+ tiny metadata)
+  // in RAM during this pass, then re-inflate survivors from disk at stream time
+  // so working memory stays flat (Standard 016). Hamming scan is O(n^2) over
+  // hashes only — trivial for the current compound count; no LSH needed.
+  const threshold = Math.max(0, Math.min(64, request.simhash_hamming_threshold ?? 3));
+
+  // Hamming distance between two 64-bit SimHash values (hex string -> bigint).
+  const hammingDistance = (aHex: string, bHex: string): number => {
+    let x = BigInt('0x' + aHex) ^ BigInt('0x' + bHex);
+    let dist = 0;
+    while (x) { dist += Number(x & 1n); x >>= 1n; }
+    return dist;
+  };
+
+  // Union-find over record ids: every absorbed record points at the current
+  // survivor of its cluster. Resolving a match yields that survivor so a third
+  // identical compound absorbs the WHOLE chain instead of escaping because its
+  // immediate predecessor was already dropped.
+  const survivorId = new Map<string, string>();
+  const recordsById = new Map<string, FullCorpusRecord>();
+  const findRoot = (id: string): string => {
+    let root = id;
+    while (survivorId.get(root) !== undefined && survivorId.get(root) !== root) root = survivorId.get(root)!;
+    while (survivorId.get(id) !== root) {
+      const next = survivorId.get(id)!;
+      survivorId.set(id, root);
+      id = next;
+    }
+    return root;
+  };
+
+  // `seen` keeps only hashes + the surviving record — never full content.
+  interface Seen { hash: string; rec: FullCorpusRecord; }
+  const seen: Seen[] = [];
+
+  // Process oldest-first so a newer compound always absorbs an older one.
+  candidates.sort((a, b) => (a.timestamp ?? Infinity) - (b.timestamp ?? Infinity));
+
+  let exactMatches = 0;
+  let nearDuplicates = 0;
+
+  for (const rec of candidates) {
+    recordsById.set(rec.id, rec);
+
+    // Inflate only the bounded window we need to hash; discard it immediately so
+    // no full content lingers in RAM between passes.
+    const { occ } = widestOccurrence(rec);
+    const inflStart = (occ && occ.start_byte > 0) ? occ.start_byte : (rec.start_byte ?? 0);
+    const inflEnd = (occ && occ.end_byte > 0) ? occ.end_byte : (rec.end_byte ?? 0);
+    const { content, inflated } = readRangeFromMirror(
+      rec.source_path, rec.provenance, inflStart, inflEnd, radius, maxRecordBytes,
+    );
+
+    // No readable content — cannot dedup by meaning; keep it as a survivor.
+    if (!inflated || content.length === 0) {
+      seen.push({ hash: '', rec }); // sentinel (never matches)
+      survivorId.set(rec.id, rec.id);
+      continue;
+    }
+
+    const hash = computeSimHash(content);
+    rec.molecular_signature = hash;
+
+    // Nearest already-seen (older) candidate by Hamming distance.
+    let bestDist = Infinity;
+    let bestSeen: Seen | null = null;
+    for (const s of seen) {
+      if (!s.hash) continue; // skip contentless sentinels
+      const d = hammingDistance(hash, s.hash);
+      if (d < bestDist) { bestDist = d; bestSeen = s; }
+    }
+
+    if (bestSeen && bestDist <= threshold) {
+      // Newest wins: absorb the ROOT survivor of the matched cluster, then fold
+      // in that survivor's own absorbed chain so this record alludes directly to
+      // every older version. Resolving the root (rather than skipping an
+      // already-dropped predecessor) is what lets a 3rd+ identical compound join
+      // the same single survivor instead of escaping as a duplicate.
+      const rootId = findRoot(bestSeen.rec.id);
+      const root = recordsById.get(rootId)!;
+      if (root !== rec) {
+        nearDuplicates++;
+        if (bestDist === 0) exactMatches++;
+        // rec supersedes `root` and everything root already absorbed. Build the
+        // survivor's flat dedup_of directly: newest-absorbed-first (timestamp
+        // descending), de-duplicated by id so a version is never listed twice
+        // across the chain. Pushing to root.dedup_of then folding back in would
+        // re-list `root` and corrupt the chain, so we merge instead.
+        const merged: DedupReference[] = [
+          { id: root.id, compound_id: root.compound_id, timestamp: root.timestamp, source_path: root.source_path, content_length: undefined, hamming_distance: bestDist },
+          ...(root.dedup_of ?? []),
+        ];
+        const seenIds = new Set<string>();
+        rec.dedup_of = [];
+        for (const r of merged) {
+          if (r.id === rec.id || seenIds.has(r.id)) continue;
+          seenIds.add(r.id);
+          rec.dedup_of.push(r);
+        }
+        survivorId.set(rootId, rec.id); // cluster now survives as `rec`
+      }
+    }
+
+    seen.push({ hash, rec });
+    survivorId.set(rec.id, rec.id);
+  }
+
+  // Only cluster roots are true survivors (union-find resolves every absorbed
+  // record to its newest member). This replaces the old `dropped` flag.
+  const survivors = candidates.filter(c => findRoot(c.id) === c.id);
+
+  StructuredLogger.info('FULL_CORPUS_DISTILL_DEDUP', {
+    threshold,
+    candidates: candidates.length,
+    survivors: survivors.length,
+    dropped: candidates.length - survivors.length,
+    exact_matches: exactMatches,
+    near_duplicates: nearDuplicates,
+  });
+
+  // ---- Phase 2 — stream survivors to JSONL (re-inflate from disk) ---------
   const distillsDir = PATHS.DISTILLS_DIR;
   if (!fs.existsSync(distillsDir)) fs.mkdirSync(distillsDir, { recursive: true });
   const outputPath = path.join(
@@ -1722,18 +1939,13 @@ export async function radialDistillFullCorpus(request: RadialDistillRequest): Pr
   let inflatedCount = 0;
   let streamError: any = null;
 
-  // Group records by source file so records from the same file stream
-  // contiguously (Standard 051 locality). We only reorder string keys — build a
-  // sorted index array keyed by (readFileFor, start_byte) and stream in that
-  // order. Content windows are still read one bounded window at a time, so
-  // memory stays flat regardless of corpus size; this is purely a reordering of
-  // the existing uniqueOrder keys, not an accumulation of content.
-  const groupOrder = uniqueOrder.slice().sort((a, b) => {
-    const ra = readFileFor(unique.get(a)!);
-    const rb = readFileFor(unique.get(b)!);
+  // Group by source file so same-file records stream contiguously (Standard 051).
+  const groupOrder = survivors.slice().sort((a, b) => {
+    const ra = a.source_path;
+    const rb = b.source_path;
     if (ra !== rb) return ra < rb ? -1 : 1;
-    const sa = widestOccurrence(unique.get(a)!).span || unique.get(a)!.start_byte;
-    const sb = widestOccurrence(unique.get(b)!).span || unique.get(b)!.start_byte;
+    const sa = widestOccurrence(a).span ?? (a.start_byte ?? 0);
+    const sb = widestOccurrence(b).span ?? (b.start_byte ?? 0);
     return sa - sb;
   });
 
@@ -1744,15 +1956,14 @@ export async function radialDistillFullCorpus(request: RadialDistillRequest): Pr
     const writeNext = () => {
       if (streamError) return resolve();
       while (i < groupOrder.length) {
-        const rec = unique.get(groupOrder[i])!;
+        const rec = groupOrder[i]!;
         i++;
-        // Inflate a bounded range from disk. Prefer the WIDEST real pointer in
-        // occurrences[] — the record's own start_byte/end_byte is often a
-        // compound-level (0,0) marker, so it would inflate the wrong region on
-        // large files. Fall back to the record pointer when no real range exists.
+
+        // Re-inflate only this survivor's bounded window from disk just for
+        // output — never hold more than one record's content at a time.
         const { occ } = widestOccurrence(rec);
-        const inflStart = (occ && occ.start_byte > 0) ? occ.start_byte : rec.start_byte;
-        const inflEnd = (occ && occ.end_byte > 0) ? occ.end_byte : rec.end_byte;
+        const inflStart = (occ && occ.start_byte > 0) ? occ.start_byte : (rec.start_byte ?? 0);
+        const inflEnd = (occ && occ.end_byte > 0) ? occ.end_byte : (rec.end_byte ?? 0);
         const { content, inflated } = readRangeFromMirror(
           rec.source_path, rec.provenance, inflStart, inflEnd, radius, maxRecordBytes,
         );
@@ -1760,7 +1971,11 @@ export async function radialDistillFullCorpus(request: RadialDistillRequest): Pr
         rec.content_inflated = inflated && content.length > 0;
         if (rec.content_inflated) inflatedCount++;
 
-        const line = JSON.stringify(rec) + '\n';
+        // Provenance is always inline (dedup_of); only write it when non-empty.
+        const line = (rec.dedup_of && rec.dedup_of.length > 0
+          ? JSON.stringify(rec)
+          : (() => { const c = { ...rec }; delete c.dedup_of; return JSON.stringify(c); })()) + '\n';
+
         sizeBytes += Buffer.byteLength(line, 'utf-8');
         const ok = out.write(line);
         if (!ok) {
@@ -1782,7 +1997,7 @@ export async function radialDistillFullCorpus(request: RadialDistillRequest): Pr
   }
 
   const duration = Date.now() - startTime;
-  const uniqueCount = uniqueOrder.length;
+  const uniqueCount = survivors.length;
 
   // Standard 016: record the distill checkpoint (pointer to the file).
   try {

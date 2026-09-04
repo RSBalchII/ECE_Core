@@ -117,6 +117,7 @@ export function setupDistillRoutes(app: Application) {
         page_size,
         inflate_radius,
         max_record_bytes,
+        simhash_hamming_threshold,
       } = req.body as any;
 
       StructuredLogger.info('DISTILL_TRIGGER', {
@@ -124,6 +125,7 @@ export function setupDistillRoutes(app: Application) {
         radius,
         output_format,
         mode: mode || (seed_query || seed_ids ? undefined : 'full-corpus'),
+        simhash_hamming_threshold: simhash_hamming_threshold ?? 3,
       });
 
       const radialRequest = {
@@ -137,6 +139,7 @@ export function setupDistillRoutes(app: Application) {
         page_size,
         inflate_radius,
         max_record_bytes,
+        simhash_hamming_threshold,
       };
 
       const result = await radialDistill(radialRequest);
