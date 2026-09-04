@@ -767,7 +767,28 @@ Tracks ingested GitHub repositories for incremental sync and status monitoring.
 
 ---
 
-#### `distills` - Distillation Output Tracking (Standard 016)
+### Distillation Methods & Mode Selection
+
+The distiller (`radial-distiller-v2.ts`) implements four methods, selected by request. **The default for seedless requests is full-corpus mode** — no query, compound IDs, buckets, or tags means "expand + dedup every unique atom."
+
+| Method | Dedup unit | Output shape | Selected when |
+|---|---|---|---|
+| **Full-corpus** (default) | Compound *content* (SimHash) | JSONL records w/ inline `dedup_of` | `mode === 'full-corpus'`, OR seedless & `mode !== 'standard'` |
+| **Standard** | Semantic block (SimHash) | Decision Records | otherwise (has query / compound_ids / buckets, no tags) |
+| **Tag-based** | Semantic block (per tag) | Decision Records + inflated content | `mode === 'tag-based'`, OR `seed.tags` present |
+| **Legacy line-level** | Line (hash) | Compound/YAML | only via the streaming path — backward compat |
+
+**Dispatcher logic:** seedless request → full-corpus · `mode='full-corpus'` → full-corpus · has `seed.tags` or `mode='tag-based'` → tag-based · otherwise → standard.
+
+- **Full-corpus** (`radialDistillFullCorpus`): pages atoms by pointer, groups occurrences by `compound_id`, merges overlapping/adjacent byte ranges per file, then dedups at the compound-*content* level via SimHash (WASM fingerprint module). It keeps only hashes + tiny metadata in RAM during dedup and re-inflates survivors from disk on demand (flat memory). Near-duplicate clusters resolve to one survivor via **union-find** (`survivorId` → cluster root); a third+ identical compound absorbs the whole cluster. The newest record (by atom timestamp) survives; absorbed older IDs are recorded as a flat **`dedup_of[]`** array on the survivor. Tunables: `inflate_radius` (default 500, max 1000), `simhash_hamming_threshold` (default 3), `page_size` (500), `max_record_bytes` (8192).
+- **Standard**: queries the `molecules` table, reads each unique file once, extracts semantic blocks (markdown headings) into **Decision Records** (`title`, `problem`/`solution`/`rationale`, `status`, `timestamps`, `provenance`, `tags`, inferred `memory_type`), and dedups at block level via SimHash. Timestamps come from source file mtime.
+- **Tag-based**: same as standard, filtered to a concept via `seed.tags`/`seed.buckets`; each unique atom is processed once across tags (cross-tag dedup).
+
+Provenance is either inline `dedup_of[]` (full-corpus survivor → absorbed older compounds) or per-line/per-block `provenance[]` (source files each unit came from). Distillation never depends on the deprecated `compounds` table. See Standard 015 for the full method description.
+
+---
+
+#### `distills` - Distillation Output Tracking (Standard 015)
 
 Stores metadata pointers to distillation output files on disk. Does not store the actual content.
 
@@ -822,7 +843,7 @@ Stores synonym mappings for search query expansion. Helps improve recall by expa
 | `atom_positions` | ✅ Active | Position indexing |
 | `summary_nodes` | ✅ Active | Dreamer abstractions |
 | `github_repos` | ✅ Active | GitHub ingestion (Standard 115) |
-| `distills` | ✅ Active | Distillation metadata (Standard 016) |
+| `distills` | ✅ Active | Distillation metadata (Standard 015) |
 | `engrams` | ✅ Active | Key-value store |
 | `synonyms` | ✅ Active | Query expansion |
 
@@ -1318,12 +1339,7 @@ All routes are mounted under `/v1/` prefix unless otherwise noted. Routes are or
 | 012 | 012-021-pointer-only-storag |
 | 013 | 013-017-dependency-validatio |
 | 014 | 014-018-ast-parser-was |
-| 015 | 015-008-radial-distillatio |
-| 016 | 016-010-radial-distillation-v |
-| 017 | 017-026-zero-copy-dedu |
-| 018 | 018-027-distillation-output-storag |
-| 019 | 019-028-self-contamination-preventio |
-| 020 | 020-029-tag-based-distillatio |
+| 015 | 015-distillatio |
 | 021 | 021-022-documentation-hygien |
 | 022 | 022-014-operational-visibilit |
 | 023 | 023-027-pain-point-loggin |

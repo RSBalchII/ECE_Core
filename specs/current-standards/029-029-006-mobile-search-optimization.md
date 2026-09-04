@@ -470,7 +470,7 @@ This query:
 
 - **Standard 104:** Universal Semantic Search — base search algorithm
 - **Standard 009:** Illuminate BFS — graph traversal
-- **Standard 008:** Radial Distillation — corpus compression
+- **Standard 015:** Radial Distillation (all modes) — corpus compression
 - **Standard 007:** PGlite Memory Optimization — database layer
 
 ---

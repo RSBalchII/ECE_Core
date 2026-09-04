@@ -18,12 +18,7 @@ This index lists the active engineering standards. Each file is named `NNN-NNN-M
 | 012 | 012 021 pointer only storage | [012-012-021-pointer-only-storage.md](012-012-021-pointer-only-storage.md) |
 | 013 | 013 017 dependency validation | [013-013-017-dependency-validation.md](013-013-017-dependency-validation.md) |
 | 014 | 014 018 ast parser wasm | [014-014-018-ast-parser-wasm.md](014-014-018-ast-parser-wasm.md) |
-| 015 | 015 008 radial distillation | [015-015-008-radial-distillation.md](015-015-008-radial-distillation.md) |
-| 016 | 016 010 radial distillation v2 | [016-016-010-radial-distillation-v2.md](016-016-010-radial-distillation-v2.md) |
-| 017 | 017 026 zero copy dedup | [017-017-026-zero-copy-dedup.md](017-017-026-zero-copy-dedup.md) |
-| 018 | 018 027 distillation output storage | [018-018-027-distillation-output-storage.md](018-018-027-distillation-output-storage.md) |
-| 019 | 019 028 self contamination prevention | [019-019-028-self-contamination-prevention.md](019-019-028-self-contamination-prevention.md) |
-| 020 | 020 029 tag based distillation | [020-020-029-tag-based-distillation.md](020-020-029-tag-based-distillation.md) |
+| 015 | 015 distillation | [015-015-distillation.md](015-015-distillation.md) |
 | 021 | 021 022 documentation hygiene | [021-021-022-documentation-hygiene.md](021-021-022-documentation-hygiene.md) |
 | 022 | 022 014 operational visibility | [022-022-014-operational-visibility.md](022-022-014-operational-visibility.md) |
 | 023 | 023 027 pain point logging | [023-023-027-pain-point-logging.md](023-023-027-pain-point-logging.md) |

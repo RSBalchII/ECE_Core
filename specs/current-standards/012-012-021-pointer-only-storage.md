@@ -363,7 +363,7 @@ The compound is **created on-demand** from search results, not pre-stored in dat
 
 - **Standard 020**: Ephemeral Database (wipe on startup)
 - **Standard 011**: Security Hardening
-- **Standard 008**: Radial Distillation v2
+- **Standard 015**: Radial Distillation (all modes)
 - **Whitepaper §3.1**: Data Hierarchy
 - **README**: Architecture at a Glance
 

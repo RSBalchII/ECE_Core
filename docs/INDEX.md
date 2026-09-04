@@ -73,7 +73,7 @@
 → See **[specs/current-standards/032-031-search-algorithms-comprehensive.md](../specs/current-standards/032-032-031-search-algorithms-comprehensive.md)** and **[whitepaper.md](whitepaper.md)**
 
 ### "How does distillation work?"
-→ Read **[specs/current-standards/016-016-010-radial-distillation-v2.md](../specs/current-standards/016-016-010-radial-distillation-v2.md)**
+→ Read **[specs/current-standards/015-015-distillation.md](../specs/current-standards/015-015-distillation.md)**
 
 ### "I want to contribute code"
 → Start with **[CONTRIBUTING.md](integrations/CONTRIBUTING.md)** and **[engine/src/README.md](../engine/src/README.md)**
@@ -168,7 +168,7 @@ anchor-engine-node/
 ### Intermediate (Understanding the System)
 1. **[specs/spec.md](../specs/spec.md)** - Full system specification
 2. **[whitepaper.md](whitepaper.md)** - Search algorithm & theory
-3. **[specs/current-standards/016-016-010-radial-distillation-v2.md](../specs/current-standards/016-016-010-radial-distillation-v2.md)** - Distillation v2.0
+3. **[specs/current-standards/015-015-distillation.md](../specs/current-standards/015-015-distillation.md)** - Radial Distillation (all modes)
 4. **[engine/src/README.md](../engine/src/README.md)** - Source overview
 
 ### Advanced (Deep Dive)

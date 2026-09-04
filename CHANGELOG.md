@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased] - In Progress
 
+### 📄 Distillation Standards Consolidation (Standard 015)
+- **What**: Consolidated the six fragmented distillation standards into a single coherent standard describing how the distiller actually works.
+- **New file**: `specs/current-standards/015-015-distillation.md` — covers all four runtime methods, mode-selection rules, data-model/provenance links, self-contamination prevention, output storage, and API contract.
+- **Removed** (superseded by Standard 015): Standards 008, 133, 134, 027, 028, 029 (`radial-distillation`, `radial-distillation-v2`, `zero-copy-dedup`, `distillation-output-storage`, `self-contamination-prevention`, `tag-based-distillation`).
+- **Now documented (was missing)**: **full-corpus mode** — the live default for seedless requests. Describes compound grouping, content SimHash dedup, union-find chain collapse, inline `dedup_of[]` provenance, and memory-flat streaming re-inflation.
+- **Aligned**: `specs/spec.md` data-model section (new "Distillation Methods & Mode Selection" subsection; `dedup_of`; corrected distills-table references to Standard 015) and `docs/INDEX.md` nav links.
+
 ### 🔧 Circuit Breaker & Resilience
 
 #### Circuit Breaker Pattern Implementation (Standard 014)
